@@ -87,6 +87,7 @@
   ##############################################################################
   # Skip long running tests that time out in debug mode.
   'generated-transition-stub': [PASS, ['mode == debug', SKIP]],
+  'migrations': [PASS, ['mode == debug', TIMEOUT]],
 
   ##############################################################################
   # This test sets the umask on a per-process basis and hence cannot be
@@ -145,6 +146,9 @@
   'debug-stepout-scope-part8': [PASS, ['arch == arm ', FAIL]],
   'elements-transition-hoisting': [PASS, FAIL],
   'getters-on-elements': [PASS, FAIL],
+  # Tests taking too long
+  'regress/regress-1122': [PASS, TIMEOUT],
+  'regress/regress-331444': [PASS, TIMEOUT],
 }],  # 'gc_stress == True'
 
 ##############################################################################

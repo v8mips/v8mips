@@ -165,6 +165,7 @@ bool Object::IsHeapObject() const {
 
 
 TYPE_CHECKER(HeapNumber, HEAP_NUMBER_TYPE)
+TYPE_CHECKER(MutableHeapNumber, MUTABLE_HEAP_NUMBER_TYPE)
 TYPE_CHECKER(Symbol, SYMBOL_TYPE)
 
 
@@ -277,10 +278,27 @@ Handle<Object> Object::NewStorageFor(Isolate* isolate,
     return handle(Smi::FromInt(0), isolate);
   }
   if (!representation.IsDouble()) return object;
+  double value;
   if (object->IsUninitialized()) {
-    return isolate->factory()->NewHeapNumber(0);
+    value = 0;
+  } else if (object->IsMutableHeapNumber()) {
+    value = HeapNumber::cast(*object)->value();
+  } else {
+    value = object->Number();
   }
-  return isolate->factory()->NewHeapNumber(object->Number());
+  return isolate->factory()->NewHeapNumber(value, MUTABLE);
+}
+
+
+Handle<Object> Object::WrapForRead(Isolate* isolate,
+                                   Handle<Object> object,
+                                   Representation representation) {
+  ASSERT(!object->IsUninitialized());
+  if (!representation.IsDouble()) {
+    ASSERT(object->FitsRepresentation(representation));
+    return object;
+  }
+  return isolate->factory()->NewHeapNumber(HeapNumber::cast(*object)->value());
 }
 
 
@@ -3079,7 +3097,6 @@ CAST_ACCESSOR(FixedTypedArrayBase)
 CAST_ACCESSOR(Foreign)
 CAST_ACCESSOR(FreeSpace)
 CAST_ACCESSOR(GlobalObject)
-CAST_ACCESSOR(HeapNumber)
 CAST_ACCESSOR(HeapObject)
 CAST_ACCESSOR(JSArray)
 CAST_ACCESSOR(JSArrayBuffer)
@@ -5151,7 +5168,7 @@ ACCESSORS(JSFunction, next_function_link, Object, kNextFunctionLinkOffset)
 ACCESSORS(GlobalObject, builtins, JSBuiltinsObject, kBuiltinsOffset)
 ACCESSORS(GlobalObject, native_context, Context, kNativeContextOffset)
 ACCESSORS(GlobalObject, global_context, Context, kGlobalContextOffset)
-ACCESSORS(GlobalObject, global_receiver, JSObject, kGlobalReceiverOffset)
+ACCESSORS(GlobalObject, global_proxy, JSObject, kGlobalProxyOffset)
 
 ACCESSORS(JSGlobalProxy, native_context, Object, kNativeContextOffset)
 ACCESSORS(JSGlobalProxy, hash, Object, kHashOffset)
@@ -5246,6 +5263,8 @@ ACCESSORS_TO_SMI(Script, eval_from_instructions_offset,
                  kEvalFrominstructionsOffsetOffset)
 ACCESSORS_TO_SMI(Script, flags, kFlagsOffset)
 BOOL_ACCESSORS(Script, flags, is_shared_cross_origin, kIsSharedCrossOriginBit)
+ACCESSORS(Script, source_url, Object, kSourceUrlOffset)
+ACCESSORS(Script, source_mapping_url, Object, kSourceMappingUrlOffset)
 
 Script::CompilationType Script::compilation_type() {
   return BooleanBit::get(flags(), kCompilationTypeBit) ?
@@ -5638,12 +5657,19 @@ bool JSFunction::IsBuiltin() {
 }
 
 
-bool JSFunction::IsNative() {
+bool JSFunction::IsFromNativeScript() {
   Object* script = shared()->script();
   bool native = script->IsScript() &&
                 Script::cast(script)->type()->value() == Script::TYPE_NATIVE;
   ASSERT(!IsBuiltin() || native);  // All builtins are also native.
   return native;
+}
+
+
+bool JSFunction::IsFromExtensionScript() {
+  Object* script = shared()->script();
+  return script->IsScript() &&
+         Script::cast(script)->type()->value() == Script::TYPE_EXTENSION;
 }
 
 
@@ -5736,6 +5762,11 @@ void JSFunction::ReplaceCode(Code* code) {
 
 Context* JSFunction::context() {
   return Context::cast(READ_FIELD(this, kContextOffset));
+}
+
+
+JSObject* JSFunction::global_proxy() {
+  return context()->global_proxy();
 }
 
 
@@ -5942,6 +5973,18 @@ ACCESSORS(JSModule, scope_info, ScopeInfo, kScopeInfoOffset)
 
 
 ACCESSORS(JSValue, value, Object, kValueOffset)
+
+
+HeapNumber* HeapNumber::cast(Object* object) {
+  SLOW_ASSERT(object->IsHeapNumber() || object->IsMutableHeapNumber());
+  return reinterpret_cast<HeapNumber*>(object);
+}
+
+
+const HeapNumber* HeapNumber::cast(const Object* object) {
+  SLOW_ASSERT(object->IsHeapNumber() || object->IsMutableHeapNumber());
+  return reinterpret_cast<const HeapNumber*>(object);
+}
 
 
 ACCESSORS(JSDate, value, Object, kValueOffset)
@@ -6481,7 +6524,7 @@ PropertyAttributes JSReceiver::GetElementAttribute(Handle<JSReceiver> object,
 
 
 bool JSGlobalObject::IsDetached() {
-  return JSGlobalProxy::cast(global_receiver())->IsDetachedFrom(this);
+  return JSGlobalProxy::cast(global_proxy())->IsDetachedFrom(this);
 }
 
 

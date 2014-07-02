@@ -153,10 +153,9 @@ Handle<Object> Accessors::FlattenNumber(Isolate* isolate,
                                         Handle<Object> value) {
   if (value->IsNumber() || !value->IsJSValue()) return value;
   Handle<JSValue> wrapper = Handle<JSValue>::cast(value);
-  ASSERT(wrapper->GetIsolate()->context()->native_context()->number_function()->
+  ASSERT(wrapper->GetIsolate()->native_context()->number_function()->
       has_initial_map());
-  if (wrapper->map() ==
-      isolate->context()->native_context()->number_function()->initial_map()) {
+  if (wrapper->map() == isolate->number_function()->initial_map()) {
     return handle(wrapper->value(), isolate);
   }
 
@@ -582,6 +581,77 @@ Handle<AccessorInfo> Accessors::ScriptLineEndsInfo(
                       name,
                       &ScriptLineEndsGetter,
                       &ScriptLineEndsSetter,
+                      attributes);
+}
+
+
+//
+// Accessors::ScriptSourceUrl
+//
+
+
+void Accessors::ScriptSourceUrlGetter(
+    v8::Local<v8::String> name,
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+  i::Isolate* isolate = reinterpret_cast<i::Isolate*>(info.GetIsolate());
+  DisallowHeapAllocation no_allocation;
+  HandleScope scope(isolate);
+  Object* object = *Utils::OpenHandle(*info.This());
+  Object* url = Script::cast(JSValue::cast(object)->value())->source_url();
+  info.GetReturnValue().Set(Utils::ToLocal(Handle<Object>(url, isolate)));
+}
+
+
+void Accessors::ScriptSourceUrlSetter(
+    v8::Local<v8::String> name,
+    v8::Local<v8::Value> value,
+    const v8::PropertyCallbackInfo<void>& info) {
+  UNREACHABLE();
+}
+
+
+Handle<AccessorInfo> Accessors::ScriptSourceUrlInfo(
+      Isolate* isolate, PropertyAttributes attributes) {
+  return MakeAccessor(isolate,
+                      isolate->factory()->source_url_string(),
+                      &ScriptSourceUrlGetter,
+                      &ScriptSourceUrlSetter,
+                      attributes);
+}
+
+
+//
+// Accessors::ScriptSourceMappingUrl
+//
+
+
+void Accessors::ScriptSourceMappingUrlGetter(
+    v8::Local<v8::String> name,
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+  i::Isolate* isolate = reinterpret_cast<i::Isolate*>(info.GetIsolate());
+  DisallowHeapAllocation no_allocation;
+  HandleScope scope(isolate);
+  Object* object = *Utils::OpenHandle(*info.This());
+  Object* url =
+      Script::cast(JSValue::cast(object)->value())->source_mapping_url();
+  info.GetReturnValue().Set(Utils::ToLocal(Handle<Object>(url, isolate)));
+}
+
+
+void Accessors::ScriptSourceMappingUrlSetter(
+    v8::Local<v8::String> name,
+    v8::Local<v8::Value> value,
+    const v8::PropertyCallbackInfo<void>& info) {
+  UNREACHABLE();
+}
+
+
+Handle<AccessorInfo> Accessors::ScriptSourceMappingUrlInfo(
+      Isolate* isolate, PropertyAttributes attributes) {
+  return MakeAccessor(isolate,
+                      isolate->factory()->source_mapping_url_string(),
+                      &ScriptSourceMappingUrlGetter,
+                      &ScriptSourceMappingUrlSetter,
                       attributes);
 }
 

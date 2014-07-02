@@ -42,6 +42,7 @@ namespace internal {
   V(Map, shared_function_info_map, SharedFunctionInfoMap)                      \
   V(Map, meta_map, MetaMap)                                                    \
   V(Map, heap_number_map, HeapNumberMap)                                       \
+  V(Map, mutable_heap_number_map, MutableHeapNumberMap)                        \
   V(Map, native_context_map, NativeContextMap)                                 \
   V(Map, fixed_array_map, FixedArrayMap)                                       \
   V(Map, code_map, CodeMap)                                                    \
@@ -193,6 +194,8 @@ namespace internal {
   V(Symbol, observed_symbol, ObservedSymbol)                                   \
   V(Symbol, uninitialized_symbol, UninitializedSymbol)                         \
   V(Symbol, megamorphic_symbol, MegamorphicSymbol)                             \
+  V(Symbol, stack_trace_symbol, StackTraceSymbol)                              \
+  V(Symbol, detailed_stack_trace_symbol, DetailedStackTraceSymbol)             \
   V(FixedArray, materialized_objects, MaterializedObjects)                     \
   V(FixedArray, allocation_sites_scratchpad, AllocationSitesScratchpad)        \
   V(FixedArray, microtask_queue, MicrotaskQueue)
@@ -230,6 +233,7 @@ namespace internal {
   V(shared_function_info_map)             \
   V(meta_map)                             \
   V(heap_number_map)                      \
+  V(mutable_heap_number_map)              \
   V(native_context_map)                   \
   V(fixed_array_map)                      \
   V(code_map)                             \
@@ -288,6 +292,8 @@ namespace internal {
   V(nan_string, "NaN")                                                   \
   V(RegExp_string, "RegExp")                                             \
   V(source_string, "source")                                             \
+  V(source_url_string, "source_url")                                     \
+  V(source_mapping_url_string, "source_mapping_url")                     \
   V(global_string, "global")                                             \
   V(ignore_case_string, "ignoreCase")                                    \
   V(multiline_string, "multiline")                                       \
@@ -340,7 +346,6 @@ namespace internal {
   V(strict_compare_ic_string, "===")                                     \
   V(infinity_string, "Infinity")                                         \
   V(minus_infinity_string, "-Infinity")                                  \
-  V(hidden_stack_trace_string, "v8::hidden_stack_trace")                 \
   V(query_colon_string, "(?:)")                                          \
   V(Generator_string, "Generator")                                       \
   V(throw_string, "throw")                                               \
@@ -423,6 +428,18 @@ class PromotionQueue {
     }
 
     RelocateQueueHead();
+  }
+
+  bool IsBelowPromotionQueue(Address to_space_top) {
+    // If the given to-space top pointer and the head of the promotion queue
+    // are not on the same page, then the to-space objects are below the
+    // promotion queue.
+    if (GetHeadPage() != Page::FromAddress(to_space_top)) {
+      return true;
+    }
+    // If the to space top pointer is smaller or equal than the promotion
+    // queue head, then the to-space objects are below the promotion queue.
+    return reinterpret_cast<intptr_t*>(to_space_top) <= rear_;
   }
 
   bool is_empty() {
@@ -1460,7 +1477,9 @@ class Heap {
 
   // Allocated a HeapNumber from value.
   MUST_USE_RESULT AllocationResult AllocateHeapNumber(
-      double value, PretenureFlag pretenure = NOT_TENURED);
+      double value,
+      MutableMode mode = IMMUTABLE,
+      PretenureFlag pretenure = NOT_TENURED);
 
   // Allocate a byte array of the specified length
   MUST_USE_RESULT AllocationResult AllocateByteArray(

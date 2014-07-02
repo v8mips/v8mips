@@ -130,7 +130,7 @@ bool LCodeGen::GeneratePrologue() {
       __ b(ne, &ok);
 
       __ ldr(r2, GlobalObjectOperand());
-      __ ldr(r2, FieldMemOperand(r2, GlobalObject::kGlobalReceiverOffset));
+      __ ldr(r2, FieldMemOperand(r2, GlobalObject::kGlobalProxyOffset));
 
       __ str(r2, MemOperand(sp, receiver_offset));
 
@@ -3375,8 +3375,8 @@ MemOperand LCodeGen::PrepareKeyedOperand(Register key,
 
 void LCodeGen::DoLoadKeyedGeneric(LLoadKeyedGeneric* instr) {
   ASSERT(ToRegister(instr->context()).is(cp));
-  ASSERT(ToRegister(instr->object()).is(KeyedLoadIC::ReceiverRegister()));
-  ASSERT(ToRegister(instr->key()).is(KeyedLoadIC::NameRegister()));
+  ASSERT(ToRegister(instr->object()).is(LoadIC::ReceiverRegister()));
+  ASSERT(ToRegister(instr->key()).is(LoadIC::NameRegister()));
 
   Handle<Code> ic = isolate()->builtins()->KeyedLoadIC_Initialize();
   CallCode(ic, RelocInfo::CODE_TARGET, instr, NEVER_INLINE_TARGET_ADDRESS);
@@ -3472,8 +3472,7 @@ void LCodeGen::DoWrapReceiver(LWrapReceiver* instr) {
   __ ldr(result, FieldMemOperand(function, JSFunction::kContextOffset));
   __ ldr(result,
          ContextOperand(result, Context::GLOBAL_OBJECT_INDEX));
-  __ ldr(result,
-         FieldMemOperand(result, GlobalObject::kGlobalReceiverOffset));
+  __ ldr(result, FieldMemOperand(result, GlobalObject::kGlobalProxyOffset));
 
   if (result.is(receiver)) {
     __ bind(&result_in_receiver);

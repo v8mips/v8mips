@@ -170,6 +170,12 @@ enum ContextualMode {
 };
 
 
+enum MutableMode {
+  MUTABLE,
+  IMMUTABLE
+};
+
+
 static const int kGrowICDelta = STORE_AND_GROW_NO_TRANSITION -
     STANDARD_STORE;
 STATIC_ASSERT(STANDARD_STORE == 0);
@@ -354,6 +360,7 @@ const int kStubMinorKeyBits = kBitsPerInt - kSmiTagSize - kStubMajorKeyBits;
   V(PROPERTY_CELL_TYPE)                                                        \
                                                                                \
   V(HEAP_NUMBER_TYPE)                                                          \
+  V(MUTABLE_HEAP_NUMBER_TYPE)                                                  \
   V(FOREIGN_TYPE)                                                              \
   V(BYTE_ARRAY_TYPE)                                                           \
   V(FREE_SPACE_TYPE)                                                           \
@@ -682,6 +689,7 @@ enum InstanceType {
   // "Data", objects that cannot contain non-map-word pointers to heap
   // objects.
   HEAP_NUMBER_TYPE,
+  MUTABLE_HEAP_NUMBER_TYPE,
   FOREIGN_TYPE,
   BYTE_ARRAY_TYPE,
   FREE_SPACE_TYPE,
@@ -902,6 +910,7 @@ template <class C> inline bool Is(Object* obj);
 
 #define HEAP_OBJECT_TYPE_LIST(V)               \
   V(HeapNumber)                                \
+  V(MutableHeapNumber)                         \
   V(Name)                                      \
   V(UniqueName)                                \
   V(String)                                    \
@@ -1429,7 +1438,7 @@ class Object {
     } else if (FLAG_track_fields && representation.IsSmi()) {
       return IsSmi();
     } else if (FLAG_track_double_fields && representation.IsDouble()) {
-      return IsNumber();
+      return IsMutableHeapNumber() || IsNumber();
     } else if (FLAG_track_heap_object_fields && representation.IsHeapObject()) {
       return IsHeapObject();
     }
@@ -1441,6 +1450,10 @@ class Object {
   inline static Handle<Object> NewStorageFor(Isolate* isolate,
                                              Handle<Object> object,
                                              Representation representation);
+
+  inline static Handle<Object> WrapForRead(Isolate* isolate,
+                                           Handle<Object> object,
+                                           Representation representation);
 
   // Returns true if the object is of the correct type to be used as a
   // implementation of a JSObject's elements.
@@ -2155,6 +2168,13 @@ class JSObject: public JSReceiver {
       StoreFromKeyed store_mode = MAY_BE_STORE_FROM_KEYED,
       ExecutableAccessorInfoHandling handling = DEFAULT_HANDLING);
 
+  static void AddProperty(Handle<JSObject> object,
+                          Handle<Name> key,
+                          Handle<Object> value,
+                          PropertyAttributes attributes,
+                          ValueType value_type = OPTIMAL_REPRESENTATION,
+                          StoreMode mode = ALLOW_AS_CONSTANT);
+
   // Extend the receiver with a single fast property appeared first in the
   // passed map. This also extends the property backing store if necessary.
   static void AllocateStorageForMap(Handle<JSObject> object, Handle<Map> map);
@@ -2752,7 +2772,7 @@ class JSObject: public JSReceiver {
       StrictMode strict_mode);
 
   // Add a property to an object.
-  MUST_USE_RESULT static MaybeHandle<Object> AddProperty(
+  MUST_USE_RESULT static MaybeHandle<Object> AddPropertyInternal(
       Handle<JSObject> object,
       Handle<Name> name,
       Handle<Object> value,
@@ -6893,6 +6913,12 @@ class Script: public Struct {
   // [flags]: Holds an exciting bitfield.
   DECL_ACCESSORS(flags, Smi)
 
+  // [source_url]: sourceURL from magic comment
+  DECL_ACCESSORS(source_url, Object)
+
+  // [source_url]: sourceMappingURL magic comment
+  DECL_ACCESSORS(source_mapping_url, Object)
+
   // [compilation_type]: how the the script was compiled. Encoded in the
   // 'flags' field.
   inline CompilationType compilation_type();
@@ -6949,7 +6975,9 @@ class Script: public Struct {
       kEvalFromSharedOffset + kPointerSize;
   static const int kFlagsOffset =
       kEvalFrominstructionsOffsetOffset + kPointerSize;
-  static const int kSize = kFlagsOffset + kPointerSize;
+  static const int kSourceUrlOffset = kFlagsOffset + kPointerSize;
+  static const int kSourceMappingUrlOffset = kSourceUrlOffset + kPointerSize;
+  static const int kSize = kSourceMappingUrlOffset + kPointerSize;
 
  private:
   int GetLineNumberWithArray(int code_pos);
@@ -7593,6 +7621,7 @@ class JSFunction: public JSObject {
   // [context]: The context for this function.
   inline Context* context();
   inline void set_context(Object* context);
+  inline JSObject* global_proxy();
 
   // [code]: The generated code object for this function.  Executed
   // when the function is invoked, e.g. foo() or new foo(). See
@@ -7607,7 +7636,10 @@ class JSFunction: public JSObject {
   inline bool IsBuiltin();
 
   // Tells whether this function is defined in a native script.
-  inline bool IsNative();
+  inline bool IsFromNativeScript();
+
+  // Tells whether this function is defined in an extension script.
+  inline bool IsFromExtensionScript();
 
   // Tells whether or not the function needs arguments adaption.
   inline bool NeedsArgumentsAdaption();
@@ -7846,8 +7878,8 @@ class GlobalObject: public JSObject {
   // [global context]: the most recent (i.e. innermost) global context.
   DECL_ACCESSORS(global_context, Context)
 
-  // [global receiver]: the global receiver object of the context
-  DECL_ACCESSORS(global_receiver, JSObject)
+  // [global proxy]: the global proxy object of the context
+  DECL_ACCESSORS(global_proxy, JSObject)
 
   // Retrieve the property cell used to store a property.
   PropertyCell* GetPropertyCell(LookupResult* result);
@@ -7858,8 +7890,8 @@ class GlobalObject: public JSObject {
   static const int kBuiltinsOffset = JSObject::kHeaderSize;
   static const int kNativeContextOffset = kBuiltinsOffset + kPointerSize;
   static const int kGlobalContextOffset = kNativeContextOffset + kPointerSize;
-  static const int kGlobalReceiverOffset = kGlobalContextOffset + kPointerSize;
-  static const int kHeaderSize = kGlobalReceiverOffset + kPointerSize;
+  static const int kGlobalProxyOffset = kGlobalContextOffset + kPointerSize;
+  static const int kHeaderSize = kGlobalProxyOffset + kPointerSize;
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(GlobalObject);

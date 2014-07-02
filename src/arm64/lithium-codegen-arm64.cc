@@ -661,7 +661,7 @@ bool LCodeGen::GeneratePrologue() {
       __ JumpIfNotRoot(x10, Heap::kUndefinedValueRootIndex, &ok);
 
       __ Ldr(x10, GlobalObjectMemOperand());
-      __ Ldr(x10, FieldMemOperand(x10, GlobalObject::kGlobalReceiverOffset));
+      __ Ldr(x10, FieldMemOperand(x10, GlobalObject::kGlobalProxyOffset));
       __ Poke(x10, receiver_offset);
 
       __ Bind(&ok);
@@ -3643,8 +3643,8 @@ void LCodeGen::DoLoadKeyedFixed(LLoadKeyedFixed* instr) {
 
 void LCodeGen::DoLoadKeyedGeneric(LLoadKeyedGeneric* instr) {
   ASSERT(ToRegister(instr->context()).is(cp));
-  ASSERT(ToRegister(instr->object()).is(KeyedLoadIC::ReceiverRegister()));
-  ASSERT(ToRegister(instr->key()).is(KeyedLoadIC::NameRegister()));
+  ASSERT(ToRegister(instr->object()).is(LoadIC::ReceiverRegister()));
+  ASSERT(ToRegister(instr->key()).is(LoadIC::NameRegister()));
 
   Handle<Code> ic = isolate()->builtins()->KeyedLoadIC_Initialize();
   CallCode(ic, RelocInfo::CODE_TARGET, instr);
@@ -3696,7 +3696,6 @@ void LCodeGen::DoLoadNamedGeneric(LLoadNamedGeneric* instr) {
   ASSERT(ToRegister(instr->context()).is(cp));
   // LoadIC expects name and receiver in registers.
   ASSERT(ToRegister(instr->object()).is(LoadIC::ReceiverRegister()));
-  ASSERT(ToRegister(instr->object()).is(x0));
   __ Mov(LoadIC::NameRegister(), Operand(instr->name()));
 
   Handle<Code> ic = LoadIC::initialize_stub(isolate(), NOT_CONTEXTUAL);
@@ -5949,7 +5948,7 @@ void LCodeGen::DoWrapReceiver(LWrapReceiver* instr) {
   __ Bind(&global_object);
   __ Ldr(result, FieldMemOperand(function, JSFunction::kContextOffset));
   __ Ldr(result, ContextMemOperand(result, Context::GLOBAL_OBJECT_INDEX));
-  __ Ldr(result, FieldMemOperand(result, GlobalObject::kGlobalReceiverOffset));
+  __ Ldr(result, FieldMemOperand(result, GlobalObject::kGlobalProxyOffset));
   __ B(&done);
 
   __ Bind(&copy_receiver);

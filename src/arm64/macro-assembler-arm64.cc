@@ -64,16 +64,22 @@ void MacroAssembler::LogicalMacro(const Register& rd,
   } else if (operand.IsImmediate()) {
     int64_t immediate = operand.ImmediateValue();
     unsigned reg_size = rd.SizeInBits();
-    ASSERT(rd.Is64Bits() || is_uint32(immediate));
 
     // If the operation is NOT, invert the operation and immediate.
     if ((op & NOT) == NOT) {
       op = static_cast<LogicalOp>(op & ~NOT);
       immediate = ~immediate;
-      if (rd.Is32Bits()) {
-        immediate &= kWRegMask;
-      }
     }
+
+    // Ignore the top 32 bits of an immediate if we're moving to a W register.
+    if (rd.Is32Bits()) {
+      // Check that the top 32 bits are consistent.
+      ASSERT(((immediate >> kWRegSizeInBits) == 0) ||
+             ((immediate >> kWRegSizeInBits) == -1));
+      immediate &= kWRegMask;
+    }
+
+    ASSERT(rd.Is64Bits() || is_uint32(immediate));
 
     // Special cases for all set or all clear immediates.
     if (immediate == 0) {
@@ -809,6 +815,17 @@ void MacroAssembler::Pop(const CPURegister& dst0, const CPURegister& dst1,
 
   PopHelper(count, size, dst0, dst1, dst2, dst3);
   PopPostamble(count, size);
+}
+
+
+void MacroAssembler::Push(const Register& src0, const FPRegister& src1) {
+  int size = src0.SizeInBytes() + src1.SizeInBytes();
+
+  PushPreamble(size);
+  // Reserve room for src0 and push src1.
+  str(src1, MemOperand(StackPointer(), -size, PreIndex));
+  // Fill the gap with src0.
+  str(src0, MemOperand(StackPointer(), src1.SizeInBytes()));
 }
 
 
@@ -2915,8 +2932,7 @@ void MacroAssembler::TruncateDoubleToI(Register result,
   TryConvertDoubleToInt64(result, double_input, &done);
 
   // If we fell through then inline version didn't succeed - call stub instead.
-  Push(lr);
-  Push(double_input);  // Put input on stack.
+  Push(lr, double_input);
 
   DoubleToIStub stub(isolate(),
                      jssp,
@@ -3560,7 +3576,8 @@ void MacroAssembler::AllocateHeapNumber(Register result,
                                         Register scratch1,
                                         Register scratch2,
                                         CPURegister value,
-                                        CPURegister heap_number_map) {
+                                        CPURegister heap_number_map,
+                                        MutableMode mode) {
   ASSERT(!value.IsValid() || value.Is64Bits());
   UseScratchRegisterScope temps(this);
 
@@ -3568,6 +3585,10 @@ void MacroAssembler::AllocateHeapNumber(Register result,
   // object.
   Allocate(HeapNumber::kSize, result, scratch1, scratch2, gc_required,
            NO_ALLOCATION_FLAGS);
+
+  Heap::RootListIndex map_index = mode == MUTABLE
+      ? Heap::kMutableHeapNumberMapRootIndex
+      : Heap::kHeapNumberMapRootIndex;
 
   // Prepare the heap number map.
   if (!heap_number_map.IsValid()) {
@@ -3578,7 +3599,7 @@ void MacroAssembler::AllocateHeapNumber(Register result,
     } else {
       heap_number_map = scratch1;
     }
-    LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
+    LoadRoot(heap_number_map, map_index);
   }
   if (emit_debug_code()) {
     Register map;
@@ -3588,7 +3609,7 @@ void MacroAssembler::AllocateHeapNumber(Register result,
     } else {
       map = Register(heap_number_map);
     }
-    AssertRegisterIsRoot(map, Heap::kHeapNumberMapRootIndex);
+    AssertRegisterIsRoot(map, map_index);
   }
 
   // Store the heap number map and the value in the allocated object.

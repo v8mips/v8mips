@@ -1633,6 +1633,38 @@ Handle<Value> UnboundScript::GetScriptName() {
 }
 
 
+Handle<Value> UnboundScript::GetSourceURL() {
+  i::Handle<i::SharedFunctionInfo> obj =
+      i::Handle<i::SharedFunctionInfo>::cast(Utils::OpenHandle(this));
+  i::Isolate* isolate = obj->GetIsolate();
+  ON_BAILOUT(isolate, "v8::UnboundScript::GetSourceURL()",
+             return Handle<String>());
+  LOG_API(isolate, "UnboundScript::GetSourceURL");
+  if (obj->script()->IsScript()) {
+    i::Object* url = i::Script::cast(obj->script())->source_url();
+    return Utils::ToLocal(i::Handle<i::Object>(url, isolate));
+  } else {
+    return Handle<String>();
+  }
+}
+
+
+Handle<Value> UnboundScript::GetSourceMappingURL() {
+  i::Handle<i::SharedFunctionInfo> obj =
+      i::Handle<i::SharedFunctionInfo>::cast(Utils::OpenHandle(this));
+  i::Isolate* isolate = obj->GetIsolate();
+  ON_BAILOUT(isolate, "v8::UnboundScript::GetSourceMappingURL()",
+             return Handle<String>());
+  LOG_API(isolate, "UnboundScript::GetSourceMappingURL");
+  if (obj->script()->IsScript()) {
+    i::Object* url = i::Script::cast(obj->script())->source_mapping_url();
+    return Utils::ToLocal(i::Handle<i::Object>(url, isolate));
+  } else {
+    return Handle<String>();
+  }
+}
+
+
 Local<Value> Script::Run() {
   i::Handle<i::Object> obj = Utils::OpenHandle(this, true);
   // If execution is terminating, Compile(..)->Run() requires this
@@ -1647,8 +1679,7 @@ Local<Value> Script::Run() {
   i::HandleScope scope(isolate);
   i::Handle<i::JSFunction> fun = i::Handle<i::JSFunction>::cast(obj);
   EXCEPTION_PREAMBLE(isolate);
-  i::Handle<i::Object> receiver(
-      isolate->context()->global_proxy(), isolate);
+  i::Handle<i::Object> receiver(isolate->global_proxy(), isolate);
   i::Handle<i::Object> result;
   has_pending_exception = !i::Execution::Call(
       isolate, fun, receiver, 0, NULL).ToHandle(&result);
@@ -5105,7 +5136,7 @@ static i::Handle<i::Context> CreateEnvironment(
     i::Isolate* isolate,
     v8::ExtensionConfiguration* extensions,
     v8::Handle<ObjectTemplate> global_template,
-    v8::Handle<Value> global_object) {
+    v8::Handle<Value> maybe_global_proxy) {
   i::Handle<i::Context> env;
 
   // Enter V8 via an ENTER_V8 scope.
@@ -5143,11 +5174,14 @@ static i::Handle<i::Context> CreateEnvironment(
       }
     }
 
+    i::Handle<i::Object> proxy = Utils::OpenHandle(*maybe_global_proxy, true);
+    i::MaybeHandle<i::JSGlobalProxy> maybe_proxy;
+    if (!proxy.is_null()) {
+      maybe_proxy = i::Handle<i::JSGlobalProxy>::cast(proxy);
+    }
     // Create the environment.
     env = isolate->bootstrapper()->CreateEnvironment(
-        Utils::OpenHandle(*global_object, true),
-        proxy_template,
-        extensions);
+        maybe_proxy, proxy_template, extensions);
 
     // Restore the access check info on the global template.
     if (!global_template.IsEmpty()) {
@@ -5826,8 +5860,7 @@ bool Value::IsPromise() const {
   i::Handle<i::Object> b;
   has_pending_exception = !i::Execution::Call(
       isolate,
-      handle(
-          isolate->context()->global_object()->native_context()->is_promise()),
+      isolate->is_promise(),
       isolate->factory()->undefined_value(),
       ARRAY_SIZE(argv), argv,
       false).ToHandle(&b);
@@ -5844,8 +5877,7 @@ Local<Promise::Resolver> Promise::Resolver::New(Isolate* v8_isolate) {
   i::Handle<i::Object> result;
   has_pending_exception = !i::Execution::Call(
       isolate,
-      handle(isolate->context()->global_object()->native_context()->
-             promise_create()),
+      isolate->promise_create(),
       isolate->factory()->undefined_value(),
       0, NULL,
       false).ToHandle(&result);
@@ -5869,8 +5901,7 @@ void Promise::Resolver::Resolve(Handle<Value> value) {
   i::Handle<i::Object> argv[] = { promise, Utils::OpenHandle(*value) };
   has_pending_exception = i::Execution::Call(
       isolate,
-      handle(isolate->context()->global_object()->native_context()->
-             promise_resolve()),
+      isolate->promise_resolve(),
       isolate->factory()->undefined_value(),
       ARRAY_SIZE(argv), argv,
       false).is_null();
@@ -5887,8 +5918,7 @@ void Promise::Resolver::Reject(Handle<Value> value) {
   i::Handle<i::Object> argv[] = { promise, Utils::OpenHandle(*value) };
   has_pending_exception = i::Execution::Call(
       isolate,
-      handle(isolate->context()->global_object()->native_context()->
-             promise_reject()),
+      isolate->promise_reject(),
       isolate->factory()->undefined_value(),
       ARRAY_SIZE(argv), argv,
       false).is_null();
@@ -5906,8 +5936,7 @@ Local<Promise> Promise::Chain(Handle<Function> handler) {
   i::Handle<i::Object> result;
   has_pending_exception = !i::Execution::Call(
       isolate,
-      handle(isolate->context()->global_object()->native_context()->
-             promise_chain()),
+      isolate->promise_chain(),
       promise,
       ARRAY_SIZE(argv), argv,
       false).ToHandle(&result);
@@ -5926,8 +5955,7 @@ Local<Promise> Promise::Catch(Handle<Function> handler) {
   i::Handle<i::Object> result;
   has_pending_exception = !i::Execution::Call(
       isolate,
-      handle(isolate->context()->global_object()->native_context()->
-             promise_catch()),
+      isolate->promise_catch(),
       promise,
       ARRAY_SIZE(argv), argv,
       false).ToHandle(&result);
@@ -5946,8 +5974,7 @@ Local<Promise> Promise::Then(Handle<Function> handler) {
   i::Handle<i::Object> result;
   has_pending_exception = !i::Execution::Call(
       isolate,
-      handle(isolate->context()->global_object()->native_context()->
-             promise_then()),
+      isolate->promise_then(),
       promise,
       ARRAY_SIZE(argv), argv,
       false).ToHandle(&result);
@@ -6382,7 +6409,7 @@ v8::Local<v8::Context> Isolate::GetCurrentContext() {
   i::Isolate* isolate = reinterpret_cast<i::Isolate*>(this);
   i::Context* context = isolate->context();
   if (context == NULL) return Local<Context>();
-  i::Context* native_context = context->global_object()->native_context();
+  i::Context* native_context = context->native_context();
   if (native_context == NULL) return Local<Context>();
   return Utils::ToLocal(i::Handle<i::Context>(native_context));
 }

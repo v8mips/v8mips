@@ -51,7 +51,7 @@ EXPECTED_FUNCTION_COUNT = 416
 EXPECTED_FUZZABLE_COUNT = 331
 EXPECTED_CCTEST_COUNT = 6
 EXPECTED_UNKNOWN_COUNT = 4
-EXPECTED_BUILTINS_COUNT = 809
+EXPECTED_BUILTINS_COUNT = 808
 
 
 # Don't call these at all.
@@ -212,6 +212,7 @@ _NUMBER_FORMAT = (
 # None means "fall back to autodetected value".
 CUSTOM_KNOWN_GOOD_INPUT = {
   "AddProperty": [None, 10, None, None, None],
+  "AddPropertyForTemplate": [None, 10, None, None, None],
   "Apply": ["function() {}", None, None, None, None, None],
   "ArrayBufferSliceImpl": [None, None, 0, None],
   "ArrayConcat": ["[1, 'a']", None],

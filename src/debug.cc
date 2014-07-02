@@ -759,7 +759,7 @@ bool Debug::CompileDebuggerScript(Isolate* isolate, int index) {
   Handle<Object> exception;
   MaybeHandle<Object> result =
       Execution::TryCall(function,
-                         Handle<Object>(context->global_object(), isolate),
+                         handle(context->global_proxy()),
                          0,
                          NULL,
                          &exception);
@@ -807,7 +807,7 @@ bool Debug::Load() {
   ExtensionConfiguration no_extensions;
   Handle<Context> context =
       isolate_->bootstrapper()->CreateEnvironment(
-          Handle<Object>::null(),
+          MaybeHandle<JSGlobalProxy>(),
           v8::Handle<ObjectTemplate>(),
           &no_extensions);
 
@@ -1226,7 +1226,7 @@ void Debug::FloodBoundFunctionWithOneShot(Handle<JSFunction> function) {
                         isolate_);
 
   if (!bindee.is_null() && bindee->IsJSFunction() &&
-      !JSFunction::cast(*bindee)->IsNative()) {
+      !JSFunction::cast(*bindee)->IsFromNativeScript()) {
     Handle<JSFunction> bindee_function(JSFunction::cast(*bindee));
     Debug::FloodWithOneShot(bindee_function);
   }
@@ -1447,7 +1447,8 @@ void Debug::PrepareStep(StepAction step_action,
       frames_it.Advance();
     }
     // Skip builtin functions on the stack.
-    while (!frames_it.done() && frames_it.frame()->function()->IsNative()) {
+    while (!frames_it.done() &&
+           frames_it.frame()->function()->IsFromNativeScript()) {
       frames_it.Advance();
     }
     // Step out: If there is a JavaScript caller frame, we need to
@@ -1534,7 +1535,7 @@ void Debug::PrepareStep(StepAction step_action,
         Handle<JSFunction> js_function(JSFunction::cast(fun));
         if (js_function->shared()->bound()) {
           Debug::FloodBoundFunctionWithOneShot(js_function);
-        } else if (!js_function->IsNative()) {
+        } else if (!js_function->IsFromNativeScript()) {
           // Don't step into builtins.
           // It will also compile target function if it's not compiled yet.
           FloodWithOneShot(js_function);
@@ -1676,7 +1677,7 @@ void Debug::HandleStepIn(Handle<JSFunction> function,
     if (function->shared()->bound()) {
       // Handle Function.prototype.bind
       Debug::FloodBoundFunctionWithOneShot(function);
-    } else if (!function->IsNative()) {
+    } else if (!function->IsFromNativeScript()) {
       // Don't allow step into functions in the native context.
       if (function->shared()->code() ==
           isolate->builtins()->builtin(Builtins::kFunctionApply) ||
@@ -1688,7 +1689,7 @@ void Debug::HandleStepIn(Handle<JSFunction> function,
         // function.
         if (!holder.is_null() && holder->IsJSFunction()) {
           Handle<JSFunction> js_function = Handle<JSFunction>::cast(holder);
-          if (!js_function->IsNative()) {
+          if (!js_function->IsFromNativeScript()) {
             Debug::FloodWithOneShot(js_function);
           } else if (js_function->shared()->bound()) {
             // Handle Function.prototype.bind
@@ -2030,7 +2031,7 @@ void Debug::PrepareForBreakPoints() {
 
           if (!shared->allows_lazy_compilation()) continue;
           if (!shared->script()->IsScript()) continue;
-          if (function->IsNative()) continue;
+          if (function->IsFromNativeScript()) continue;
           if (shared->code()->gc_metadata() == active_code_marker) continue;
 
           if (shared->is_generator()) {
@@ -2446,12 +2447,13 @@ void Debug::ClearMirrorCache() {
   HandleScope scope(isolate_);
   AssertDebugContext();
   Factory* factory = isolate_->factory();
-  JSObject::SetProperty(isolate_->global_object(),
+  Handle<GlobalObject> global(isolate_->global_object());
+  JSObject::SetProperty(global,
       factory->NewStringFromAsciiChecked("next_handle_"),
       handle(Smi::FromInt(0), isolate_),
       NONE,
       SLOPPY).Check();
-  JSObject::SetProperty(isolate_->global_object(),
+  JSObject::SetProperty(global,
       factory->NewStringFromAsciiChecked("mirror_cache_"),
       factory->NewJSArray(0, FAST_ELEMENTS),
       NONE,
@@ -2494,14 +2496,15 @@ MaybeHandle<Object> Debug::MakeJSObject(const char* constructor_name,
                                         Handle<Object> argv[]) {
   AssertDebugContext();
   // Create the execution state object.
+  Handle<GlobalObject> global(isolate_->global_object());
   Handle<Object> constructor = Object::GetProperty(
-      isolate_, isolate_->global_object(), constructor_name).ToHandleChecked();
+      isolate_, global, constructor_name).ToHandleChecked();
   ASSERT(constructor->IsJSFunction());
   if (!constructor->IsJSFunction()) return MaybeHandle<Object>();
   // We do not handle interrupts here.  In particular, termination interrupts.
   PostponeInterruptsScope no_interrupts(isolate_);
   return Execution::TryCall(Handle<JSFunction>::cast(constructor),
-                            Handle<JSObject>(debug_context()->global_object()),
+                            handle(debug_context()->global_proxy()),
                             argc,
                             argv);
 }
@@ -2777,10 +2780,9 @@ void Debug::CallEventCallback(v8::DebugEvent event,
                               exec_state,
                               event_data,
                               event_listener_data_ };
+    Handle<JSReceiver> global(isolate_->global_proxy());
     Execution::TryCall(Handle<JSFunction>::cast(event_listener_),
-                       isolate_->global_object(),
-                       ARRAY_SIZE(argv),
-                       argv);
+                       global, ARRAY_SIZE(argv), argv);
   }
 }
 
