@@ -32,8 +32,8 @@ void Builtins::Generate_Adaptor(MacroAssembler* masm,
   //  -- cp                 : context
   //  -- sp[0]              : last argument
   //  -- ...
-  //  -- sp[4 * (argc - 1)] : first argument
-  //  -- sp[4 * agrc]       : receiver
+  //  -- sp[8 * (argc - 1)] : first argument
+  //  -- sp[8 * agrc]       : receiver
   // -----------------------------------
 
   // Insert extra arguments.
@@ -151,8 +151,8 @@ void Builtins::Generate_StringConstructCode(MacroAssembler* masm) {
   //  -- a0                     : number of arguments
   //  -- a1                     : constructor function
   //  -- ra                     : return address
-  //  -- sp[(argc - n - 1) * 4] : arg[n] (zero based)
-  //  -- sp[argc * 4]           : receiver
+  //  -- sp[(argc - n - 1) * 8] : arg[n] (zero based)
+  //  -- sp[argc * 8]           : receiver
   // -----------------------------------
   Counters* counters = masm->isolate()->counters();
   __ IncrementCounter(counters->string_ctor_calls(), 1, a2, a3);
@@ -166,7 +166,7 @@ void Builtins::Generate_StringConstructCode(MacroAssembler* masm) {
   // Load the first arguments in a0 and get rid of the rest.
   Label no_arguments;
   __ Branch(&no_arguments, eq, a0, Operand(zero_reg));
-  // First args = sp[(argc - 1) * 4].
+  // First args = sp[(argc - 1) * 8].
   __ Dsubu(a0, a0, Operand(1));
   __ dsll(a0, a0, kPointerSizeLog2);
   __ Daddu(sp, a0, sp);
@@ -1141,15 +1141,13 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
     // Enter an internal frame in order to preserve argument count.
     {
       FrameScope scope(masm, StackFrame::INTERNAL);
-      // __ dsll(a0, a0, kSmiTagSize);  // Smi tagged.
-      __ dsll32(a0, a0, 0);
+      __ SmiTag(a0);
       __ Push(a0, a2);
       __ InvokeBuiltin(Builtins::TO_OBJECT, CALL_FUNCTION);
       __ mov(a2, v0);
 
       __ pop(a0);
-      // __ dsra(a0, a0, kSmiTagSize);  // Un-tag.
-      __ dsra32(a0, a0, 0);
+      __ SmiUntag(a0);
       // Leave internal frame.
     }
     // Restore the function to a1, and the flag to t0.
@@ -1384,8 +1382,7 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
     // Call the function.
     Label call_proxy;
     ParameterCount actual(a0);
-    // __ sra(a0, a0, kSmiTagSize);
-    __ dsra32(a0, a0, 0);
+    __ SmiUntag(a0);
     __ ld(a1, MemOperand(fp, kFunctionOffset));
     __ GetObjectType(a1, a2, a2);
     __ Branch(&call_proxy, ne, a2, Operand(JS_FUNCTION_TYPE));
