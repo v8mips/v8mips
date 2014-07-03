@@ -153,7 +153,7 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
       }
       if ((object_regs & (1 << r)) != 0) {
         __ pop(reg);
-      }        
+      }
       if (FLAG_debug_code &&
           (((object_regs |non_object_regs) & (1 << r)) == 0)) {
         __ li(reg, kDebugZapValue);

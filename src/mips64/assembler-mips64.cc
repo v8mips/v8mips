@@ -37,8 +37,8 @@
 
 #if V8_TARGET_ARCH_MIPS64
 
-#include "src/mips64/assembler-mips64-inl.h"
 #include "src/base/cpu.h"
+#include "src/mips64/assembler-mips64-inl.h"
 #include "src/serialize.h"
 
 namespace v8 {
@@ -2170,7 +2170,8 @@ void Assembler::GrowBuffer() {
 
   // Copy the data.
   intptr_t pc_delta = desc.buffer - buffer_;
-  intptr_t rc_delta = (desc.buffer + desc.buffer_size) - (buffer_ + buffer_size_);
+  intptr_t rc_delta = (desc.buffer + desc.buffer_size) -
+      (buffer_ + buffer_size_);
   MemMove(desc.buffer, buffer_, desc.instr_size);
   MemMove(reloc_info_writer.pos() + rc_delta,
               reloc_info_writer.pos(), desc.reloc_size);
@@ -2291,7 +2292,8 @@ void Assembler::CheckTrampolinePool() {
           // references until associated instructions are emitted and available
           // to be patched.
           RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
-          // TODO(plind): Verify this, presume I cannot use macro-assembler here.
+          // TODO(plind): Verify this, presume I cannot use macro-assembler
+          // here.
           lui(at, (imm64 >> 32) & kImm16Mask);
           ori(at, at, (imm64 >> 16) & kImm16Mask);
           dsll(at, at, 16);
@@ -2367,7 +2369,6 @@ void Assembler::QuietNaN(HeapObject* object) {
 void Assembler::set_target_address_at(Address pc,
                                       Address target,
                                       ICacheFlushMode icache_flush_mode) {
-
 // There is an optimization where only 4 instructions are used to load address
 // in code on MIP64 because only 48-bits of address is effectively used.
 // It relies on fact the upper [63:48] bits are not used for virtual address

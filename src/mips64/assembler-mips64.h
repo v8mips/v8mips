@@ -151,8 +151,8 @@ REGISTER(a0, 4);
 REGISTER(a1, 5);
 REGISTER(a2, 6);
 REGISTER(a3, 7);
-// a4 - a7 t0 - t3: Can be used without reservation, act as temporary registers and are
-// allowed to be destroyed by subroutines.
+// a4 - a7 t0 - t3: Can be used without reservation, act as temporary registers
+// and are allowed to be destroyed by subroutines.
 REGISTER(a4, 8);
 REGISTER(a5, 9);
 REGISTER(a6, 10);

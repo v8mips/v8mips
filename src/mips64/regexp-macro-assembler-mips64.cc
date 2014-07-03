@@ -629,7 +629,8 @@ Handle<HeapObject> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
     // Start new stack frame.
     // Store link register in existing stack-cell.
     // Order here should correspond to order of offset constants in header file.
-    // TODO(plind): we save s0..s7, but ONLY use s3 here - use the regs or dont save.
+    // TODO(plind): we save s0..s7, but ONLY use s3 here - use the regs
+    // or dont save.
     RegList registers_to_retain = s0.bit() | s1.bit() | s2.bit() |
         s3.bit() | s4.bit() | s5.bit() | s6.bit() | s7.bit() | fp.bit();
     RegList argument_registers = a0.bit() | a1.bit() | a2.bit() | a3.bit();

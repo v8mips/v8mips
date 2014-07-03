@@ -3280,7 +3280,8 @@ void MacroAssembler::AllocateAsciiString(Register result,
   // while observing object alignment.
   ASSERT((SeqOneByteString::kHeaderSize & kObjectAlignmentMask) == 0);
   ASSERT(kCharSize == 1);
-  daddiu(scratch1, length, kObjectAlignmentMask + SeqOneByteString::kHeaderSize);
+  daddiu(scratch1, length,
+      kObjectAlignmentMask + SeqOneByteString::kHeaderSize);
   And(scratch1, scratch1, Operand(~kObjectAlignmentMask));
 
   // Allocate ASCII string in new space.
@@ -3598,8 +3599,8 @@ void MacroAssembler::StoreNumberToDoubleElements(Register value_reg,
   jmp(&done);
 
   bind(&maybe_nan);
-  // Could be NaN, Infinity or -Infinity. If fraction is not zero, it's NaN, otherwise
-  // it's Infinity or -Infinity, and the non-NaN code path applies.
+  // Could be NaN, Infinity or -Infinity. If fraction is not zero, it's NaN,
+  // otherwise it's Infinity or -Infinity, and the non-NaN code path applies.
   lw(mantissa_reg, FieldMemOperand(value_reg, HeapNumber::kMantissaOffset));
   Branch(&have_double_value, eq, mantissa_reg, Operand(zero_reg));
   bind(&is_nan);
@@ -4969,7 +4970,8 @@ void MacroAssembler::JumpIfNotBothSmi(Register reg1,
                                       Register reg2,
                                       Label* on_not_both_smi) {
   STATIC_ASSERT(kSmiTag == 0);
-#if defined(__APPLE__)  // TODO(plind): Find some better to fix this assert issue.
+  // TODO(plind): Find some better to fix this assert issue.
+#if defined(__APPLE__)
   ASSERT_EQ(1, kSmiTagMask);
 #else
   ASSERT_EQ((uint64_t)1, kSmiTagMask);
@@ -4983,7 +4985,8 @@ void MacroAssembler::JumpIfEitherSmi(Register reg1,
                                      Register reg2,
                                      Label* on_either_smi) {
   STATIC_ASSERT(kSmiTag == 0);
-#if defined(__APPLE__)  // TODO(plind): Find some better to fix this assert issue.
+  // TODO(plind): Find some better to fix this assert issue.
+#if defined(__APPLE__)
   ASSERT_EQ(1, kSmiTagMask);
 #else
   ASSERT_EQ((uint64_t)1, kSmiTagMask);
@@ -5664,7 +5667,6 @@ void MacroAssembler::EnsureNotWhite(
     // Adjust length for UC16.
     dsll(t9, t9, 1);
     bind(&skip);
-
   }
   Daddu(length, t9, Operand(SeqString::kHeaderSize + kObjectAlignmentMask));
   ASSERT(!length.is(t8));

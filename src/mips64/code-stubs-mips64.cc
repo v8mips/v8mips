@@ -2618,7 +2618,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
     __ daddu(a6, a0, a2);
 
     // Argument 6: Set the number of capture registers to zero to force global
-    // regexps to behave as non-global.  This does not affect non-global regexps.
+    // regexps to behave as non-global. This does not affect non-global regexps.
     __ mov(a5, zero_reg);
 
     // Argument 5: static offsets vector buffer.
@@ -2645,7 +2645,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
     __ sd(a0, MemOperand(sp, 3 * kPointerSize));
 
     // Argument 6: Set the number of capture registers to zero to force global
-    // regexps to behave as non-global.  This does not affect non-global regexps.
+    // regexps to behave as non-global. This does not affect non-global regexps.
     __ mov(a0, zero_reg);
     __ sd(a0, MemOperand(sp, 2 * kPointerSize));
 

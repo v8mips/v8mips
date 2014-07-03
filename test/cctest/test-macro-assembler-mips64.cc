@@ -67,11 +67,11 @@ TEST(CopyBytes) {
   size_t act_size;
 
   // Allocate two blocks to copy data between.
-  byte* src_buffer = 
+  byte* src_buffer =
       static_cast<byte*>(v8::base::OS::Allocate(data_size, &act_size, 0));
   CHECK(src_buffer);
   CHECK(act_size >= static_cast<size_t>(data_size));
-  byte* dest_buffer = 
+  byte* dest_buffer =
       static_cast<byte*>(v8::base::OS::Allocate(data_size, &act_size, 0));
   CHECK(dest_buffer);
   CHECK(act_size >= static_cast<size_t>(data_size));
@@ -138,10 +138,10 @@ TEST(LoadConstants) {
   Isolate* isolate = Isolate::Current();
   HandleScope handles(isolate);
 
-  long refConstants[64];
-  long result[64];
+  int64_t refConstants[64];
+  int64_t result[64];
 
-  long mask = 1;
+  int64_t mask = 1;
   for (int i = 0; i < 64; i++) {
     refConstants[i] = ~(mask << i);
   }
@@ -172,7 +172,6 @@ TEST(LoadConstants) {
   for (int i = 0; i < 64; i++) {
     CHECK(refConstants[i] == result[i]);
   }
-
 }
 
 
@@ -195,7 +194,7 @@ TEST(LoadAddress) {
   __ bind(&skip);
   __ li(a4, Operand(masm->jump_address(&to_jump)), ADDRESS_LOAD);
   int check_size = masm->InstructionsGeneratedSince(&skip);
-  CHECK(check_size == 4);
+  CHECK_EQ(check_size, 4);
   __ jr(a4);
   __ nop();
   __ stop("invalid");
@@ -213,7 +212,6 @@ TEST(LoadAddress) {
   ::F f = FUNCTION_CAST< ::F>(code->entry());
      (void) CALL_GENERATED_CODE(f, 0, 0, 0, 0, 0);
   // Check results.
-
 }
 
 #undef __

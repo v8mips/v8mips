@@ -278,7 +278,8 @@ bool LCodeGen::GenerateDeferredCode() {
         __ MultiPush(cp.bit() | fp.bit() | ra.bit());
         __ li(scratch0(), Operand(Smi::FromInt(StackFrame::STUB)));
         __ push(scratch0());
-        __ Daddu(fp, sp, Operand(StandardFrameConstants::kFixedFrameSizeFromFp));
+        __ Daddu(fp, sp,
+            Operand(StandardFrameConstants::kFixedFrameSizeFromFp));
         Comment(";;; Deferred code");
       }
       code->Generate();
@@ -331,7 +332,8 @@ bool LCodeGen::GenerateDeoptJumpTable() {
         ASSERT(info()->IsStub());
         __ li(scratch0(), Operand(Smi::FromInt(StackFrame::STUB)));
         __ push(scratch0());
-        __ Daddu(fp, sp, Operand(StandardFrameConstants::kFixedFrameSizeFromFp));
+        __ Daddu(fp, sp,
+            Operand(StandardFrameConstants::kFixedFrameSizeFromFp));
         __ Call(t9);
       }
     } else {
@@ -1704,8 +1706,10 @@ void LCodeGen::DoSubI(LSubI* instr) {
     }
     DeoptimizeIf(lt, instr->environment(), overflow, Operand(zero_reg));
     if (!instr->hydrogen()->representation().IsSmi()) {
-      DeoptimizeIf(gt, instr->environment(), ToRegister(result), Operand(kMaxInt));
-      DeoptimizeIf(lt, instr->environment(), ToRegister(result), Operand(kMinInt));
+      DeoptimizeIf(gt, instr->environment(),
+          ToRegister(result), Operand(kMaxInt));
+      DeoptimizeIf(lt, instr->environment(),
+          ToRegister(result), Operand(kMinInt));
     }
   }
 }
@@ -1900,8 +1904,10 @@ void LCodeGen::DoAddI(LAddI* instr) {
     DeoptimizeIf(lt, instr->environment(), overflow, Operand(zero_reg));
     // if not smi, it must int32.
     if (!instr->hydrogen()->representation().IsSmi()) {
-      DeoptimizeIf(gt, instr->environment(), ToRegister(result), Operand(kMaxInt));
-      DeoptimizeIf(lt, instr->environment(), ToRegister(result), Operand(kMinInt));
+      DeoptimizeIf(gt, instr->environment(),
+          ToRegister(result), Operand(kMaxInt));
+      DeoptimizeIf(lt, instr->environment(),
+          ToRegister(result), Operand(kMinInt));
     }
   }
 }
@@ -3004,7 +3010,6 @@ void LCodeGen::DoLoadNamedField(LLoadNamedField* instr) {
     representation = Representation::Integer32();
   }
   __ Load(result, FieldMemOperand(object, offset), representation);
-
 }
 
 
@@ -3130,7 +3135,8 @@ void LCodeGen::DoLoadKeyedExternalArray(LLoadKeyed* instr) {
   }
   int element_size_shift = ElementsKindToShiftSize(elements_kind);
   int shift_size = (instr->hydrogen()->key()->representation().IsSmi())
-      ? (element_size_shift - (kSmiTagSize + kSmiShiftSize)) : element_size_shift;
+      ? (element_size_shift - (kSmiTagSize + kSmiShiftSize))
+      : element_size_shift;
   int base_offset = instr->base_offset();
 
   if (elements_kind == EXTERNAL_FLOAT32_ELEMENTS ||
@@ -3140,7 +3146,8 @@ void LCodeGen::DoLoadKeyedExternalArray(LLoadKeyed* instr) {
     int base_offset = instr->base_offset();
     FPURegister result = ToDoubleRegister(instr->result());
     if (key_is_constant) {
-      __ Daddu(scratch0(), external_pointer, constant_key << element_size_shift);
+      __ Daddu(scratch0(), external_pointer,
+          constant_key << element_size_shift);
     } else {
       if (shift_size < 0) {
          if (shift_size == -32) {
@@ -3237,7 +3244,8 @@ void LCodeGen::DoLoadKeyedFixedDoubleArray(LLoadKeyed* instr) {
   if (!key_is_constant) {
     key = ToRegister(instr->key());
     int shift_size = (instr->hydrogen()->key()->representation().IsSmi())
-        ? (element_size_shift - (kSmiTagSize + kSmiShiftSize)) : element_size_shift;
+        ? (element_size_shift - (kSmiTagSize + kSmiShiftSize))
+        : element_size_shift;
     if (shift_size > 0) {
       __ dsll(at, key, shift_size);
     } else if (shift_size == -32) {
@@ -4176,7 +4184,6 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
                         instr->hydrogen()->SmiCheckForWriteBarrier(),
                         instr->hydrogen()->PointersToHereCheckForValue());
   }
-
 }
 
 
@@ -4231,7 +4238,8 @@ void LCodeGen::DoStoreKeyedExternalArray(LStoreKeyed* instr) {
   }
   int element_size_shift = ElementsKindToShiftSize(elements_kind);
   int shift_size = (instr->hydrogen()->key()->representation().IsSmi())
-      ? (element_size_shift - (kSmiTagSize + kSmiShiftSize)) : element_size_shift;
+      ? (element_size_shift - (kSmiTagSize + kSmiShiftSize))
+      : element_size_shift;
   int base_offset = instr->base_offset();
 
   if (elements_kind == EXTERNAL_FLOAT32_ELEMENTS ||
@@ -4334,7 +4342,8 @@ void LCodeGen::DoStoreKeyedFixedDoubleArray(LStoreKeyed* instr) {
              Operand((constant_key << element_size_shift) + base_offset));
   } else {
     int shift_size = (instr->hydrogen()->key()->representation().IsSmi())
-        ? (element_size_shift - (kSmiTagSize + kSmiShiftSize)) : element_size_shift;
+        ? (element_size_shift - (kSmiTagSize + kSmiShiftSize))
+        : element_size_shift;
     __ Daddu(scratch, elements, Operand(base_offset));
     ASSERT((shift_size == 3) || (shift_size == -29));
     if (shift_size == 3) {

@@ -1040,7 +1040,7 @@ void Simulator::set_fpu_register_word(int fpureg, int32_t value) {
   // TODO(plind): big endian issue.
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
   int32_t *pword = reinterpret_cast<int32_t*>(&FPUregisters_[fpureg]);
-  *pword = value & 0xffffffff;  // plind...................................................ACK - check this
+  *pword = value;
 }
 
 
@@ -1049,7 +1049,7 @@ void Simulator::set_fpu_register_hi_word(int fpureg, int32_t value) {
   // TODO(plind): big endian issue.
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
   int32_t *phiword = (reinterpret_cast<int32_t*>(&FPUregisters_[fpureg])) + 1;
-  *phiword = value & 0xffffffff;
+  *phiword = value;
 }
 
 
@@ -1492,9 +1492,10 @@ void Simulator::WriteH(int64_t addr, uint16_t value, Instruction* instr) {
     *ptr = value;
     return;
   }
-  PrintF("Unaligned unsigned halfword write at 0x%08lx, pc=0x%08" V8PRIxPTR "\n",
-         addr,
-         reinterpret_cast<intptr_t>(instr));
+  PrintF(
+      "Unaligned unsigned halfword write at 0x%08lx, pc=0x%08" V8PRIxPTR "\n",
+      addr,
+      reinterpret_cast<intptr_t>(instr));
   DieOrDebug();
 }
 
@@ -1619,7 +1620,6 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
       arg4 = stack_pointer[4];
       arg5 = stack_pointer[5];
     }
-// printf("arg0 : 0x%llx  arg1 : 0x%llx  arg2 : 0x%llx  arg3 : 0x%llx  arg4 : 0x%llx  arg5 : 0x%llx\n", arg0, arg1, arg2, arg3, arg4, arg5);
     bool fp_call =
          (redirection->type() == ExternalReference::BUILTIN_FP_FP_CALL) ||
          (redirection->type() == ExternalReference::BUILTIN_COMPARE_CALL) ||
@@ -2048,7 +2048,8 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
             // Logical right-rotate of a word by a variable number of bits.
             // This is special case od SRLV instruction, added in MIPS32
             // Release 2. SA field is equal to 00001.
-            *alu_out = ((uint32_t)rt_u >> rs_u) | ((uint32_t)rt_u << (32 - rs_u));
+            *alu_out =
+                ((uint32_t)rt_u >> rs_u) | ((uint32_t)rt_u << (32 - rs_u));
           }
           break;
         case DSRLV:
@@ -2076,10 +2077,12 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           *alu_out = get_register(LO);
           break;
         case MULT:
-          // TODO(plind) - Unify MULT/DMULT with single set of 64-bit HI/Lo regs.
+          // TODO(plind) - Unify MULT/DMULT with single set of 64-bit HI/Lo
+          // regs.
           // TODO(plind) - make the 32-bit MULT ops conform to spec regarding
           //   checking of 32-bit input values, and un-define operations of HW.
-          *i64hilo = static_cast<int64_t>((int32_t)rs) * static_cast<int64_t>((int32_t)rt);
+          *i64hilo = static_cast<int64_t>((int32_t)rs) *
+              static_cast<int64_t>((int32_t)rt);
           break;
         case MULTU:
           *u64hilo = static_cast<uint64_t>(rs_u) * static_cast<uint64_t>(rt_u);
@@ -2089,7 +2092,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           *i128resultL = rs * rt;
           break;
         case DMULTU:
-          // TODO never called.
+          UNIMPLEMENTED_MIPS();
           break;
         case ADD:
         case DADD:
@@ -2190,7 +2193,8 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
     case SPECIAL2:
       switch (instr->FunctionFieldRaw()) {
         case MUL:
-          *alu_out = (int32_t)rs_u * (int32_t)rt_u;  // Only the lower 32 bits are kept.
+          // Only the lower 32 bits are kept.
+          *alu_out = (int32_t)rs_u * (int32_t)rt_u;
           break;
         case CLZ:
           // MIPS32 spec: If no bits were set in GPR rs, the result written to
@@ -2457,7 +2461,6 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               // No break.
             case ROUND_L_D: {  // Mips64r2 instruction.
               // check error cases
-              // TODO: exception handling?
               double rounded = fs > 0 ? floor(fs + 0.5) : ceil(fs - 0.5);
               int64_t result = static_cast<int64_t>(rounded);
               set_fpu_register(fd_reg, result);
@@ -2580,7 +2583,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           set_register(HI, static_cast<int64_t>(i128resultH));
           break;
         case DMULTU:
-          // TODO nerver called.
+          UNIMPLEMENTED_MIPS();
           break;
         case DIV:
         case DDIV:

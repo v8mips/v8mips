@@ -699,8 +699,10 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   // Load in-object property.
   __ bind(&load_in_object_property);
   __ lbu(a6, FieldMemOperand(a0, Map::kInstanceSizeOffset));
-  __ daddu(a6, a6, a5);  // Index from start of object.
-  __ Dsubu(receiver, receiver, Operand(kHeapObjectTag));  // Remove the heap tag.
+  // Index from start of object.
+  __ daddu(a6, a6, a5);
+  // Remove the heap tag.
+  __ Dsubu(receiver, receiver, Operand(kHeapObjectTag));
   __ dsll(at, a6, kPointerSizeLog2);
   __ daddu(at, receiver, at);
   __ ld(v0, MemOperand(at));
@@ -846,7 +848,8 @@ static void KeyedStoreGenerateGenericHelper(
     __ sd(scratch_value, FieldMemOperand(receiver, JSArray::kLengthOffset));
   }
   // It's irrelevant whether array is smi-only or not when writing a smi.
-  __ Daddu(address, elements, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+  __ Daddu(address, elements,
+      Operand(FixedArray::kHeaderSize - kHeapObjectTag));
   __ SmiScale(scratch_value, key, kPointerSizeLog2);
   __ Daddu(address, address, scratch_value);
   __ sd(value, MemOperand(address));
@@ -864,7 +867,8 @@ static void KeyedStoreGenerateGenericHelper(
     __ Daddu(scratch_value, key, Operand(Smi::FromInt(1)));
     __ sd(scratch_value, FieldMemOperand(receiver, JSArray::kLengthOffset));
   }
-  __ Daddu(address, elements, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+  __ Daddu(address, elements,
+      Operand(FixedArray::kHeaderSize - kHeapObjectTag));
   __ SmiScale(scratch_value, key, kPointerSizeLog2);
   __ Daddu(address, address, scratch_value);
   __ sd(value, MemOperand(address));
