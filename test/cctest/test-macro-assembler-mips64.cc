@@ -149,12 +149,12 @@ TEST(LoadConstants) {
   MacroAssembler assembler(isolate, NULL, 0);
   MacroAssembler* masm = &assembler;
 
-  __ mov(t0, a0);
+  __ mov(a4, a0);
   for (int i = 0; i < 64; i++) {
     // Load constant.
-    __ li(t1, Operand(refConstants[i]));
-    __ sd(t1, MemOperand(t0));
-    __ Daddu(t0, t0, Operand(kPointerSize));
+    __ li(a5, Operand(refConstants[i]));
+    __ sd(a5, MemOperand(a4));
+    __ Daddu(a4, a4, Operand(kPointerSize));
   }
 
   __ jr(ra);
@@ -184,7 +184,7 @@ TEST(LoadAddress) {
   MacroAssembler assembler(isolate, NULL, 0);
   MacroAssembler* masm = &assembler;
   Label to_jump, skip;
-  __ mov(t0, a0);
+  __ mov(a4, a0);
 
   __ Branch(&skip);
   __ bind(&to_jump);
@@ -193,10 +193,10 @@ TEST(LoadAddress) {
   __ jr(ra);
   __ nop();
   __ bind(&skip);
-  __ li(t0, Operand(masm->jump_address(&to_jump)), ADDRESS_LOAD);
+  __ li(a4, Operand(masm->jump_address(&to_jump)), ADDRESS_LOAD);
   int check_size = masm->InstructionsGeneratedSince(&skip);
   CHECK(check_size == 4);
-  __ jr(t0);
+  __ jr(a4);
   __ nop();
   __ stop("invalid");
   __ stop("invalid");

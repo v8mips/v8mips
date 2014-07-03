@@ -122,14 +122,14 @@ int ToNumber(Register reg) {
     5,    // a1
     6,    // a2
     7,    // a3
-    8,    // t0
-    9,    // t1
-    10,   // t2
-    11,   // t3
-    12,   // t4
-    13,   // t5
-    14,   // t6
-    15,   // t7
+    8,    // a4
+    9,    // a5
+    10,   // a6
+    11,   // a7
+    12,   // t0
+    13,   // t1
+    14,   // t2
+    15,   // t3
     16,   // s0
     17,   // s1
     18,   // s2
@@ -157,8 +157,8 @@ Register ToRegister(int num) {
     zero_reg,
     at,
     v0, v1,
-    a0, a1, a2, a3,
-    t0, t1, t2, t3, t4, t5, t6, t7,
+    a0, a1, a2, a3, a4, a5, a6, a7,
+    t0, t1, t2, t3,
     s0, s1, s2, s3, s4, s5, s6, s7,
     t8, t9,
     k0, k1,

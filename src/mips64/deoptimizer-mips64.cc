@@ -167,28 +167,28 @@ void Deoptimizer::EntryGenerator::Generate() {
 
   // Get the address of the location in the code object (a3) (return
   // address for lazy deoptimization) and compute the fp-to-sp delta in
-  // register t0.
+  // register a4.
   __ mov(a3, ra);
   // Correct one word for bailout id.
-  __ Daddu(t0, sp, Operand(kSavedRegistersAreaSize + (1 * kPointerSize)));
+  __ Daddu(a4, sp, Operand(kSavedRegistersAreaSize + (1 * kPointerSize)));
 
-  __ Dsubu(t0, fp, t0);
+  __ Dsubu(a4, fp, a4);
 
   // Allocate a new deoptimizer object.
-  __ PrepareCallCFunction(6, t1);
+  __ PrepareCallCFunction(6, a5);
   // Pass six arguments, according to O32 or n64 ABI. a0..a3 are same for both.
   __ li(a1, Operand(type()));  // bailout type,
   __ ld(a0, MemOperand(fp, JavaScriptFrameConstants::kFunctionOffset));
   // a2: bailout id already loaded.
   // a3: code address or 0 already loaded.
   if (kMipsAbi == kN64) {
-    // t0: already has fp-to-sp delta.
-    __ li(t1, Operand(ExternalReference::isolate_address(isolate())));
+    // a4: already has fp-to-sp delta.
+    __ li(a5, Operand(ExternalReference::isolate_address(isolate())));
   } else {  // O32 abi.
     // Pass four arguments in a0 to a3 and fifth & sixth arguments on stack.
-    __ sd(t0, CFunctionArgumentOperand(5));  // Fp-to-sp delta.
-    __ li(t1, Operand(ExternalReference::isolate_address(isolate())));
-    __ sd(t1, CFunctionArgumentOperand(6));  // Isolate.
+    __ sd(a4, CFunctionArgumentOperand(5));  // Fp-to-sp delta.
+    __ li(a5, Operand(ExternalReference::isolate_address(isolate())));
+    __ sd(a5, CFunctionArgumentOperand(6));  // Isolate.
   }
   // Call Deoptimizer::New().
   {
@@ -241,8 +241,8 @@ void Deoptimizer::EntryGenerator::Generate() {
   Label pop_loop_header;
   __ BranchShort(&pop_loop_header);
   __ bind(&pop_loop);
-  __ pop(t0);
-  __ sd(t0, MemOperand(a3, 0));
+  __ pop(a4);
+  __ sd(a4, MemOperand(a3, 0));
   // __ daddiu(a3, a3, sizeof(uint32_t));
   __ daddiu(a3, a3, sizeof(uint64_t));
   __ bind(&pop_loop_header);
@@ -262,29 +262,29 @@ void Deoptimizer::EntryGenerator::Generate() {
   // Replace the current (input) frame with the output frames.
   Label outer_push_loop, inner_push_loop,
       outer_loop_header, inner_loop_header;
-  // Outer loop state: t0 = current "FrameDescription** output_",
+  // Outer loop state: a4 = current "FrameDescription** output_",
   // a1 = one past the last FrameDescription**.
   __ lw(a1, MemOperand(a0, Deoptimizer::output_count_offset()));
-  __ ld(t0, MemOperand(a0, Deoptimizer::output_offset()));  // t0 is output_.
+  __ ld(a4, MemOperand(a0, Deoptimizer::output_offset()));  // a4 is output_.
   __ dsll(a1, a1, kPointerSizeLog2);  // Count to offset.
-  __ daddu(a1, t0, a1);  // a1 = one past the last FrameDescription**.
+  __ daddu(a1, a4, a1);  // a1 = one past the last FrameDescription**.
   __ jmp(&outer_loop_header);
   __ bind(&outer_push_loop);
   // Inner loop state: a2 = current FrameDescription*, a3 = loop index.
-  __ ld(a2, MemOperand(t0, 0));  // output_[ix]
+  __ ld(a2, MemOperand(a4, 0));  // output_[ix]
   __ ld(a3, MemOperand(a2, FrameDescription::frame_size_offset()));
   __ jmp(&inner_loop_header);
   __ bind(&inner_push_loop);
   __ Dsubu(a3, a3, Operand(sizeof(uint64_t)));
-  __ Daddu(t2, a2, Operand(a3));
-  __ ld(t3, MemOperand(t2, FrameDescription::frame_content_offset()));
-  __ push(t3);
+  __ Daddu(a6, a2, Operand(a3));
+  __ ld(a7, MemOperand(a6, FrameDescription::frame_content_offset()));
+  __ push(a7);
   __ bind(&inner_loop_header);
   __ BranchShort(&inner_push_loop, ne, a3, Operand(zero_reg));
 
-  __ Daddu(t0, t0, Operand(kPointerSize));
+  __ Daddu(a4, a4, Operand(kPointerSize));
   __ bind(&outer_loop_header);
-  __ BranchShort(&outer_push_loop, lt, t0, Operand(a1));
+  __ BranchShort(&outer_push_loop, lt, a4, Operand(a1));
 
   __ ld(a1, MemOperand(a0, Deoptimizer::input_offset()));
   for (int i = 0; i < FPURegister::kMaxNumAllocatableRegisters; ++i) {
@@ -294,13 +294,13 @@ void Deoptimizer::EntryGenerator::Generate() {
   }
 
   // Push state, pc, and continuation from the last output frame.
-  __ ld(t2, MemOperand(a2, FrameDescription::state_offset()));
-  __ push(t2);
+  __ ld(a6, MemOperand(a2, FrameDescription::state_offset()));
+  __ push(a6);
 
-  __ ld(t2, MemOperand(a2, FrameDescription::pc_offset()));
-  __ push(t2);
-  __ ld(t2, MemOperand(a2, FrameDescription::continuation_offset()));
-  __ push(t2);
+  __ ld(a6, MemOperand(a2, FrameDescription::pc_offset()));
+  __ push(a6);
+  __ ld(a6, MemOperand(a2, FrameDescription::continuation_offset()));
+  __ push(a6);
 
 
   // Technically restoring 'at' should work unless zero_reg is also restored

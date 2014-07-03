@@ -743,7 +743,7 @@ void StubCompiler::GenerateFastApiCall(MacroAssembler* masm,
 
   // Abi for CallApiFunctionStub.
   Register callee = a0;
-  Register call_data = t0;
+  Register call_data = a4;
   Register holder = a2;
   Register api_function_address = a1;
 
@@ -1255,7 +1255,7 @@ Register* LoadStubCompiler::registers() {
   // receiver, name, scratch1, scratch2, scratch3, scratch4.
   Register receiver = LoadIC::ReceiverRegister();
   Register name = LoadIC::NameRegister();
-  static Register registers[] = { receiver, name, a3, a0, t0, t1 };
+  static Register registers[] = { receiver, name, a3, a0, a4, a5 };
   return registers;
 }
 
@@ -1264,7 +1264,7 @@ Register* KeyedLoadStubCompiler::registers() {
   // receiver, name, scratch1, scratch2, scratch3, scratch4.
   Register receiver = LoadIC::ReceiverRegister();
   Register name = LoadIC::NameRegister();
-  static Register registers[] = { receiver, name, a3, a0, t0, t1 };
+  static Register registers[] = { receiver, name, a3, a0, a4, a5 };
   return registers;
 }
 
@@ -1276,14 +1276,14 @@ Register StoreStubCompiler::value() {
 
 Register* StoreStubCompiler::registers() {
   // receiver, name, scratch1, scratch2, scratch3.
-  static Register registers[] = { a1, a2, a3, t0, t1 };
+  static Register registers[] = { a1, a2, a3, a4, a5 };
   return registers;
 }
 
 
 Register* KeyedStoreStubCompiler::registers() {
   // receiver, name, scratch1, scratch2, scratch3.
-  static Register registers[] = { a2, a1, a3, t0, t1 };
+  static Register registers[] = { a2, a1, a3, a4, a5 };
   return registers;
 }
 
@@ -1345,18 +1345,18 @@ Handle<Code> LoadStubCompiler::CompileLoadGlobal(
 
   // Get the value from the cell.
   __ li(a3, Operand(cell));
-  __ ld(t0, FieldMemOperand(a3, Cell::kValueOffset));
+  __ ld(a4, FieldMemOperand(a3, Cell::kValueOffset));
 
   // Check for deleted property if property can actually be deleted.
   if (!is_dont_delete) {
     __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
-    __ Branch(&miss, eq, t0, Operand(at));
+    __ Branch(&miss, eq, a4, Operand(at));
   }
 
   Counters* counters = isolate()->counters();
   __ IncrementCounter(counters->named_load_global_stub(), 1, a1, a3);
   __ Ret(USE_DELAY_SLOT);
-  __ mov(v0, t0);
+  __ mov(v0, a4);
 
   HandlerFrontendFooter(name, &miss);
 
@@ -1472,10 +1472,10 @@ void KeyedLoadStubCompiler::GenerateLoadDictionaryElement(
   ASSERT(receiver.is(a1));
   ASSERT(key.is(a2));
 
-  __ UntagAndJumpIfNotSmi(t2, key, &miss);
-  __ ld(t0, FieldMemOperand(receiver, JSObject::kElementsOffset));
+  __ UntagAndJumpIfNotSmi(a6, key, &miss);
+  __ ld(a4, FieldMemOperand(receiver, JSObject::kElementsOffset));
   ASSERT(kSmiTagSize + kSmiShiftSize == 32);
-  __ LoadFromNumberDictionary(&slow, t0, key, v0, t2, a3, t1);
+  __ LoadFromNumberDictionary(&slow, a4, key, v0, a6, a3, a5);
   __ Ret();
 
   // Slow case, key and receiver still unmodified.

@@ -122,66 +122,66 @@ TEST(MIPS2) {
   // Test lui, ori, and addiu, used in the li pseudo-instruction.
   // This way we can then safely load registers with chosen values.
 
-  __ ori(t0, zero_reg, 0);
-  __ lui(t0, 0x1234);
-  __ ori(t0, t0, 0);
-  __ ori(t0, t0, 0x0f0f);
-  __ ori(t0, t0, 0xf0f0);
-  __ addiu(t1, t0, 1);
-  __ addiu(t2, t1, -0x10);
+  __ ori(a4, zero_reg, 0);
+  __ lui(a4, 0x1234);
+  __ ori(a4, a4, 0);
+  __ ori(a4, a4, 0x0f0f);
+  __ ori(a4, a4, 0xf0f0);
+  __ addiu(a5, a4, 1);
+  __ addiu(a6, a5, -0x10);
 
   // Load values in temporary registers.
-  __ li(t0, 0x00000004);
-  __ li(t1, 0x00001234);
-  __ li(t2, 0x12345678);
-  __ li(t3, 0x7fffffff);
-  __ li(t4, 0xfffffffc);
-  __ li(t5, 0xffffedcc);
-  __ li(t6, 0xedcba988);
-  __ li(t7, 0x80000000);
+  __ li(a4, 0x00000004);
+  __ li(a5, 0x00001234);
+  __ li(a6, 0x12345678);
+  __ li(a7, 0x7fffffff);
+  __ li(t0, 0xfffffffc);
+  __ li(t1, 0xffffedcc);
+  __ li(t2, 0xedcba988);
+  __ li(t3, 0x80000000);
 
   // SPECIAL class.
-  __ srl(v0, t2, 8);    // 0x00123456
+  __ srl(v0, a6, 8);    // 0x00123456
   __ sll(v0, v0, 11);   // 0x91a2b000
   __ sra(v0, v0, 3);    // 0xf2345600
-  __ srav(v0, v0, t0);  // 0xff234560
-  __ sllv(v0, v0, t0);  // 0xf2345600
-  __ srlv(v0, v0, t0);  // 0x0f234560
+  __ srav(v0, v0, a4);  // 0xff234560
+  __ sllv(v0, v0, a4);  // 0xf2345600
+  __ srlv(v0, v0, a4);  // 0x0f234560
   __ Branch(&error, ne, v0, Operand(0x0f234560));
   __ nop();
 
-  __ addu(v0, t0, t1);  // 0x00001238
-  __ subu(v0, v0, t0);  // 0x00001234
+  __ addu(v0, a4, a5);  // 0x00001238
+  __ subu(v0, v0, a4);  // 0x00001234
   __ Branch(&error, ne, v0, Operand(0x00001234));
   __ nop();
-  __ addu(v1, t3, t0);  // 32bit addu result is sign-extended into 64bit reg.
+  __ addu(v1, a7, a4);  // 32bit addu result is sign-extended into 64bit reg.
   __ Branch(&error, ne, v1, Operand(0xffffffff80000003));
   __ nop();
-  __ subu(v1, t7, t0);  // 0x7ffffffc
+  __ subu(v1, t3, a4);  // 0x7ffffffc
   __ Branch(&error, ne, v1, Operand(0x7ffffffc));
   __ nop();
 
-  __ and_(v0, t1, t2);  // 0x0000000000001230
-  __ or_(v0, v0, t1);   // 0x0000000000001234
-  __ xor_(v0, v0, t2);  // 0x000000001234444c
-  __ nor(v0, v0, t2);   // 0xffffffffedcba987
+  __ and_(v0, a5, a6);  // 0x0000000000001230
+  __ or_(v0, v0, a5);   // 0x0000000000001234
+  __ xor_(v0, v0, a6);  // 0x000000001234444c
+  __ nor(v0, v0, a6);   // 0xffffffffedcba987
   __ Branch(&error, ne, v0, Operand(0xffffffffedcba983));
   __ nop();
 
   // Shift both 32bit number to left, to preserve meaning of next comparison.
+  __ dsll32(a7, a7, 0);
   __ dsll32(t3, t3, 0);
-  __ dsll32(t7, t7, 0);
 
-  __ slt(v0, t7, t3);
+  __ slt(v0, t3, a7);
   __ Branch(&error, ne, v0, Operand(0x1));
   __ nop();
-  __ sltu(v0, t7, t3);
+  __ sltu(v0, t3, a7);
   __ Branch(&error, ne, v0, Operand(zero_reg));
   __ nop();
 
   // Restore original values in registers.
+  __ dsrl32(a7, a7, 0);
   __ dsrl32(t3, t3, 0);
-  __ dsrl32(t7, t7, 0);
   // End of SPECIAL class.
 
   __ addiu(v0, zero_reg, 0x7421);  // 0x00007421
@@ -189,20 +189,20 @@ TEST(MIPS2) {
   __ addiu(v0, v0, -0x20);         // 0x00007400
   __ Branch(&error, ne, v0, Operand(0x00007400));
   __ nop();
-  __ addiu(v1, t3, 0x1);  // 0x80000000 - result is sign-extended.
+  __ addiu(v1, a7, 0x1);  // 0x80000000 - result is sign-extended.
   __ Branch(&error, ne, v1, Operand(0xffffffff80000000));
   __ nop();
 
-  __ slti(v0, t1, 0x00002000);  // 0x1
+  __ slti(v0, a5, 0x00002000);  // 0x1
   __ slti(v0, v0, 0xffff8000);  // 0x0
   __ Branch(&error, ne, v0, Operand(zero_reg));
   __ nop();
-  __ sltiu(v0, t1, 0x00002000);  // 0x1
+  __ sltiu(v0, a5, 0x00002000);  // 0x1
   __ sltiu(v0, v0, 0x00008000);  // 0x1
   __ Branch(&error, ne, v0, Operand(0x1));
   __ nop();
 
-  __ andi(v0, t1, 0xf0f0);  // 0x00001030
+  __ andi(v0, a5, 0xf0f0);  // 0x00001030
   __ ori(v0, v0, 0x8a00);   // 0x00009a30
   __ xori(v0, v0, 0x83cc);  // 0x000019fc
   __ Branch(&error, ne, v0, Operand(0x000019fc));
@@ -212,23 +212,23 @@ TEST(MIPS2) {
   __ nop();
 
   // Bit twiddling instructions & conditional moves.
-  // Uses t0-t7 as set above.
-  __ Clz(v0, t0);       // 29
-  __ Clz(v1, t1);       // 19
+  // Uses a4-t3 as set above.
+  __ Clz(v0, a4);       // 29
+  __ Clz(v1, a5);       // 19
   __ addu(v0, v0, v1);  // 48
-  __ Clz(v1, t2);       // 3
+  __ Clz(v1, a6);       // 3
   __ addu(v0, v0, v1);  // 51
-  __ Clz(v1, t7);       // 0
+  __ Clz(v1, t3);       // 0
   __ addu(v0, v0, v1);  // 51
   __ Branch(&error, ne, v0, Operand(51));
-  __ Movn(a0, t3, t0);  // Move a0<-t3 (t0 is NOT 0).
-  __ Ins(a0, t1, 12, 8);  // 0x7ff34fff
+  __ Movn(a0, a7, a4);  // Move a0<-a7 (a4 is NOT 0).
+  __ Ins(a0, a5, 12, 8);  // 0x7ff34fff
   __ Branch(&error, ne, a0, Operand(0x7ff34fff));
-  __ Movz(a0, t6, t7);    // a0 not updated (t7 is NOT 0).
+  __ Movz(a0, t2, t3);    // a0 not updated (t3 is NOT 0).
   __ Ext(a1, a0, 8, 12);  // 0x34f
   __ Branch(&error, ne, a1, Operand(0x34f));
-  __ Movz(a0, t6, v1);    // a0<-t6, v0 is 0, from 8 instr back.
-  __ Branch(&error, ne, a0, Operand(t6));
+  __ Movz(a0, t2, v1);    // a0<-t2, v0 is 0, from 8 instr back.
+  __ Branch(&error, ne, a0, Operand(t2));
 
   // Everything was correctly executed. Load the expected result.
   __ li(v0, 0x31415926);
@@ -292,8 +292,8 @@ TEST(MIPS3) {
 
   __ sdc1(f4, MemOperand(a0, OFFSET_OF(T, b)) );   // b = a.
 
-  __ li(t0, 120);
-  __ mtc1(t0, f14);
+  __ li(a4, 120);
+  __ mtc1(a4, f14);
   __ cvt_d_w(f14, f14);   // f14 = 120.0.
   __ mul_d(f10, f10, f14);
   __ sdc1(f10, MemOperand(a0, OFFSET_OF(T, e)) );  // e = d * 120 = 1.8066e16.
@@ -362,17 +362,17 @@ TEST(MIPS4) {
   __ ldc1(f4, MemOperand(a0, OFFSET_OF(T, a)) );
   __ ldc1(f5, MemOperand(a0, OFFSET_OF(T, b)) );
 
-  // Swap f4 and f5, by using 3 integer registers, t0-t2,
+  // Swap f4 and f5, by using 3 integer registers, a4-a6,
   // both two 32-bit chunks, and one 64-bit chunk.
   // mXhc1 is mips32/64-r2 only, not r1,
   // but we will not support r1 in practice.
-  __ mfc1(t0, f4);
-  __ mfhc1(t1, f4);
-  __ dmfc1(t2, f5);
+  __ mfc1(a4, f4);
+  __ mfhc1(a5, f4);
+  __ dmfc1(a6, f5);
 
-  __ mtc1(t0, f5);
-  __ mthc1(t1, f5);
-  __ dmtc1(t2, f4);
+  __ mtc1(a4, f5);
+  __ mthc1(a5, f5);
+  __ dmtc1(a6, f4);
 
   // Store the swapped f4 and f5 back to memory.
   __ sdc1(f4, MemOperand(a0, OFFSET_OF(T, a)) );
@@ -418,26 +418,26 @@ TEST(MIPS5) {
   // Load all structure elements to registers.
   __ ldc1(f4, MemOperand(a0, OFFSET_OF(T, a)) );
   __ ldc1(f6, MemOperand(a0, OFFSET_OF(T, b)) );
-  __ lw(t0, MemOperand(a0, OFFSET_OF(T, i)) );
-  __ lw(t1, MemOperand(a0, OFFSET_OF(T, j)) );
+  __ lw(a4, MemOperand(a0, OFFSET_OF(T, i)) );
+  __ lw(a5, MemOperand(a0, OFFSET_OF(T, j)) );
 
   // Convert double in f4 to int in element i.
   __ cvt_w_d(f8, f4);
-  __ mfc1(t2, f8);
-  __ sw(t2, MemOperand(a0, OFFSET_OF(T, i)) );
+  __ mfc1(a6, f8);
+  __ sw(a6, MemOperand(a0, OFFSET_OF(T, i)) );
 
   // Convert double in f6 to int in element j.
   __ cvt_w_d(f10, f6);
-  __ mfc1(t3, f10);
-  __ sw(t3, MemOperand(a0, OFFSET_OF(T, j)) );
+  __ mfc1(a7, f10);
+  __ sw(a7, MemOperand(a0, OFFSET_OF(T, j)) );
 
-  // Convert int in original i (t0) to double in a.
-  __ mtc1(t0, f12);
+  // Convert int in original i (a4) to double in a.
+  __ mtc1(a4, f12);
   __ cvt_d_w(f0, f12);
   __ sdc1(f0, MemOperand(a0, OFFSET_OF(T, a)) );
 
-  // Convert int in original j (t1) to double in b.
-  __ mtc1(t1, f14);
+  // Convert int in original j (a5) to double in b.
+  __ mtc1(a5, f14);
   __ cvt_d_w(f2, f14);
   __ sdc1(f2, MemOperand(a0, OFFSET_OF(T, b)) );
 
@@ -485,31 +485,31 @@ TEST(MIPS6) {
   Label L, C;
 
   // Basic word load/store.
-  __ lw(t0, MemOperand(a0, OFFSET_OF(T, ui)) );
-  __ sw(t0, MemOperand(a0, OFFSET_OF(T, r1)) );
+  __ lw(a4, MemOperand(a0, OFFSET_OF(T, ui)) );
+  __ sw(a4, MemOperand(a0, OFFSET_OF(T, r1)) );
 
   // lh with positive data.
-  __ lh(t1, MemOperand(a0, OFFSET_OF(T, ui)) );
-  __ sw(t1, MemOperand(a0, OFFSET_OF(T, r2)) );
+  __ lh(a5, MemOperand(a0, OFFSET_OF(T, ui)) );
+  __ sw(a5, MemOperand(a0, OFFSET_OF(T, r2)) );
 
   // lh with negative data.
-  __ lh(t2, MemOperand(a0, OFFSET_OF(T, si)) );
-  __ sw(t2, MemOperand(a0, OFFSET_OF(T, r3)) );
+  __ lh(a6, MemOperand(a0, OFFSET_OF(T, si)) );
+  __ sw(a6, MemOperand(a0, OFFSET_OF(T, r3)) );
 
   // lhu with negative data.
-  __ lhu(t3, MemOperand(a0, OFFSET_OF(T, si)) );
-  __ sw(t3, MemOperand(a0, OFFSET_OF(T, r4)) );
+  __ lhu(a7, MemOperand(a0, OFFSET_OF(T, si)) );
+  __ sw(a7, MemOperand(a0, OFFSET_OF(T, r4)) );
 
   // lb with negative data.
-  __ lb(t4, MemOperand(a0, OFFSET_OF(T, si)) );
-  __ sw(t4, MemOperand(a0, OFFSET_OF(T, r5)) );
+  __ lb(t0, MemOperand(a0, OFFSET_OF(T, si)) );
+  __ sw(t0, MemOperand(a0, OFFSET_OF(T, r5)) );
 
   // sh writes only 1/2 of word.
-  __ lui(t5, 0x3333);
-  __ ori(t5, t5, 0x3333);
-  __ sw(t5, MemOperand(a0, OFFSET_OF(T, r6)) );
-  __ lhu(t5, MemOperand(a0, OFFSET_OF(T, si)) );
-  __ sh(t5, MemOperand(a0, OFFSET_OF(T, r6)) );
+  __ lui(t1, 0x3333);
+  __ ori(t1, t1, 0x3333);
+  __ sw(t1, MemOperand(a0, OFFSET_OF(T, r6)) );
+  __ lhu(t1, MemOperand(a0, OFFSET_OF(T, si)) );
+  __ sh(t1, MemOperand(a0, OFFSET_OF(T, r6)) );
 
   __ jr(ra);
   __ nop();
@@ -577,8 +577,8 @@ TEST(MIPS7) {
   __ Branch(&outa_here);
 
   __ bind(&less_than);
-  __ Addu(t0, zero_reg, Operand(1));
-  __ sw(t0, MemOperand(a0, OFFSET_OF(T, result)) );  // Set true.
+  __ Addu(a4, zero_reg, Operand(1));
+  __ sw(a4, MemOperand(a0, OFFSET_OF(T, result)) );  // Set true.
 
 
   // This test-case should have additional tests.
@@ -636,50 +636,50 @@ TEST(MIPS8) {
   MacroAssembler assm(isolate, NULL, 0);
 
   // Basic word load.
-  __ lw(t0, MemOperand(a0, OFFSET_OF(T, input)) );
+  __ lw(a4, MemOperand(a0, OFFSET_OF(T, input)) );
 
   // ROTR instruction (called through the Ror macro).
-  __ Ror(t1, t0, 0x0004);
-  __ Ror(t2, t0, 0x0008);
-  __ Ror(t3, t0, 0x000c);
-  __ Ror(t4, t0, 0x0010);
-  __ Ror(t5, t0, 0x0014);
-  __ Ror(t6, t0, 0x0018);
-  __ Ror(t7, t0, 0x001c);
+  __ Ror(a5, a4, 0x0004);
+  __ Ror(a6, a4, 0x0008);
+  __ Ror(a7, a4, 0x000c);
+  __ Ror(t0, a4, 0x0010);
+  __ Ror(t1, a4, 0x0014);
+  __ Ror(t2, a4, 0x0018);
+  __ Ror(t3, a4, 0x001c);
 
   // Basic word store.
-  __ sw(t1, MemOperand(a0, OFFSET_OF(T, result_rotr_4)) );
-  __ sw(t2, MemOperand(a0, OFFSET_OF(T, result_rotr_8)) );
-  __ sw(t3, MemOperand(a0, OFFSET_OF(T, result_rotr_12)) );
-  __ sw(t4, MemOperand(a0, OFFSET_OF(T, result_rotr_16)) );
-  __ sw(t5, MemOperand(a0, OFFSET_OF(T, result_rotr_20)) );
-  __ sw(t6, MemOperand(a0, OFFSET_OF(T, result_rotr_24)) );
-  __ sw(t7, MemOperand(a0, OFFSET_OF(T, result_rotr_28)) );
+  __ sw(a5, MemOperand(a0, OFFSET_OF(T, result_rotr_4)) );
+  __ sw(a6, MemOperand(a0, OFFSET_OF(T, result_rotr_8)) );
+  __ sw(a7, MemOperand(a0, OFFSET_OF(T, result_rotr_12)) );
+  __ sw(t0, MemOperand(a0, OFFSET_OF(T, result_rotr_16)) );
+  __ sw(t1, MemOperand(a0, OFFSET_OF(T, result_rotr_20)) );
+  __ sw(t2, MemOperand(a0, OFFSET_OF(T, result_rotr_24)) );
+  __ sw(t3, MemOperand(a0, OFFSET_OF(T, result_rotr_28)) );
 
   // ROTRV instruction (called through the Ror macro).
-  __ li(t7, 0x0004);
-  __ Ror(t1, t0, t7);
-  __ li(t7, 0x0008);
-  __ Ror(t2, t0, t7);
-  __ li(t7, 0x000C);
-  __ Ror(t3, t0, t7);
-  __ li(t7, 0x0010);
-  __ Ror(t4, t0, t7);
-  __ li(t7, 0x0014);
-  __ Ror(t5, t0, t7);
-  __ li(t7, 0x0018);
-  __ Ror(t6, t0, t7);
-  __ li(t7, 0x001C);
-  __ Ror(t7, t0, t7);
+  __ li(t3, 0x0004);
+  __ Ror(a5, a4, t3);
+  __ li(t3, 0x0008);
+  __ Ror(a6, a4, t3);
+  __ li(t3, 0x000C);
+  __ Ror(a7, a4, t3);
+  __ li(t3, 0x0010);
+  __ Ror(t0, a4, t3);
+  __ li(t3, 0x0014);
+  __ Ror(t1, a4, t3);
+  __ li(t3, 0x0018);
+  __ Ror(t2, a4, t3);
+  __ li(t3, 0x001C);
+  __ Ror(t3, a4, t3);
 
   // Basic word store.
-  __ sw(t1, MemOperand(a0, OFFSET_OF(T, result_rotrv_4)) );
-  __ sw(t2, MemOperand(a0, OFFSET_OF(T, result_rotrv_8)) );
-  __ sw(t3, MemOperand(a0, OFFSET_OF(T, result_rotrv_12)) );
-  __ sw(t4, MemOperand(a0, OFFSET_OF(T, result_rotrv_16)) );
-  __ sw(t5, MemOperand(a0, OFFSET_OF(T, result_rotrv_20)) );
-  __ sw(t6, MemOperand(a0, OFFSET_OF(T, result_rotrv_24)) );
-  __ sw(t7, MemOperand(a0, OFFSET_OF(T, result_rotrv_28)) );
+  __ sw(a5, MemOperand(a0, OFFSET_OF(T, result_rotrv_4)) );
+  __ sw(a6, MemOperand(a0, OFFSET_OF(T, result_rotrv_8)) );
+  __ sw(a7, MemOperand(a0, OFFSET_OF(T, result_rotrv_12)) );
+  __ sw(t0, MemOperand(a0, OFFSET_OF(T, result_rotrv_16)) );
+  __ sw(t1, MemOperand(a0, OFFSET_OF(T, result_rotrv_20)) );
+  __ sw(t2, MemOperand(a0, OFFSET_OF(T, result_rotrv_24)) );
+  __ sw(t3, MemOperand(a0, OFFSET_OF(T, result_rotrv_28)) );
 
   __ jr(ra);
   __ nop();
@@ -769,39 +769,39 @@ TEST(MIPS10) {
     __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, a)));
 
     // Save the raw bits of the double.
-    __ mfc1(t0, f0);
-    __ mfhc1(t1, f0);
-    __ sw(t0, MemOperand(a0, OFFSET_OF(T, dbl_mant)));
-    __ sw(t1, MemOperand(a0, OFFSET_OF(T, dbl_exp)));
+    __ mfc1(a4, f0);
+    __ mfhc1(a5, f0);
+    __ sw(a4, MemOperand(a0, OFFSET_OF(T, dbl_mant)));
+    __ sw(a5, MemOperand(a0, OFFSET_OF(T, dbl_exp)));
 
     // Convert double in f0 to long, save hi/lo parts.
     __ cvt_l_d(f0, f0);
-    __ mfc1(t0, f0);  // f0 LS 32 bits of long.
-    __ mfhc1(t1, f0);  // f0 MS 32 bits of long.
-    __ sw(t0, MemOperand(a0, OFFSET_OF(T, long_lo)));
-    __ sw(t1, MemOperand(a0, OFFSET_OF(T, long_hi)));
+    __ mfc1(a4, f0);  // f0 LS 32 bits of long.
+    __ mfhc1(a5, f0);  // f0 MS 32 bits of long.
+    __ sw(a4, MemOperand(a0, OFFSET_OF(T, long_lo)));
+    __ sw(a5, MemOperand(a0, OFFSET_OF(T, long_hi)));
 
     // Combine the high/low ints, convert back to double.
-    __ dsll32(t2, t1, 0);  // Move t1 to high bits of t2.
-    __ or_(t2, t2, t0);
-    __ dmtc1(t2, f1);
+    __ dsll32(a6, a5, 0);  // Move a5 to high bits of a6.
+    __ or_(a6, a6, a4);
+    __ dmtc1(a6, f1);
     __ cvt_d_l(f1, f1);
     __ sdc1(f1, MemOperand(a0, OFFSET_OF(T, a_converted)));
 
 
     // Convert the b long integers to double b.
-    __ lw(t0, MemOperand(a0, OFFSET_OF(T, b_long_lo)));
-    __ lw(t1, MemOperand(a0, OFFSET_OF(T, b_long_hi)));
-    __ mtc1(t0, f8);  // f8 LS 32-bits.
-    __ mthc1(t1, f8);  // f8 MS 32-bits.
+    __ lw(a4, MemOperand(a0, OFFSET_OF(T, b_long_lo)));
+    __ lw(a5, MemOperand(a0, OFFSET_OF(T, b_long_hi)));
+    __ mtc1(a4, f8);  // f8 LS 32-bits.
+    __ mthc1(a5, f8);  // f8 MS 32-bits.
     __ cvt_d_l(f10, f8);
     __ sdc1(f10, MemOperand(a0, OFFSET_OF(T, b)));
 
     // Convert double b back to long-int.
     __ ldc1(f31, MemOperand(a0, OFFSET_OF(T, b)));
     __ cvt_l_d(f31, f31);
-    __ dmfc1(t3, f31);
-    __ sd(t3, MemOperand(a0, OFFSET_OF(T, b_long_as_int64)));
+    __ dmfc1(a7, f31);
+    __ sd(a7, MemOperand(a0, OFFSET_OF(T, b_long_as_int64)));
 
 
     __ jr(ra);
@@ -862,80 +862,80 @@ TEST(MIPS11) {
   Assembler assm(isolate, NULL, 0);
 
   // Test all combinations of LWL and vAddr.
-  __ lw(t0, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ lwl(t0, MemOperand(a0, OFFSET_OF(T, mem_init)) );
-  __ sw(t0, MemOperand(a0, OFFSET_OF(T, lwl_0)) );
+  __ lw(a4, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ lwl(a4, MemOperand(a0, OFFSET_OF(T, mem_init)) );
+  __ sw(a4, MemOperand(a0, OFFSET_OF(T, lwl_0)) );
 
-  __ lw(t1, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ lwl(t1, MemOperand(a0, OFFSET_OF(T, mem_init) + 1) );
-  __ sw(t1, MemOperand(a0, OFFSET_OF(T, lwl_1)) );
+  __ lw(a5, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ lwl(a5, MemOperand(a0, OFFSET_OF(T, mem_init) + 1) );
+  __ sw(a5, MemOperand(a0, OFFSET_OF(T, lwl_1)) );
 
-  __ lw(t2, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ lwl(t2, MemOperand(a0, OFFSET_OF(T, mem_init) + 2) );
-  __ sw(t2, MemOperand(a0, OFFSET_OF(T, lwl_2)) );
+  __ lw(a6, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ lwl(a6, MemOperand(a0, OFFSET_OF(T, mem_init) + 2) );
+  __ sw(a6, MemOperand(a0, OFFSET_OF(T, lwl_2)) );
 
-  __ lw(t3, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ lwl(t3, MemOperand(a0, OFFSET_OF(T, mem_init) + 3) );
-  __ sw(t3, MemOperand(a0, OFFSET_OF(T, lwl_3)) );
+  __ lw(a7, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ lwl(a7, MemOperand(a0, OFFSET_OF(T, mem_init) + 3) );
+  __ sw(a7, MemOperand(a0, OFFSET_OF(T, lwl_3)) );
 
   // Test all combinations of LWR and vAddr.
-  __ lw(t0, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ lwr(t0, MemOperand(a0, OFFSET_OF(T, mem_init)) );
-  __ sw(t0, MemOperand(a0, OFFSET_OF(T, lwr_0)) );
+  __ lw(a4, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ lwr(a4, MemOperand(a0, OFFSET_OF(T, mem_init)) );
+  __ sw(a4, MemOperand(a0, OFFSET_OF(T, lwr_0)) );
 
-  __ lw(t1, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ lwr(t1, MemOperand(a0, OFFSET_OF(T, mem_init) + 1) );
-  __ sw(t1, MemOperand(a0, OFFSET_OF(T, lwr_1)) );
+  __ lw(a5, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ lwr(a5, MemOperand(a0, OFFSET_OF(T, mem_init) + 1) );
+  __ sw(a5, MemOperand(a0, OFFSET_OF(T, lwr_1)) );
 
-  __ lw(t2, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ lwr(t2, MemOperand(a0, OFFSET_OF(T, mem_init) + 2) );
-  __ sw(t2, MemOperand(a0, OFFSET_OF(T, lwr_2)) );
+  __ lw(a6, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ lwr(a6, MemOperand(a0, OFFSET_OF(T, mem_init) + 2) );
+  __ sw(a6, MemOperand(a0, OFFSET_OF(T, lwr_2)) );
 
-  __ lw(t3, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ lwr(t3, MemOperand(a0, OFFSET_OF(T, mem_init) + 3) );
-  __ sw(t3, MemOperand(a0, OFFSET_OF(T, lwr_3)) );
+  __ lw(a7, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ lwr(a7, MemOperand(a0, OFFSET_OF(T, mem_init) + 3) );
+  __ sw(a7, MemOperand(a0, OFFSET_OF(T, lwr_3)) );
 
   // Test all combinations of SWL and vAddr.
-  __ lw(t0, MemOperand(a0, OFFSET_OF(T, mem_init)) );
-  __ sw(t0, MemOperand(a0, OFFSET_OF(T, swl_0)) );
-  __ lw(t0, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ swl(t0, MemOperand(a0, OFFSET_OF(T, swl_0)) );
+  __ lw(a4, MemOperand(a0, OFFSET_OF(T, mem_init)) );
+  __ sw(a4, MemOperand(a0, OFFSET_OF(T, swl_0)) );
+  __ lw(a4, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ swl(a4, MemOperand(a0, OFFSET_OF(T, swl_0)) );
 
-  __ lw(t1, MemOperand(a0, OFFSET_OF(T, mem_init)) );
-  __ sw(t1, MemOperand(a0, OFFSET_OF(T, swl_1)) );
-  __ lw(t1, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ swl(t1, MemOperand(a0, OFFSET_OF(T, swl_1) + 1) );
+  __ lw(a5, MemOperand(a0, OFFSET_OF(T, mem_init)) );
+  __ sw(a5, MemOperand(a0, OFFSET_OF(T, swl_1)) );
+  __ lw(a5, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ swl(a5, MemOperand(a0, OFFSET_OF(T, swl_1) + 1) );
 
-  __ lw(t2, MemOperand(a0, OFFSET_OF(T, mem_init)) );
-  __ sw(t2, MemOperand(a0, OFFSET_OF(T, swl_2)) );
-  __ lw(t2, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ swl(t2, MemOperand(a0, OFFSET_OF(T, swl_2) + 2) );
+  __ lw(a6, MemOperand(a0, OFFSET_OF(T, mem_init)) );
+  __ sw(a6, MemOperand(a0, OFFSET_OF(T, swl_2)) );
+  __ lw(a6, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ swl(a6, MemOperand(a0, OFFSET_OF(T, swl_2) + 2) );
 
-  __ lw(t3, MemOperand(a0, OFFSET_OF(T, mem_init)) );
-  __ sw(t3, MemOperand(a0, OFFSET_OF(T, swl_3)) );
-  __ lw(t3, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ swl(t3, MemOperand(a0, OFFSET_OF(T, swl_3) + 3) );
+  __ lw(a7, MemOperand(a0, OFFSET_OF(T, mem_init)) );
+  __ sw(a7, MemOperand(a0, OFFSET_OF(T, swl_3)) );
+  __ lw(a7, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ swl(a7, MemOperand(a0, OFFSET_OF(T, swl_3) + 3) );
 
   // Test all combinations of SWR and vAddr.
-  __ lw(t0, MemOperand(a0, OFFSET_OF(T, mem_init)) );
-  __ sw(t0, MemOperand(a0, OFFSET_OF(T, swr_0)) );
-  __ lw(t0, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ swr(t0, MemOperand(a0, OFFSET_OF(T, swr_0)) );
+  __ lw(a4, MemOperand(a0, OFFSET_OF(T, mem_init)) );
+  __ sw(a4, MemOperand(a0, OFFSET_OF(T, swr_0)) );
+  __ lw(a4, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ swr(a4, MemOperand(a0, OFFSET_OF(T, swr_0)) );
 
-  __ lw(t1, MemOperand(a0, OFFSET_OF(T, mem_init)) );
-  __ sw(t1, MemOperand(a0, OFFSET_OF(T, swr_1)) );
-  __ lw(t1, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ swr(t1, MemOperand(a0, OFFSET_OF(T, swr_1) + 1) );
+  __ lw(a5, MemOperand(a0, OFFSET_OF(T, mem_init)) );
+  __ sw(a5, MemOperand(a0, OFFSET_OF(T, swr_1)) );
+  __ lw(a5, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ swr(a5, MemOperand(a0, OFFSET_OF(T, swr_1) + 1) );
 
-  __ lw(t2, MemOperand(a0, OFFSET_OF(T, mem_init)) );
-  __ sw(t2, MemOperand(a0, OFFSET_OF(T, swr_2)) );
-  __ lw(t2, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ swr(t2, MemOperand(a0, OFFSET_OF(T, swr_2) + 2) );
+  __ lw(a6, MemOperand(a0, OFFSET_OF(T, mem_init)) );
+  __ sw(a6, MemOperand(a0, OFFSET_OF(T, swr_2)) );
+  __ lw(a6, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ swr(a6, MemOperand(a0, OFFSET_OF(T, swr_2) + 2) );
 
-  __ lw(t3, MemOperand(a0, OFFSET_OF(T, mem_init)) );
-  __ sw(t3, MemOperand(a0, OFFSET_OF(T, swr_3)) );
-  __ lw(t3, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ swr(t3, MemOperand(a0, OFFSET_OF(T, swr_3) + 3) );
+  __ lw(a7, MemOperand(a0, OFFSET_OF(T, mem_init)) );
+  __ sw(a7, MemOperand(a0, OFFSET_OF(T, swr_3)) );
+  __ lw(a7, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ swr(a7, MemOperand(a0, OFFSET_OF(T, swr_3) + 3) );
 
   __ jr(ra);
   __ nop();
@@ -990,55 +990,55 @@ TEST(MIPS12) {
 
   MacroAssembler assm(isolate, NULL, 0);
 
-  __ mov(t6, fp);  // Save frame pointer.
+  __ mov(t2, fp);  // Save frame pointer.
   __ mov(fp, a0);  // Access struct T by fp.
-  __ lw(t0, MemOperand(a0, OFFSET_OF(T, y)) );
-  __ lw(t3, MemOperand(a0, OFFSET_OF(T, y4)) );
+  __ lw(a4, MemOperand(a0, OFFSET_OF(T, y)) );
+  __ lw(a7, MemOperand(a0, OFFSET_OF(T, y4)) );
 
-  __ addu(t1, t0, t3);
-  __ subu(t4, t0, t3);
+  __ addu(a5, a4, a7);
+  __ subu(t0, a4, a7);
   __ nop();
-  __ push(t0);  // These instructions disappear after opt.
+  __ push(a4);  // These instructions disappear after opt.
   __ Pop();
-  __ addu(t0, t0, t0);
+  __ addu(a4, a4, a4);
   __ nop();
   __ Pop();     // These instructions disappear after opt.
-  __ push(t3);
+  __ push(a7);
   __ nop();
-  __ push(t3);  // These instructions disappear after opt.
-  __ pop(t3);
+  __ push(a7);  // These instructions disappear after opt.
+  __ pop(a7);
   __ nop();
-  __ push(t3);
-  __ pop(t4);
+  __ push(a7);
+  __ pop(t0);
   __ nop();
-  __ sw(t0, MemOperand(fp, OFFSET_OF(T, y)) );
-  __ lw(t0, MemOperand(fp, OFFSET_OF(T, y)) );
+  __ sw(a4, MemOperand(fp, OFFSET_OF(T, y)) );
+  __ lw(a4, MemOperand(fp, OFFSET_OF(T, y)) );
   __ nop();
-  __ sw(t0, MemOperand(fp, OFFSET_OF(T, y)) );
-  __ lw(t1, MemOperand(fp, OFFSET_OF(T, y)) );
+  __ sw(a4, MemOperand(fp, OFFSET_OF(T, y)) );
+  __ lw(a5, MemOperand(fp, OFFSET_OF(T, y)) );
   __ nop();
-  __ push(t1);
-  __ lw(t1, MemOperand(fp, OFFSET_OF(T, y)) );
-  __ pop(t1);
+  __ push(a5);
+  __ lw(a5, MemOperand(fp, OFFSET_OF(T, y)) );
+  __ pop(a5);
   __ nop();
-  __ push(t1);
-  __ lw(t2, MemOperand(fp, OFFSET_OF(T, y)) );
-  __ pop(t1);
+  __ push(a5);
+  __ lw(a6, MemOperand(fp, OFFSET_OF(T, y)) );
+  __ pop(a5);
   __ nop();
-  __ push(t1);
-  __ lw(t2, MemOperand(fp, OFFSET_OF(T, y)) );
-  __ pop(t2);
+  __ push(a5);
+  __ lw(a6, MemOperand(fp, OFFSET_OF(T, y)) );
+  __ pop(a6);
   __ nop();
-  __ push(t2);
-  __ lw(t2, MemOperand(fp, OFFSET_OF(T, y)) );
-  __ pop(t1);
+  __ push(a6);
+  __ lw(a6, MemOperand(fp, OFFSET_OF(T, y)) );
+  __ pop(a5);
   __ nop();
-  __ push(t1);
-  __ lw(t2, MemOperand(fp, OFFSET_OF(T, y)) );
-  __ pop(t3);
+  __ push(a5);
+  __ lw(a6, MemOperand(fp, OFFSET_OF(T, y)) );
+  __ pop(a7);
   __ nop();
 
-  __ mov(fp, t6);
+  __ mov(fp, t2);
   __ jr(ra);
   __ nop();
 
@@ -1079,15 +1079,15 @@ TEST(MIPS13) {
 
   MacroAssembler assm(isolate, NULL, 0);
 
-  __ sw(t0, MemOperand(a0, OFFSET_OF(T, cvt_small_in)));
-  __ Cvt_d_uw(f10, t0, f22);
+  __ sw(a4, MemOperand(a0, OFFSET_OF(T, cvt_small_in)));
+  __ Cvt_d_uw(f10, a4, f22);
   __ sdc1(f10, MemOperand(a0, OFFSET_OF(T, cvt_small_out)));
 
   __ Trunc_uw_d(f10, f10, f22);
   __ swc1(f10, MemOperand(a0, OFFSET_OF(T, trunc_small_out)));
 
-  __ sw(t0, MemOperand(a0, OFFSET_OF(T, cvt_big_in)));
-  __ Cvt_d_uw(f8, t0, f22);
+  __ sw(a4, MemOperand(a0, OFFSET_OF(T, cvt_big_in)));
+  __ Cvt_d_uw(f8, a4, f22);
   __ sdc1(f8, MemOperand(a0, OFFSET_OF(T, cvt_big_out)));
 
   __ Trunc_uw_d(f8, f8, f22);
@@ -1288,48 +1288,48 @@ TEST(MIPS16) {
   Label L, C;
 
   // Basic 32-bit word load/store, with un-signed data.
-  __ lw(t0, MemOperand(a0, OFFSET_OF(T, ui)) );
-  __ sw(t0, MemOperand(a0, OFFSET_OF(T, r1)) );
+  __ lw(a4, MemOperand(a0, OFFSET_OF(T, ui)) );
+  __ sw(a4, MemOperand(a0, OFFSET_OF(T, r1)) );
 
-  // Check that the data got zero-extended into 64-bit t0.
-  __ sd(t0, MemOperand(a0, OFFSET_OF(T, r2)) );
+  // Check that the data got zero-extended into 64-bit a4.
+  __ sd(a4, MemOperand(a0, OFFSET_OF(T, r2)) );
 
   // Basic 32-bit word load/store, with SIGNED data.
-  __ lw(t1, MemOperand(a0, OFFSET_OF(T, si)) );
-  __ sw(t1, MemOperand(a0, OFFSET_OF(T, r3)) );
+  __ lw(a5, MemOperand(a0, OFFSET_OF(T, si)) );
+  __ sw(a5, MemOperand(a0, OFFSET_OF(T, r3)) );
 
-  // Check that the data got sign-extended into 64-bit t0.
-  __ sd(t1, MemOperand(a0, OFFSET_OF(T, r4)) );
+  // Check that the data got sign-extended into 64-bit a4.
+  __ sd(a5, MemOperand(a0, OFFSET_OF(T, r4)) );
 
   // 32-bit UNSIGNED word load/store, with SIGNED data.
-  __ lwu(t2, MemOperand(a0, OFFSET_OF(T, si)) );
-  __ sw(t2, MemOperand(a0, OFFSET_OF(T, r5)) );
+  __ lwu(a6, MemOperand(a0, OFFSET_OF(T, si)) );
+  __ sw(a6, MemOperand(a0, OFFSET_OF(T, r5)) );
 
-  // Check that the data got zero-extended into 64-bit t0.
-  __ sd(t2, MemOperand(a0, OFFSET_OF(T, r6)) );
+  // Check that the data got zero-extended into 64-bit a4.
+  __ sd(a6, MemOperand(a0, OFFSET_OF(T, r6)) );
 
   // lh with positive data.
-  __ lh(t1, MemOperand(a0, OFFSET_OF(T, ui)) );
-  __ sw(t1, MemOperand(a0, OFFSET_OF(T, r2)) );
+  __ lh(a5, MemOperand(a0, OFFSET_OF(T, ui)) );
+  __ sw(a5, MemOperand(a0, OFFSET_OF(T, r2)) );
 
   // lh with negative data.
-  __ lh(t2, MemOperand(a0, OFFSET_OF(T, si)) );
-  __ sw(t2, MemOperand(a0, OFFSET_OF(T, r3)) );
+  __ lh(a6, MemOperand(a0, OFFSET_OF(T, si)) );
+  __ sw(a6, MemOperand(a0, OFFSET_OF(T, r3)) );
 
   // lhu with negative data.
-  __ lhu(t3, MemOperand(a0, OFFSET_OF(T, si)) );
-  __ sw(t3, MemOperand(a0, OFFSET_OF(T, r4)) );
+  __ lhu(a7, MemOperand(a0, OFFSET_OF(T, si)) );
+  __ sw(a7, MemOperand(a0, OFFSET_OF(T, r4)) );
 
   // lb with negative data.
-  __ lb(t4, MemOperand(a0, OFFSET_OF(T, si)) );
-  __ sw(t4, MemOperand(a0, OFFSET_OF(T, r5)) );
+  __ lb(t0, MemOperand(a0, OFFSET_OF(T, si)) );
+  __ sw(t0, MemOperand(a0, OFFSET_OF(T, r5)) );
 
   // // sh writes only 1/2 of word.
-  __ lui(t5, 0x3333);
-  __ ori(t5, t5, 0x3333);
-  __ sw(t5, MemOperand(a0, OFFSET_OF(T, r6)) );
-  __ lhu(t5, MemOperand(a0, OFFSET_OF(T, si)) );
-  __ sh(t5, MemOperand(a0, OFFSET_OF(T, r6)) );
+  __ lui(t1, 0x3333);
+  __ ori(t1, t1, 0x3333);
+  __ sw(t1, MemOperand(a0, OFFSET_OF(T, r6)) );
+  __ lhu(t1, MemOperand(a0, OFFSET_OF(T, si)) );
+  __ sh(t1, MemOperand(a0, OFFSET_OF(T, r6)) );
 
   __ jr(ra);
   __ nop();

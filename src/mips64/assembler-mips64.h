@@ -102,13 +102,13 @@ struct Register {
       "a1",
       "a2",
       "a3",
+      "a4",
+      "a5",
+      "a6",
+      "a7",
       "t0",
       "t1",
       "t2",
-      "t3",
-      "t4",
-      "t5",
-      "t6",
       "s7",
     };
     return names[index];
@@ -151,16 +151,16 @@ REGISTER(a0, 4);
 REGISTER(a1, 5);
 REGISTER(a2, 6);
 REGISTER(a3, 7);
-// t0 - t9: Can be used without reservation, act as temporary registers and are
+// a4 - a7 t0 - t3: Can be used without reservation, act as temporary registers and are
 // allowed to be destroyed by subroutines.
-REGISTER(t0, 8);
-REGISTER(t1, 9);
-REGISTER(t2, 10);
-REGISTER(t3, 11);
-REGISTER(t4, 12);
-REGISTER(t5, 13);
-REGISTER(t6, 14);
-REGISTER(t7, 15);
+REGISTER(a4, 8);
+REGISTER(a5, 9);
+REGISTER(a6, 10);
+REGISTER(a7, 11);
+REGISTER(t0, 12);
+REGISTER(t1, 13);
+REGISTER(t2, 14);
+REGISTER(t3, 15);
 // s0 - s7: Subroutine register variables. Subroutines that write to these
 // registers must restore their values before exiting so that the caller can
 // expect the values to be preserved.

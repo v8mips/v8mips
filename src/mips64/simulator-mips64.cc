@@ -281,7 +281,7 @@ void MipsDebugger::PrintAllRegs() {
   // a3.
   PrintF("%34s\t%34s\t%3s: 0x%016lx %14ld\n", "", "", REG_INFO(7));
   PrintF("\n");
-  // t0-t7, s0-s7
+  // a4-t3, s0-s7
   for (int i = 0; i < 8; i++) {
     PrintF("%3s: 0x%016lx %14ld\t%3s: 0x%016lx %14ld\n",
            REG_INFO(8+i), REG_INFO(16+i));
@@ -1611,8 +1611,8 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
     int64_t arg4, arg5;
 
     if (kMipsAbi == kN64) {
-      arg4 = get_register(t0);  // Abi n64 register a4.
-      arg5 = get_register(t1);  // Abi n64 register a5.
+      arg4 = get_register(a4);  // Abi n64 register a4.
+      arg5 = get_register(a5);  // Abi n64 register a5.
     } else {  // Abi O32.
       int64_t* stack_pointer = reinterpret_cast<int64_t*>(get_register(sp));
       // Args 4 and 5 are on the stack after the reserved space for args 0..3.
@@ -3224,10 +3224,10 @@ int64_t Simulator::Call(byte* entry, int argument_count, ...) {
   if (kMipsAbi == kN64) {
     // Up to eight arguments passed in registers in N64 ABI.
     // TODO(plind): N64 ABI calls these regs a4 - a7. Clarify this.
-    if (argument_count >= 5) set_register(t0, va_arg(parameters, int64_t));
-    if (argument_count >= 6) set_register(t1, va_arg(parameters, int64_t));
-    if (argument_count >= 7) set_register(t2, va_arg(parameters, int64_t));
-    if (argument_count >= 8) set_register(t3, va_arg(parameters, int64_t));
+    if (argument_count >= 5) set_register(a4, va_arg(parameters, int64_t));
+    if (argument_count >= 6) set_register(a5, va_arg(parameters, int64_t));
+    if (argument_count >= 7) set_register(a6, va_arg(parameters, int64_t));
+    if (argument_count >= 8) set_register(a7, va_arg(parameters, int64_t));
   }
 
   // Remaining arguments passed on stack.

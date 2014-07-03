@@ -996,7 +996,7 @@ LInstruction* LChunkBuilder::DoInstanceOfKnownGlobal(
       new(zone()) LInstanceOfKnownGlobal(
           UseFixed(instr->context(), cp),
           UseFixed(instr->left(), a0),
-          FixedTemp(t0));
+          FixedTemp(a4));
   return MarkAsCall(DefineFixed(result, v0), instr);
 }
 

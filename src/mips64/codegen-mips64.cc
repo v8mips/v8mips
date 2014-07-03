@@ -41,9 +41,9 @@ UnaryMathFunction CreateExpFunction() {
     DoubleRegister result = f0;
     DoubleRegister double_scratch1 = f4;
     DoubleRegister double_scratch2 = f6;
-    Register temp1 = t0;
-    Register temp2 = t1;
-    Register temp3 = t2;
+    Register temp1 = a4;
+    Register temp2 = a5;
+    Register temp3 = a6;
 
     if (!IsMipsSoftFloatABI) {
       // Input value is in f12 anyway, nothing to do.
@@ -124,8 +124,8 @@ MemCopyUint8Function CreateMemCopyUint8Function(MemCopyUint8Function stub) {
            pref_chunk * 4 >= max_pref_size);
     // If the size is less than 8, go to lastb. Regardless of size,
     // copy dst pointer to v0 for the retuen value.
-    __ slti(t2, a2, 2 * loadstore_chunk);
-    __ bne(t2, zero_reg, &lastb);
+    __ slti(a6, a2, 2 * loadstore_chunk);
+    __ bne(a6, zero_reg, &lastb);
     __ mov(v0, a0);  // In delay slot.
 
     // If src and dst have different alignments, go to unaligned, if they
@@ -157,13 +157,13 @@ MemCopyUint8Function CreateMemCopyUint8Function(MemCopyUint8Function stub) {
     __ addu(a3, a0, a3);  // Now a3 is the final dst after loop.
 
     // When in the loop we prefetch with kPrefHintPrepareForStore hint,
-    // in this case the a0+x should be past the "t0-32" address. This means:
-    // for x=128 the last "safe" a0 address is "t0-160". Alternatively, for
-    // x=64 the last "safe" a0 address is "t0-96". In the current version we
-    // will use "pref hint, 128(a0)", so "t0-160" is the limit.
+    // in this case the a0+x should be past the "a4-32" address. This means:
+    // for x=128 the last "safe" a0 address is "a4-160". Alternatively, for
+    // x=64 the last "safe" a0 address is "a4-96". In the current version we
+    // will use "pref hint, 128(a0)", so "a4-160" is the limit.
     if (pref_hint_store == kPrefHintPrepareForStore) {
-      __ addu(t0, a0, a2);  // t0 is the "past the end" address.
-      __ Subu(t9, t0, pref_limit);  // t9 is the "last safe pref" address.
+      __ addu(a4, a0, a2);  // a4 is the "past the end" address.
+      __ Subu(t9, a4, pref_limit);  // t9 is the "last safe pref" address.
     }
 
     __ Pref(pref_hint_load, MemOperand(a1, 0 * pref_chunk));
@@ -177,53 +177,53 @@ MemCopyUint8Function CreateMemCopyUint8Function(MemCopyUint8Function stub) {
       __ Pref(pref_hint_store, MemOperand(a0, 3 * pref_chunk));
     }
     __ bind(&loop16w);
-    __ lw(t0, MemOperand(a1));
+    __ lw(a4, MemOperand(a1));
 
     if (pref_hint_store == kPrefHintPrepareForStore) {
       __ sltu(v1, t9, a0);  // If a0 > t9, don't use next prefetch.
       __ Branch(USE_DELAY_SLOT, &skip_pref, gt, v1, Operand(zero_reg));
     }
-    __ lw(t1, MemOperand(a1, 1, loadstore_chunk));  // Maybe in delay slot.
+    __ lw(a5, MemOperand(a1, 1, loadstore_chunk));  // Maybe in delay slot.
 
     __ Pref(pref_hint_store, MemOperand(a0, 4 * pref_chunk));
     __ Pref(pref_hint_store, MemOperand(a0, 5 * pref_chunk));
 
     __ bind(&skip_pref);
-    __ lw(t2, MemOperand(a1, 2, loadstore_chunk));
-    __ lw(t3, MemOperand(a1, 3, loadstore_chunk));
-    __ lw(t4, MemOperand(a1, 4, loadstore_chunk));
-    __ lw(t5, MemOperand(a1, 5, loadstore_chunk));
-    __ lw(t6, MemOperand(a1, 6, loadstore_chunk));
-    __ lw(t7, MemOperand(a1, 7, loadstore_chunk));
+    __ lw(a6, MemOperand(a1, 2, loadstore_chunk));
+    __ lw(a7, MemOperand(a1, 3, loadstore_chunk));
+    __ lw(t0, MemOperand(a1, 4, loadstore_chunk));
+    __ lw(t1, MemOperand(a1, 5, loadstore_chunk));
+    __ lw(t2, MemOperand(a1, 6, loadstore_chunk));
+    __ lw(t3, MemOperand(a1, 7, loadstore_chunk));
     __ Pref(pref_hint_load, MemOperand(a1, 4 * pref_chunk));
 
-    __ sw(t0, MemOperand(a0));
-    __ sw(t1, MemOperand(a0, 1, loadstore_chunk));
-    __ sw(t2, MemOperand(a0, 2, loadstore_chunk));
-    __ sw(t3, MemOperand(a0, 3, loadstore_chunk));
-    __ sw(t4, MemOperand(a0, 4, loadstore_chunk));
-    __ sw(t5, MemOperand(a0, 5, loadstore_chunk));
-    __ sw(t6, MemOperand(a0, 6, loadstore_chunk));
-    __ sw(t7, MemOperand(a0, 7, loadstore_chunk));
+    __ sw(a4, MemOperand(a0));
+    __ sw(a5, MemOperand(a0, 1, loadstore_chunk));
+    __ sw(a6, MemOperand(a0, 2, loadstore_chunk));
+    __ sw(a7, MemOperand(a0, 3, loadstore_chunk));
+    __ sw(t0, MemOperand(a0, 4, loadstore_chunk));
+    __ sw(t1, MemOperand(a0, 5, loadstore_chunk));
+    __ sw(t2, MemOperand(a0, 6, loadstore_chunk));
+    __ sw(t3, MemOperand(a0, 7, loadstore_chunk));
 
-    __ lw(t0, MemOperand(a1, 8, loadstore_chunk));
-    __ lw(t1, MemOperand(a1, 9, loadstore_chunk));
-    __ lw(t2, MemOperand(a1, 10, loadstore_chunk));
-    __ lw(t3, MemOperand(a1, 11, loadstore_chunk));
-    __ lw(t4, MemOperand(a1, 12, loadstore_chunk));
-    __ lw(t5, MemOperand(a1, 13, loadstore_chunk));
-    __ lw(t6, MemOperand(a1, 14, loadstore_chunk));
-    __ lw(t7, MemOperand(a1, 15, loadstore_chunk));
+    __ lw(a4, MemOperand(a1, 8, loadstore_chunk));
+    __ lw(a5, MemOperand(a1, 9, loadstore_chunk));
+    __ lw(a6, MemOperand(a1, 10, loadstore_chunk));
+    __ lw(a7, MemOperand(a1, 11, loadstore_chunk));
+    __ lw(t0, MemOperand(a1, 12, loadstore_chunk));
+    __ lw(t1, MemOperand(a1, 13, loadstore_chunk));
+    __ lw(t2, MemOperand(a1, 14, loadstore_chunk));
+    __ lw(t3, MemOperand(a1, 15, loadstore_chunk));
     __ Pref(pref_hint_load, MemOperand(a1, 5 * pref_chunk));
 
-    __ sw(t0, MemOperand(a0, 8, loadstore_chunk));
-    __ sw(t1, MemOperand(a0, 9, loadstore_chunk));
-    __ sw(t2, MemOperand(a0, 10, loadstore_chunk));
-    __ sw(t3, MemOperand(a0, 11, loadstore_chunk));
-    __ sw(t4, MemOperand(a0, 12, loadstore_chunk));
-    __ sw(t5, MemOperand(a0, 13, loadstore_chunk));
-    __ sw(t6, MemOperand(a0, 14, loadstore_chunk));
-    __ sw(t7, MemOperand(a0, 15, loadstore_chunk));
+    __ sw(a4, MemOperand(a0, 8, loadstore_chunk));
+    __ sw(a5, MemOperand(a0, 9, loadstore_chunk));
+    __ sw(a6, MemOperand(a0, 10, loadstore_chunk));
+    __ sw(a7, MemOperand(a0, 11, loadstore_chunk));
+    __ sw(t0, MemOperand(a0, 12, loadstore_chunk));
+    __ sw(t1, MemOperand(a0, 13, loadstore_chunk));
+    __ sw(t2, MemOperand(a0, 14, loadstore_chunk));
+    __ sw(t3, MemOperand(a0, 15, loadstore_chunk));
     __ addiu(a0, a0, 16 * loadstore_chunk);
     __ bne(a0, a3, &loop16w);
     __ addiu(a1, a1, 16 * loadstore_chunk);  // In delay slot.
@@ -237,23 +237,23 @@ MemCopyUint8Function CreateMemCopyUint8Function(MemCopyUint8Function stub) {
     __ andi(t8, a2, 0x1f);
     __ beq(a2, t8, &chk1w);  // Less than 32?
     __ nop();  // In delay slot.
-    __ lw(t0, MemOperand(a1));
-    __ lw(t1, MemOperand(a1, 1, loadstore_chunk));
-    __ lw(t2, MemOperand(a1, 2, loadstore_chunk));
-    __ lw(t3, MemOperand(a1, 3, loadstore_chunk));
-    __ lw(t4, MemOperand(a1, 4, loadstore_chunk));
-    __ lw(t5, MemOperand(a1, 5, loadstore_chunk));
-    __ lw(t6, MemOperand(a1, 6, loadstore_chunk));
-    __ lw(t7, MemOperand(a1, 7, loadstore_chunk));
+    __ lw(a4, MemOperand(a1));
+    __ lw(a5, MemOperand(a1, 1, loadstore_chunk));
+    __ lw(a6, MemOperand(a1, 2, loadstore_chunk));
+    __ lw(a7, MemOperand(a1, 3, loadstore_chunk));
+    __ lw(t0, MemOperand(a1, 4, loadstore_chunk));
+    __ lw(t1, MemOperand(a1, 5, loadstore_chunk));
+    __ lw(t2, MemOperand(a1, 6, loadstore_chunk));
+    __ lw(t3, MemOperand(a1, 7, loadstore_chunk));
     __ addiu(a1, a1, 8 * loadstore_chunk);
-    __ sw(t0, MemOperand(a0));
-    __ sw(t1, MemOperand(a0, 1, loadstore_chunk));
-    __ sw(t2, MemOperand(a0, 2, loadstore_chunk));
-    __ sw(t3, MemOperand(a0, 3, loadstore_chunk));
-    __ sw(t4, MemOperand(a0, 4, loadstore_chunk));
-    __ sw(t5, MemOperand(a0, 5, loadstore_chunk));
-    __ sw(t6, MemOperand(a0, 6, loadstore_chunk));
-    __ sw(t7, MemOperand(a0, 7, loadstore_chunk));
+    __ sw(a4, MemOperand(a0));
+    __ sw(a5, MemOperand(a0, 1, loadstore_chunk));
+    __ sw(a6, MemOperand(a0, 2, loadstore_chunk));
+    __ sw(a7, MemOperand(a0, 3, loadstore_chunk));
+    __ sw(t0, MemOperand(a0, 4, loadstore_chunk));
+    __ sw(t1, MemOperand(a0, 5, loadstore_chunk));
+    __ sw(t2, MemOperand(a0, 6, loadstore_chunk));
+    __ sw(t3, MemOperand(a0, 7, loadstore_chunk));
     __ addiu(a0, a0, 8 * loadstore_chunk);
 
     // Here we have less than 32 bytes to copy. Set up for a loop to copy
@@ -268,11 +268,11 @@ MemCopyUint8Function CreateMemCopyUint8Function(MemCopyUint8Function stub) {
     __ addu(a3, a0, a3);
 
     __ bind(&wordCopy_loop);
-    __ lw(t3, MemOperand(a1));
+    __ lw(a7, MemOperand(a1));
     __ addiu(a0, a0, loadstore_chunk);
     __ addiu(a1, a1, loadstore_chunk);
     __ bne(a0, a3, &wordCopy_loop);
-    __ sw(t3, MemOperand(a0, -1, loadstore_chunk));  // In delay slot.
+    __ sw(a7, MemOperand(a0, -1, loadstore_chunk));  // In delay slot.
 
     __ bind(&lastb);
     __ Branch(&leave, le, a2, Operand(zero_reg));
@@ -315,8 +315,8 @@ MemCopyUint8Function CreateMemCopyUint8Function(MemCopyUint8Function stub) {
     __ addu(a3, a0, a3);
 
     if (pref_hint_store == kPrefHintPrepareForStore) {
-      __ addu(t0, a0, a2);
-      __ Subu(t9, t0, pref_limit);
+      __ addu(a4, a0, a2);
+      __ Subu(t9, a4, pref_limit);
     }
 
     __ Pref(pref_hint_load, MemOperand(a1, 0 * pref_chunk));
@@ -331,82 +331,82 @@ MemCopyUint8Function CreateMemCopyUint8Function(MemCopyUint8Function stub) {
 
     __ bind(&ua_loop16w);
     __ Pref(pref_hint_load, MemOperand(a1, 3 * pref_chunk));
-    __ lwr(t0, MemOperand(a1));
-    __ lwr(t1, MemOperand(a1, 1, loadstore_chunk));
-    __ lwr(t2, MemOperand(a1, 2, loadstore_chunk));
+    __ lwr(a4, MemOperand(a1));
+    __ lwr(a5, MemOperand(a1, 1, loadstore_chunk));
+    __ lwr(a6, MemOperand(a1, 2, loadstore_chunk));
 
     if (pref_hint_store == kPrefHintPrepareForStore) {
       __ sltu(v1, t9, a0);
       __ Branch(USE_DELAY_SLOT, &ua_skip_pref, gt, v1, Operand(zero_reg));
     }
-    __ lwr(t3, MemOperand(a1, 3, loadstore_chunk));  // Maybe in delay slot.
+    __ lwr(a7, MemOperand(a1, 3, loadstore_chunk));  // Maybe in delay slot.
 
     __ Pref(pref_hint_store, MemOperand(a0, 4 * pref_chunk));
     __ Pref(pref_hint_store, MemOperand(a0, 5 * pref_chunk));
 
     __ bind(&ua_skip_pref);
-    __ lwr(t4, MemOperand(a1, 4, loadstore_chunk));
-    __ lwr(t5, MemOperand(a1, 5, loadstore_chunk));
-    __ lwr(t6, MemOperand(a1, 6, loadstore_chunk));
-    __ lwr(t7, MemOperand(a1, 7, loadstore_chunk));
-    __ lwl(t0,
+    __ lwr(t0, MemOperand(a1, 4, loadstore_chunk));
+    __ lwr(t1, MemOperand(a1, 5, loadstore_chunk));
+    __ lwr(t2, MemOperand(a1, 6, loadstore_chunk));
+    __ lwr(t3, MemOperand(a1, 7, loadstore_chunk));
+    __ lwl(a4,
            MemOperand(a1, 1, loadstore_chunk, MemOperand::offset_minus_one));
-    __ lwl(t1,
+    __ lwl(a5,
            MemOperand(a1, 2, loadstore_chunk, MemOperand::offset_minus_one));
-    __ lwl(t2,
+    __ lwl(a6,
            MemOperand(a1, 3, loadstore_chunk, MemOperand::offset_minus_one));
-    __ lwl(t3,
+    __ lwl(a7,
            MemOperand(a1, 4, loadstore_chunk, MemOperand::offset_minus_one));
-    __ lwl(t4,
+    __ lwl(t0,
            MemOperand(a1, 5, loadstore_chunk, MemOperand::offset_minus_one));
-    __ lwl(t5,
+    __ lwl(t1,
            MemOperand(a1, 6, loadstore_chunk, MemOperand::offset_minus_one));
-    __ lwl(t6,
+    __ lwl(t2,
            MemOperand(a1, 7, loadstore_chunk, MemOperand::offset_minus_one));
-    __ lwl(t7,
+    __ lwl(t3,
            MemOperand(a1, 8, loadstore_chunk, MemOperand::offset_minus_one));
     __ Pref(pref_hint_load, MemOperand(a1, 4 * pref_chunk));
-    __ sw(t0, MemOperand(a0));
-    __ sw(t1, MemOperand(a0, 1, loadstore_chunk));
-    __ sw(t2, MemOperand(a0, 2, loadstore_chunk));
-    __ sw(t3, MemOperand(a0, 3, loadstore_chunk));
-    __ sw(t4, MemOperand(a0, 4, loadstore_chunk));
-    __ sw(t5, MemOperand(a0, 5, loadstore_chunk));
-    __ sw(t6, MemOperand(a0, 6, loadstore_chunk));
-    __ sw(t7, MemOperand(a0, 7, loadstore_chunk));
-    __ lwr(t0, MemOperand(a1, 8, loadstore_chunk));
-    __ lwr(t1, MemOperand(a1, 9, loadstore_chunk));
-    __ lwr(t2, MemOperand(a1, 10, loadstore_chunk));
-    __ lwr(t3, MemOperand(a1, 11, loadstore_chunk));
-    __ lwr(t4, MemOperand(a1, 12, loadstore_chunk));
-    __ lwr(t5, MemOperand(a1, 13, loadstore_chunk));
-    __ lwr(t6, MemOperand(a1, 14, loadstore_chunk));
-    __ lwr(t7, MemOperand(a1, 15, loadstore_chunk));
-    __ lwl(t0,
+    __ sw(a4, MemOperand(a0));
+    __ sw(a5, MemOperand(a0, 1, loadstore_chunk));
+    __ sw(a6, MemOperand(a0, 2, loadstore_chunk));
+    __ sw(a7, MemOperand(a0, 3, loadstore_chunk));
+    __ sw(t0, MemOperand(a0, 4, loadstore_chunk));
+    __ sw(t1, MemOperand(a0, 5, loadstore_chunk));
+    __ sw(t2, MemOperand(a0, 6, loadstore_chunk));
+    __ sw(t3, MemOperand(a0, 7, loadstore_chunk));
+    __ lwr(a4, MemOperand(a1, 8, loadstore_chunk));
+    __ lwr(a5, MemOperand(a1, 9, loadstore_chunk));
+    __ lwr(a6, MemOperand(a1, 10, loadstore_chunk));
+    __ lwr(a7, MemOperand(a1, 11, loadstore_chunk));
+    __ lwr(t0, MemOperand(a1, 12, loadstore_chunk));
+    __ lwr(t1, MemOperand(a1, 13, loadstore_chunk));
+    __ lwr(t2, MemOperand(a1, 14, loadstore_chunk));
+    __ lwr(t3, MemOperand(a1, 15, loadstore_chunk));
+    __ lwl(a4,
            MemOperand(a1, 9, loadstore_chunk, MemOperand::offset_minus_one));
-    __ lwl(t1,
+    __ lwl(a5,
            MemOperand(a1, 10, loadstore_chunk, MemOperand::offset_minus_one));
-    __ lwl(t2,
+    __ lwl(a6,
            MemOperand(a1, 11, loadstore_chunk, MemOperand::offset_minus_one));
-    __ lwl(t3,
+    __ lwl(a7,
            MemOperand(a1, 12, loadstore_chunk, MemOperand::offset_minus_one));
-    __ lwl(t4,
+    __ lwl(t0,
            MemOperand(a1, 13, loadstore_chunk, MemOperand::offset_minus_one));
-    __ lwl(t5,
+    __ lwl(t1,
            MemOperand(a1, 14, loadstore_chunk, MemOperand::offset_minus_one));
-    __ lwl(t6,
+    __ lwl(t2,
            MemOperand(a1, 15, loadstore_chunk, MemOperand::offset_minus_one));
-    __ lwl(t7,
+    __ lwl(t3,
            MemOperand(a1, 16, loadstore_chunk, MemOperand::offset_minus_one));
     __ Pref(pref_hint_load, MemOperand(a1, 5 * pref_chunk));
-    __ sw(t0, MemOperand(a0, 8, loadstore_chunk));
-    __ sw(t1, MemOperand(a0, 9, loadstore_chunk));
-    __ sw(t2, MemOperand(a0, 10, loadstore_chunk));
-    __ sw(t3, MemOperand(a0, 11, loadstore_chunk));
-    __ sw(t4, MemOperand(a0, 12, loadstore_chunk));
-    __ sw(t5, MemOperand(a0, 13, loadstore_chunk));
-    __ sw(t6, MemOperand(a0, 14, loadstore_chunk));
-    __ sw(t7, MemOperand(a0, 15, loadstore_chunk));
+    __ sw(a4, MemOperand(a0, 8, loadstore_chunk));
+    __ sw(a5, MemOperand(a0, 9, loadstore_chunk));
+    __ sw(a6, MemOperand(a0, 10, loadstore_chunk));
+    __ sw(a7, MemOperand(a0, 11, loadstore_chunk));
+    __ sw(t0, MemOperand(a0, 12, loadstore_chunk));
+    __ sw(t1, MemOperand(a0, 13, loadstore_chunk));
+    __ sw(t2, MemOperand(a0, 14, loadstore_chunk));
+    __ sw(t3, MemOperand(a0, 15, loadstore_chunk));
     __ addiu(a0, a0, 16 * loadstore_chunk);
     __ bne(a0, a3, &ua_loop16w);
     __ addiu(a1, a1, 16 * loadstore_chunk);  // In delay slot.
@@ -421,39 +421,39 @@ MemCopyUint8Function CreateMemCopyUint8Function(MemCopyUint8Function stub) {
 
     __ beq(a2, t8, &ua_chk1w);
     __ nop();  // In delay slot.
-    __ lwr(t0, MemOperand(a1));
-    __ lwr(t1, MemOperand(a1, 1, loadstore_chunk));
-    __ lwr(t2, MemOperand(a1, 2, loadstore_chunk));
-    __ lwr(t3, MemOperand(a1, 3, loadstore_chunk));
-    __ lwr(t4, MemOperand(a1, 4, loadstore_chunk));
-    __ lwr(t5, MemOperand(a1, 5, loadstore_chunk));
-    __ lwr(t6, MemOperand(a1, 6, loadstore_chunk));
-    __ lwr(t7, MemOperand(a1, 7, loadstore_chunk));
-    __ lwl(t0,
+    __ lwr(a4, MemOperand(a1));
+    __ lwr(a5, MemOperand(a1, 1, loadstore_chunk));
+    __ lwr(a6, MemOperand(a1, 2, loadstore_chunk));
+    __ lwr(a7, MemOperand(a1, 3, loadstore_chunk));
+    __ lwr(t0, MemOperand(a1, 4, loadstore_chunk));
+    __ lwr(t1, MemOperand(a1, 5, loadstore_chunk));
+    __ lwr(t2, MemOperand(a1, 6, loadstore_chunk));
+    __ lwr(t3, MemOperand(a1, 7, loadstore_chunk));
+    __ lwl(a4,
            MemOperand(a1, 1, loadstore_chunk, MemOperand::offset_minus_one));
-    __ lwl(t1,
+    __ lwl(a5,
            MemOperand(a1, 2, loadstore_chunk, MemOperand::offset_minus_one));
-    __ lwl(t2,
+    __ lwl(a6,
            MemOperand(a1, 3, loadstore_chunk, MemOperand::offset_minus_one));
-    __ lwl(t3,
+    __ lwl(a7,
            MemOperand(a1, 4, loadstore_chunk, MemOperand::offset_minus_one));
-    __ lwl(t4,
+    __ lwl(t0,
            MemOperand(a1, 5, loadstore_chunk, MemOperand::offset_minus_one));
-    __ lwl(t5,
+    __ lwl(t1,
            MemOperand(a1, 6, loadstore_chunk, MemOperand::offset_minus_one));
-    __ lwl(t6,
+    __ lwl(t2,
            MemOperand(a1, 7, loadstore_chunk, MemOperand::offset_minus_one));
-    __ lwl(t7,
+    __ lwl(t3,
            MemOperand(a1, 8, loadstore_chunk, MemOperand::offset_minus_one));
     __ addiu(a1, a1, 8 * loadstore_chunk);
-    __ sw(t0, MemOperand(a0));
-    __ sw(t1, MemOperand(a0, 1, loadstore_chunk));
-    __ sw(t2, MemOperand(a0, 2, loadstore_chunk));
-    __ sw(t3, MemOperand(a0, 3, loadstore_chunk));
-    __ sw(t4, MemOperand(a0, 4, loadstore_chunk));
-    __ sw(t5, MemOperand(a0, 5, loadstore_chunk));
-    __ sw(t6, MemOperand(a0, 6, loadstore_chunk));
-    __ sw(t7, MemOperand(a0, 7, loadstore_chunk));
+    __ sw(a4, MemOperand(a0));
+    __ sw(a5, MemOperand(a0, 1, loadstore_chunk));
+    __ sw(a6, MemOperand(a0, 2, loadstore_chunk));
+    __ sw(a7, MemOperand(a0, 3, loadstore_chunk));
+    __ sw(t0, MemOperand(a0, 4, loadstore_chunk));
+    __ sw(t1, MemOperand(a0, 5, loadstore_chunk));
+    __ sw(t2, MemOperand(a0, 6, loadstore_chunk));
+    __ sw(t3, MemOperand(a0, 7, loadstore_chunk));
     __ addiu(a0, a0, 8 * loadstore_chunk);
 
     // Less than 32 bytes to copy. Set up for a loop to
@@ -559,11 +559,11 @@ void ElementsTransitionGenerator::GenerateMapChangeElementsTransition(
   //  -- a2    : receiver
   //  -- ra    : return address
   //  -- a3    : target map, scratch for subsequent call
-  //  -- t0    : scratch (elements)
+  //  -- a4    : scratch (elements)
   // -----------------------------------
   if (mode == TRACK_ALLOCATION_SITE) {
     ASSERT(allocation_memento_found != NULL);
-    __ JumpIfJSArrayHasAllocationMemento(a2, t0, allocation_memento_found);
+    __ JumpIfJSArrayHasAllocationMemento(a2, a4, allocation_memento_found);
   }
 
   // Set transitioned map.
@@ -571,7 +571,7 @@ void ElementsTransitionGenerator::GenerateMapChangeElementsTransition(
   __ RecordWriteField(a2,
                       HeapObject::kMapOffset,
                       a3,
-                      t5,
+                      t1,
                       kRAHasNotBeenSaved,
                       kDontSaveFPRegs,
                       EMIT_REMEMBERED_SET,
@@ -587,54 +587,54 @@ void ElementsTransitionGenerator::GenerateSmiToDouble(
   //  -- a2    : receiver
   //  -- ra    : return address
   //  -- a3    : target map, scratch for subsequent call
-  //  -- t0    : scratch (elements)
+  //  -- a4    : scratch (elements)
   // -----------------------------------
   Label loop, entry, convert_hole, gc_required, only_change_map, done;
 
-  Register scratch = t6;
+  Register scratch = t2;
   if (mode == TRACK_ALLOCATION_SITE) {
-    __ JumpIfJSArrayHasAllocationMemento(a2, t0, fail);
+    __ JumpIfJSArrayHasAllocationMemento(a2, a4, fail);
   }
 
   // Check for empty arrays, which only require a map transition and no changes
   // to the backing store.
-  __ ld(t0, FieldMemOperand(a2, JSObject::kElementsOffset));
+  __ ld(a4, FieldMemOperand(a2, JSObject::kElementsOffset));
   __ LoadRoot(at, Heap::kEmptyFixedArrayRootIndex);
-  __ Branch(&only_change_map, eq, at, Operand(t0));
+  __ Branch(&only_change_map, eq, at, Operand(a4));
 
   __ push(ra);
-  __ ld(t1, FieldMemOperand(t0, FixedArray::kLengthOffset));
-  // t0: source FixedArray
-  // t1: number of elements (smi-tagged)
+  __ ld(a5, FieldMemOperand(a4, FixedArray::kLengthOffset));
+  // a4: source FixedArray
+  // a5: number of elements (smi-tagged)
 
   // Allocate new FixedDoubleArray.
-  __ SmiScale(scratch, t1, kDoubleSizeLog2);
+  __ SmiScale(scratch, a5, kDoubleSizeLog2);
   __ Daddu(scratch, scratch, FixedDoubleArray::kHeaderSize);
-  __ Allocate(scratch, t2, t3, t5, &gc_required, DOUBLE_ALIGNMENT);
-  // t2: destination FixedDoubleArray, not tagged as heap object
+  __ Allocate(scratch, a6, a7, t1, &gc_required, DOUBLE_ALIGNMENT);
+  // a6: destination FixedDoubleArray, not tagged as heap object
 
   // Set destination FixedDoubleArray's length and map.
-  __ LoadRoot(t5, Heap::kFixedDoubleArrayMapRootIndex);
-  __ sd(t1, MemOperand(t2, FixedDoubleArray::kLengthOffset));
-  __ sd(t5, MemOperand(t2, HeapObject::kMapOffset));
+  __ LoadRoot(t1, Heap::kFixedDoubleArrayMapRootIndex);
+  __ sd(a5, MemOperand(a6, FixedDoubleArray::kLengthOffset));
+  __ sd(t1, MemOperand(a6, HeapObject::kMapOffset));
   // Update receiver's map.
 
   __ sd(a3, FieldMemOperand(a2, HeapObject::kMapOffset));
   __ RecordWriteField(a2,
                       HeapObject::kMapOffset,
                       a3,
-                      t5,
+                      t1,
                       kRAHasBeenSaved,
                       kDontSaveFPRegs,
                       OMIT_REMEMBERED_SET,
                       OMIT_SMI_CHECK);
   // Replace receiver's backing store with newly created FixedDoubleArray.
-  __ Daddu(a3, t2, Operand(kHeapObjectTag));
+  __ Daddu(a3, a6, Operand(kHeapObjectTag));
   __ sd(a3, FieldMemOperand(a2, JSObject::kElementsOffset));
   __ RecordWriteField(a2,
                       JSObject::kElementsOffset,
                       a3,
-                      t5,
+                      t1,
                       kRAHasBeenSaved,
                       kDontSaveFPRegs,
                       EMIT_REMEMBERED_SET,
@@ -642,16 +642,16 @@ void ElementsTransitionGenerator::GenerateSmiToDouble(
 
 
   // Prepare for conversion loop.
-  __ Daddu(a3, t0, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
-  __ Daddu(t3, t2, Operand(FixedDoubleArray::kHeaderSize));
-  __ SmiScale(t2, t1, kDoubleSizeLog2);
-  __ Daddu(t2, t2, t3);
-  __ li(t0, Operand(kHoleNanLower32));
-  __ li(t1, Operand(kHoleNanUpper32));
-  // t0: kHoleNanLower32
-  // t1: kHoleNanUpper32
-  // t2: end of destination FixedDoubleArray, not tagged
-  // t3: begin of FixedDoubleArray element fields, not tagged
+  __ Daddu(a3, a4, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+  __ Daddu(a7, a6, Operand(FixedDoubleArray::kHeaderSize));
+  __ SmiScale(a6, a5, kDoubleSizeLog2);
+  __ Daddu(a6, a6, a7);
+  __ li(a4, Operand(kHoleNanLower32));
+  __ li(a5, Operand(kHoleNanUpper32));
+  // a4: kHoleNanLower32
+  // a5: kHoleNanUpper32
+  // a6: end of destination FixedDoubleArray, not tagged
+  // a7: begin of FixedDoubleArray element fields, not tagged
 
   __ Branch(&entry);
 
@@ -660,7 +660,7 @@ void ElementsTransitionGenerator::GenerateSmiToDouble(
   __ RecordWriteField(a2,
                       HeapObject::kMapOffset,
                       a3,
-                      t5,
+                      t1,
                       kRAHasNotBeenSaved,
                       kDontSaveFPRegs,
                       OMIT_REMEMBERED_SET,
@@ -674,17 +674,17 @@ void ElementsTransitionGenerator::GenerateSmiToDouble(
 
   // Convert and copy elements.
   __ bind(&loop);
-  __ ld(t5, MemOperand(a3));
+  __ ld(t1, MemOperand(a3));
   __ Daddu(a3, a3, kIntSize);
-  // t5: current element
-  __ JumpIfNotSmi(t5, &convert_hole);
-  __ SmiUntag(t5);
+  // t1: current element
+  __ JumpIfNotSmi(t1, &convert_hole);
+  __ SmiUntag(t1);
 
   // Normal smi, convert to double and store.
-  __ mtc1(t5, f0);
+  __ mtc1(t1, f0);
   __ cvt_d_w(f0, f0);
-  __ sdc1(f0, MemOperand(t3));
-  __ Daddu(t3, t3, kDoubleSize);
+  __ sdc1(f0, MemOperand(a7));
+  __ Daddu(a7, a7, kDoubleSize);
 
   __ Branch(&entry);
 
@@ -692,16 +692,16 @@ void ElementsTransitionGenerator::GenerateSmiToDouble(
   __ bind(&convert_hole);
   if (FLAG_debug_code) {
     // Restore a "smi-untagged" heap object.
-    __ Or(t5, t5, Operand(1));
+    __ Or(t1, t1, Operand(1));
     __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
-    __ Assert(eq, kObjectFoundInSmiOnlyArray, at, Operand(t5));
+    __ Assert(eq, kObjectFoundInSmiOnlyArray, at, Operand(t1));
   }
-  __ sw(t0, MemOperand(t3));  // mantissa
-  __ sw(t1, MemOperand(t3, kIntSize));  // exponent
-  __ Daddu(t3, t3, kDoubleSize);
+  __ sw(a4, MemOperand(a7));  // mantissa
+  __ sw(a5, MemOperand(a7, kIntSize));  // exponent
+  __ Daddu(a7, a7, kDoubleSize);
 
   __ bind(&entry);
-  __ Branch(&loop, lt, t3, Operand(t2));
+  __ Branch(&loop, lt, a7, Operand(a6));
 
   __ pop(ra);
   __ bind(&done);
@@ -716,50 +716,50 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
   //  -- a2    : receiver
   //  -- ra    : return address
   //  -- a3    : target map, scratch for subsequent call
-  //  -- t0    : scratch (elements)
+  //  -- a4    : scratch (elements)
   // -----------------------------------
   Label entry, loop, convert_hole, gc_required, only_change_map;
   if (mode == TRACK_ALLOCATION_SITE) {
-    __ JumpIfJSArrayHasAllocationMemento(a2, t0, fail);
+    __ JumpIfJSArrayHasAllocationMemento(a2, a4, fail);
   }
 
   // Check for empty arrays, which only require a map transition and no changes
   // to the backing store.
-  __ ld(t0, FieldMemOperand(a2, JSObject::kElementsOffset));
+  __ ld(a4, FieldMemOperand(a2, JSObject::kElementsOffset));
   __ LoadRoot(at, Heap::kEmptyFixedArrayRootIndex);
-  __ Branch(&only_change_map, eq, at, Operand(t0));
+  __ Branch(&only_change_map, eq, at, Operand(a4));
 
   __ MultiPush(a0.bit() | a1.bit() | a2.bit() | a3.bit() | ra.bit());
 
-  __ ld(t1, FieldMemOperand(t0, FixedArray::kLengthOffset));
-  // t0: source FixedArray
-  // t1: number of elements (smi-tagged)
+  __ ld(a5, FieldMemOperand(a4, FixedArray::kLengthOffset));
+  // a4: source FixedArray
+  // a5: number of elements (smi-tagged)
 
   // Allocate new FixedArray.
-  __ SmiScale(a0, t1, kPointerSizeLog2);
+  __ SmiScale(a0, a5, kPointerSizeLog2);
   __ Daddu(a0, a0, FixedDoubleArray::kHeaderSize);
-  __ Allocate(a0, t2, t3, t5, &gc_required, NO_ALLOCATION_FLAGS);
-  // t2: destination FixedArray, not tagged as heap object
+  __ Allocate(a0, a6, a7, t1, &gc_required, NO_ALLOCATION_FLAGS);
+  // a6: destination FixedArray, not tagged as heap object
   // Set destination FixedDoubleArray's length and map.
-  __ LoadRoot(t5, Heap::kFixedArrayMapRootIndex);
-  __ sd(t1, MemOperand(t2, FixedDoubleArray::kLengthOffset));
-  __ sd(t5, MemOperand(t2, HeapObject::kMapOffset));
+  __ LoadRoot(t1, Heap::kFixedArrayMapRootIndex);
+  __ sd(a5, MemOperand(a6, FixedDoubleArray::kLengthOffset));
+  __ sd(t1, MemOperand(a6, HeapObject::kMapOffset));
 
   // Prepare for conversion loop.
-  __ Daddu(t0, t0, Operand(FixedDoubleArray::kHeaderSize - kHeapObjectTag + 4));
-  __ Daddu(a3, t2, Operand(FixedArray::kHeaderSize));
-  __ Daddu(t2, t2, Operand(kHeapObjectTag));
-  __ SmiScale(t1, t1, kPointerSizeLog2);
-  __ Daddu(t1, a3, t1);
-  __ LoadRoot(t3, Heap::kTheHoleValueRootIndex);
-  __ LoadRoot(t5, Heap::kHeapNumberMapRootIndex);
+  __ Daddu(a4, a4, Operand(FixedDoubleArray::kHeaderSize - kHeapObjectTag + 4));
+  __ Daddu(a3, a6, Operand(FixedArray::kHeaderSize));
+  __ Daddu(a6, a6, Operand(kHeapObjectTag));
+  __ SmiScale(a5, a5, kPointerSizeLog2);
+  __ Daddu(a5, a3, a5);
+  __ LoadRoot(a7, Heap::kTheHoleValueRootIndex);
+  __ LoadRoot(t1, Heap::kHeapNumberMapRootIndex);
   // Using offsetted addresses.
   // a3: begin of destination FixedArray element fields, not tagged
-  // t0: begin of source FixedDoubleArray element fields, not tagged, +4
-  // t1: end of destination FixedArray, not tagged
-  // t2: destination FixedArray
-  // t3: the-hole pointer
-  // t5: heap number map
+  // a4: begin of source FixedDoubleArray element fields, not tagged, +4
+  // a5: end of destination FixedArray, not tagged
+  // a6: destination FixedArray
+  // a7: the-hole pointer
+  // t1: heap number map
   __ Branch(&entry);
 
   // Call into runtime if GC is required.
@@ -769,22 +769,22 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
   __ Branch(fail);
 
   __ bind(&loop);
-  __ lw(a1, MemOperand(t0));
-  __ Daddu(t0, t0, kDoubleSize);
+  __ lw(a1, MemOperand(a4));
+  __ Daddu(a4, a4, kDoubleSize);
   // a1: current element's upper 32 bit
-  // t0: address of next element's upper 32 bit
+  // a4: address of next element's upper 32 bit
   __ Branch(&convert_hole, eq, a1, Operand(kHoleNanUpper32));
 
   // Non-hole double, copy value into a heap number.
-  __ AllocateHeapNumber(a2, a0, t6, t5, &gc_required);
+  __ AllocateHeapNumber(a2, a0, t2, t1, &gc_required);
   // a2: new heap number
-  __ lw(a0, MemOperand(t0, -12));
+  __ lw(a0, MemOperand(a4, -12));
   __ sw(a0, FieldMemOperand(a2, HeapNumber::kMantissaOffset));
   __ sw(a1, FieldMemOperand(a2, HeapNumber::kExponentOffset));
   __ mov(a0, a3);
   __ sd(a2, MemOperand(a3));
   __ Daddu(a3, a3, kPointerSize);
-  __ RecordWrite(t2,
+  __ RecordWrite(a6,
                  a0,
                  a2,
                  kRAHasBeenSaved,
@@ -795,19 +795,19 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
 
   // Replace the-hole NaN with the-hole pointer.
   __ bind(&convert_hole);
-  __ sd(t3, MemOperand(a3));
+  __ sd(a7, MemOperand(a3));
   __ Daddu(a3, a3, kPointerSize);
 
   __ bind(&entry);
-  __ Branch(&loop, lt, a3, Operand(t1));
+  __ Branch(&loop, lt, a3, Operand(a5));
 
   __ MultiPop(a2.bit() | a3.bit() | a0.bit() | a1.bit());
   // Replace receiver's backing store with newly created and filled FixedArray.
-  __ sd(t2, FieldMemOperand(a2, JSObject::kElementsOffset));
+  __ sd(a6, FieldMemOperand(a2, JSObject::kElementsOffset));
   __ RecordWriteField(a2,
                       JSObject::kElementsOffset,
-                      t2,
-                      t5,
+                      a6,
+                      t1,
                       kRAHasBeenSaved,
                       kDontSaveFPRegs,
                       EMIT_REMEMBERED_SET,
@@ -820,7 +820,7 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
   __ RecordWriteField(a2,
                       HeapObject::kMapOffset,
                       a3,
-                      t5,
+                      t1,
                       kRAHasNotBeenSaved,
                       kDontSaveFPRegs,
                       OMIT_REMEMBERED_SET,

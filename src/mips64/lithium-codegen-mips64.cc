@@ -2768,11 +2768,11 @@ void LCodeGen::DoDeferredInstanceOfKnownGlobal(LInstanceOfKnownGlobal* instr,
   PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
   LoadContextFromDeferred(instr->context());
 
-  // Get the temp register reserved by the instruction. This needs to be t0 as
+  // Get the temp register reserved by the instruction. This needs to be a4 as
   // its slot of the pushing of safepoint registers is used to communicate the
   // offset to the location of the map check.
   Register temp = ToRegister(instr->temp());
-  ASSERT(temp.is(t0));
+  ASSERT(temp.is(a4));
   __ li(InstanceofStub::right(), instr->function());
   static const int kAdditionalDelta = 13;
   int delta = masm_->InstructionsGeneratedSince(map_check) + kAdditionalDelta;
@@ -3652,7 +3652,7 @@ void LCodeGen::DoDeferredMathAbsTaggedHeapNumber(LMathAbs* instr) {
     Register tmp1 = input.is(a1) ? a0 : a1;
     Register tmp2 = input.is(a2) ? a0 : a2;
     Register tmp3 = input.is(a3) ? a0 : a3;
-    Register tmp4 = input.is(t0) ? a0 : t0;
+    Register tmp4 = input.is(a4) ? a0 : a4;
 
     // exponent: floating point exponent value.
 
@@ -3892,9 +3892,9 @@ void LCodeGen::DoPower(LPower* instr) {
   } else if (exponent_type.IsTagged()) {
     Label no_deopt;
     __ JumpIfSmi(a2, &no_deopt);
-    __ ld(t3, FieldMemOperand(a2, HeapObject::kMapOffset));
+    __ ld(a7, FieldMemOperand(a2, HeapObject::kMapOffset));
     __ LoadRoot(at, Heap::kHeapNumberMapRootIndex);
-    DeoptimizeIf(ne, instr->environment(), t3, Operand(at));
+    DeoptimizeIf(ne, instr->environment(), a7, Operand(at));
     __ bind(&no_deopt);
     MathPowStub stub(isolate(), MathPowStub::TAGGED);
     __ CallStub(&stub);
@@ -4047,8 +4047,8 @@ void LCodeGen::DoCallNewArray(LCallNewArray* instr) {
       Label packed_case;
       // We might need a change here,
       // look at the first argument.
-      __ ld(t1, MemOperand(sp, 0));
-      __ Branch(&packed_case, eq, t1, Operand(zero_reg));
+      __ ld(a5, MemOperand(sp, 0));
+      __ Branch(&packed_case, eq, a5, Operand(zero_reg));
 
       ElementsKind holey_kind = GetHoleyElementsKind(kind);
       ArraySingleArgumentConstructorStub stub(isolate(),
@@ -5426,23 +5426,23 @@ void LCodeGen::DoRegExpLiteral(LRegExpLiteral* instr) {
   ASSERT(ToRegister(instr->context()).is(cp));
   Label materialized;
   // Registers will be used as follows:
-  // t3 = literals array.
+  // a7 = literals array.
   // a1 = regexp literal.
   // a0 = regexp literal clone.
-  // a2 and t0-t2 are used as temporaries.
+  // a2 and a4-a6 are used as temporaries.
   int literal_offset =
       FixedArray::OffsetOfElementAt(instr->hydrogen()->literal_index());
-  __ li(t3, instr->hydrogen()->literals());
-  __ ld(a1, FieldMemOperand(t3, literal_offset));
+  __ li(a7, instr->hydrogen()->literals());
+  __ ld(a1, FieldMemOperand(a7, literal_offset));
   __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
   __ Branch(&materialized, ne, a1, Operand(at));
 
   // Create regexp literal using runtime function
   // Result will be in v0.
-  __ li(t2, Operand(Smi::FromInt(instr->hydrogen()->literal_index())));
-  __ li(t1, Operand(instr->hydrogen()->pattern()));
-  __ li(t0, Operand(instr->hydrogen()->flags()));
-  __ Push(t3, t2, t1, t0);
+  __ li(a6, Operand(Smi::FromInt(instr->hydrogen()->literal_index())));
+  __ li(a5, Operand(instr->hydrogen()->pattern()));
+  __ li(a4, Operand(instr->hydrogen()->flags()));
+  __ Push(a7, a6, a5, a4);
   CallRuntime(Runtime::kMaterializeRegExpLiteral, 4, instr);
   __ mov(a1, v0);
 
@@ -5793,7 +5793,7 @@ void LCodeGen::DoForInPrepareMap(LForInPrepareMap* instr) {
   __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
   DeoptimizeIf(eq, instr->environment(), object, Operand(at));
 
-  Register null_value = t1;
+  Register null_value = a5;
   __ LoadRoot(null_value, Heap::kNullValueRootIndex);
   DeoptimizeIf(eq, instr->environment(), object, Operand(null_value));
 

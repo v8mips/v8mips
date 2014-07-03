@@ -1210,9 +1210,9 @@ void MacroAssembler::FlushICache(Register address, unsigned instructions) {
   MultiPush(saved_regs);
   AllowExternalCallThatCantCauseGC scope(this);
 
-  // Save to a0 in case address == t0.
+  // Save to a0 in case address == a4.
   Move(a0, address);
-  PrepareCallCFunction(2, t0);
+  PrepareCallCFunction(2, a4);
 
   li(a1, instructions * kInstrSize);
   CallCFunction(ExternalReference::flush_icache_function(isolate()), 2);
@@ -2913,14 +2913,14 @@ void MacroAssembler::PushTryHandler(StackHandler::Kind kind,
   STATIC_ASSERT(StackHandlerConstants::kFPOffset == 4 * kPointerSize);
 
   // For the JSEntry handler, we must preserve a0-a3 and s0.
-  // t1-t3 are available. We will build up the handler from the bottom by
+  // a5-a7 are available. We will build up the handler from the bottom by
   // pushing on the stack.
-  // Set up the code object (t1) and the state (t2) for pushing.
+  // Set up the code object (a5) and the state (a6) for pushing.
   unsigned state =
       StackHandler::IndexField::encode(handler_index) |
       StackHandler::KindField::encode(kind);
-  li(t1, Operand(CodeObject()), CONSTANT_SIZE);
-  li(t2, Operand(state));
+  li(a5, Operand(CodeObject()), CONSTANT_SIZE);
+  li(a6, Operand(state));
 
   // Push the frame pointer, context, state, and code object.
   if (kind == StackHandler::JS_ENTRY) {
@@ -2928,17 +2928,17 @@ void MacroAssembler::PushTryHandler(StackHandler::Kind kind,
     // The second zero_reg indicates no context.
     // The first zero_reg is the NULL frame pointer.
     // The operands are reversed to match the order of MultiPush/Pop.
-    Push(zero_reg, zero_reg, t2, t1);
+    Push(zero_reg, zero_reg, a6, a5);
   } else {
-    MultiPush(t1.bit() | t2.bit() | cp.bit() | fp.bit());
+    MultiPush(a5.bit() | a6.bit() | cp.bit() | fp.bit());
   }
 
   // Link the current handler as the next handler.
-  li(t2, Operand(ExternalReference(Isolate::kHandlerAddress, isolate())));
-  ld(t1, MemOperand(t2));
-  push(t1);
+  li(a6, Operand(ExternalReference(Isolate::kHandlerAddress, isolate())));
+  ld(a5, MemOperand(a6));
+  push(a5);
   // Set this new handler as the current one.
-  sd(sp, MemOperand(t2));
+  sd(sp, MemOperand(a6));
 }
 
 
@@ -4138,10 +4138,10 @@ void MacroAssembler::CallApiFunctionAndReturn(
 
   // Check if the function scheduled an exception.
   bind(&leave_exit_frame);
-  LoadRoot(t0, Heap::kTheHoleValueRootIndex);
+  LoadRoot(a4, Heap::kTheHoleValueRootIndex);
   li(at, Operand(ExternalReference::scheduled_exception_address(isolate())));
-  ld(t1, MemOperand(at));
-  Branch(&promote_scheduled_exception, ne, t0, Operand(t1));
+  ld(a5, MemOperand(at));
+  Branch(&promote_scheduled_exception, ne, a4, Operand(a5));
   bind(&exception_handled);
 
   bool restore_context = context_restore_operand != NULL;
@@ -5015,8 +5015,8 @@ void MacroAssembler::AssertSmi(Register object) {
 void MacroAssembler::AssertString(Register object) {
   if (emit_debug_code()) {
     STATIC_ASSERT(kSmiTag == 0);
-    SmiTst(object, t0);
-    Check(ne, kOperandIsASmiAndNotAString, t0, Operand(zero_reg));
+    SmiTst(object, a4);
+    Check(ne, kOperandIsASmiAndNotAString, a4, Operand(zero_reg));
     push(object);
     ld(object, FieldMemOperand(object, HeapObject::kMapOffset));
     lbu(object, FieldMemOperand(object, Map::kInstanceTypeOffset));
@@ -5029,8 +5029,8 @@ void MacroAssembler::AssertString(Register object) {
 void MacroAssembler::AssertName(Register object) {
   if (emit_debug_code()) {
     STATIC_ASSERT(kSmiTag == 0);
-    SmiTst(object, t0);
-    Check(ne, kOperandIsASmiAndNotAName, t0, Operand(zero_reg));
+    SmiTst(object, a4);
+    Check(ne, kOperandIsASmiAndNotAName, a4, Operand(zero_reg));
     push(object);
     ld(object, FieldMemOperand(object, HeapObject::kMapOffset));
     lbu(object, FieldMemOperand(object, Map::kInstanceTypeOffset));
@@ -5274,7 +5274,7 @@ void MacroAssembler::PrepareCallCFunction(int num_reg_arguments,
                                           Register scratch) {
   int frame_alignment = ActivationFrameAlignment();
 
-  // n64: Up to eight simple arguments in a0..a3, t0..t3, No argument slots.
+  // n64: Up to eight simple arguments in a0..a3, a4..a7, No argument slots.
   // O32: Up to four simple arguments are passed in registers a0..a3.
   // Those four arguments must have reserved argument slots on the stack for
   // mips, even though those argument slots are not normally used.
@@ -5707,7 +5707,7 @@ void MacroAssembler::EnumLength(Register dst, Register map) {
 
 
 void MacroAssembler::CheckEnumCache(Register null_value, Label* call_runtime) {
-  Register  empty_fixed_array_value = t2;
+  Register  empty_fixed_array_value = a6;
   LoadRoot(empty_fixed_array_value, Heap::kEmptyFixedArrayRootIndex);
   Label next, start;
   mov(a2, a0);

@@ -1272,7 +1272,7 @@ const Operand& rt = Operand(zero_reg), BranchDelaySlot bd = PROTECT
 
   // Arguments 1-4 are placed in registers a0 thru a3 respectively.
   // Arguments 5..n are stored to stack using following:
-  //  sw(t0, CFunctionArgumentOperand(5));
+  //  sw(a4, CFunctionArgumentOperand(5));
 
   // Calls a C function and cleans up the space for arguments allocated
   // by PrepareCallCFunction. The called function is not allowed to trigger a
