@@ -4089,7 +4089,6 @@ void FullCodeGenerator::VisitCallRuntime(CallRuntime* expr) {
     __ push(receiver);
 
     // Load the function from the receiver.
-    ASSERT(a0.is(LoadIC::ReceiverRegister()));
     __ li(LoadIC::NameRegister(), Operand(expr->name()));
     CallLoadIC(NOT_CONTEXTUAL, expr->CallRuntimeFeedbackId());
 
