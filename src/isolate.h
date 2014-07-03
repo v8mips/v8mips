@@ -58,7 +58,6 @@ class HTracer;
 class InlineRuntimeFunctionsTable;
 class InnerPointerToCodeCache;
 class MaterializedObjectStore;
-class NoAllocationStringAllocator;
 class CodeAgingHelper;
 class RegExpStack;
 class SaveContext;
@@ -1423,7 +1422,7 @@ class StackLimitCheck BASE_EMBEDDED {
   // Use this to check for stack-overflows in C++ code.
   inline bool HasOverflowed() const {
     StackGuard* stack_guard = isolate_->stack_guard();
-    return reinterpret_cast<uintptr_t>(this) < stack_guard->real_climit();
+    return GetCurrentStackPosition() < stack_guard->real_climit();
   }
 
   // Use this to check for stack-overflow when entering runtime from JS code.

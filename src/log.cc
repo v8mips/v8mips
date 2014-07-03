@@ -1974,16 +1974,15 @@ void Logger::LogAccessorCallbacks() {
 }
 
 
-static void AddIsolateIdIfNeeded(Isolate* isolate, StringStream* stream) {
-  if (FLAG_logfile_per_isolate) stream->Add("isolate-%p-", isolate);
+static void AddIsolateIdIfNeeded(OStream& os,  // NOLINT
+                                 Isolate* isolate) {
+  if (FLAG_logfile_per_isolate) os << "isolate-" << isolate << "-";
 }
 
 
-static SmartArrayPointer<const char> PrepareLogFileName(
-    Isolate* isolate, const char* file_name) {
-  HeapStringAllocator allocator;
-  StringStream stream(&allocator);
-  AddIsolateIdIfNeeded(isolate, &stream);
+static void PrepareLogFileName(OStream& os,  // NOLINT
+                               Isolate* isolate, const char* file_name) {
+  AddIsolateIdIfNeeded(os, isolate);
   for (const char* p = file_name; *p; p++) {
     if (*p == '%') {
       p++;
@@ -1994,29 +1993,25 @@ static SmartArrayPointer<const char> PrepareLogFileName(
           p--;
           break;
         case 'p':
-          stream.Add("%d", base::OS::GetCurrentProcessId());
+          os << base::OS::GetCurrentProcessId();
           break;
-        case 't': {
+        case 't':
           // %t expands to the current time in milliseconds.
-          double time = base::OS::TimeCurrentMillis();
-          stream.Add("%.0f", FmtElm(time));
+          os << static_cast<int64_t>(base::OS::TimeCurrentMillis());
           break;
-        }
         case '%':
           // %% expands (contracts really) to %.
-          stream.Put('%');
+          os << '%';
           break;
         default:
           // All other %'s expand to themselves.
-          stream.Put('%');
-          stream.Put(*p);
+          os << '%' << *p;
           break;
       }
     } else {
-      stream.Put(*p);
+      os << *p;
     }
   }
-  return SmartArrayPointer<const char>(stream.ToCString());
 }
 
 
@@ -2030,9 +2025,9 @@ bool Logger::SetUp(Isolate* isolate) {
     FLAG_log_snapshot_positions = true;
   }
 
-  SmartArrayPointer<const char> log_file_name =
-      PrepareLogFileName(isolate, FLAG_logfile);
-  log_->Initialize(log_file_name.get());
+  OStringStream log_file_name;
+  PrepareLogFileName(log_file_name, isolate, FLAG_logfile);
+  log_->Initialize(log_file_name.c_str());
 
 
   if (FLAG_perf_basic_prof) {
@@ -2046,7 +2041,7 @@ bool Logger::SetUp(Isolate* isolate) {
   }
 
   if (FLAG_ll_prof) {
-    ll_logger_ = new LowLevelLogger(log_file_name.get());
+    ll_logger_ = new LowLevelLogger(log_file_name.c_str());
     addCodeEventListener(ll_logger_);
   }
 
