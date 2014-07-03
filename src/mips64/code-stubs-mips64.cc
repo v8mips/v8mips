@@ -2242,10 +2242,8 @@ void ArgumentsAccessStub::GenerateNewSloppyFast(MacroAssembler* masm) {
   __ jmp(&parameters_test);
 
   __ bind(&parameters_loop);
-  // TODO(plind): Fix smi load within operand (suspect this works already).
-  // __ Dsubu(a6, a6, Operand(Smi::FromInt(1)));
-  __ li(a5, Operand(Smi::FromInt(1)));
-  __ Dsubu(a6, a6, Operand(a5));
+
+  __ Dsubu(a6, a6, Operand(Smi::FromInt(1)));
   __ SmiScale(a5, a6, kPointerSizeLog2);
   __ Daddu(a5, a5, Operand(kParameterMapHeaderSize - kHeapObjectTag));
   __ Daddu(t2, a4, a5);
@@ -2279,10 +2277,7 @@ void ArgumentsAccessStub::GenerateNewSloppyFast(MacroAssembler* masm) {
   __ SmiScale(t2, t1, kPointerSizeLog2);
   __ Daddu(a5, a3, Operand(t2));
   __ sd(a6, FieldMemOperand(a5, FixedArray::kHeaderSize));
-  // TODO(plind): Fix smi loaded in Operand (suspect this works already).
-  // __ Daddu(t1, t1, Operand(Smi::FromInt(1)));
-  __ li(a6, Operand(Smi::FromInt(1)));
-  __ Daddu(t1, t1, Operand(a6));
+  __ Daddu(t1, t1, Operand(Smi::FromInt(1)));
 
   __ bind(&arguments_test);
   __ Branch(&arguments_loop, lt, t1, Operand(a2));
@@ -2471,13 +2466,9 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
          FieldMemOperand(regexp_data, JSRegExp::kIrregexpCaptureCountOffset));
   // Check (number_of_captures + 1) * 2 <= offsets vector size
   // Or          number_of_captures * 2 <= offsets vector size - 2
+  // Or          number_of_captures     <= offsets vector size / 2 - 1
   // Multiplying by 2 comes for free since a2 is smi-tagged.
-
-  // TODO(plind): Cleanup, and check the -1 below in 'temp'. Looks wrong.
   STATIC_ASSERT(Isolate::kJSRegexpStaticOffsetsVectorSize >= 2);
-  // __ Branch(
-  //     &runtime, hi, a2, Operand(Isolate::kJSRegexpStaticOffsetsVectorSize - 2));
-  // __ dsra(a4, a2, 32 - 1);  // Untag and * 2.
   int temp = Isolate::kJSRegexpStaticOffsetsVectorSize / 2 - 1;
   __ Branch(&runtime, hi, a2, Operand(Smi::FromInt(temp)));
 
@@ -2561,8 +2552,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ JumpIfNotSmi(a1, &runtime);
   __ ld(a3, FieldMemOperand(a3, String::kLengthOffset));
   __ Branch(&runtime, ls, a3, Operand(a1));
-  // __ sra(a1, a1, kSmiTagSize);  // Untag the Smi.
-  __ dsra32(a1, a1, 0);
+  __ SmiUntag(a1);
 
   STATIC_ASSERT(kStringEncodingMask == 4);
   STATIC_ASSERT(kOneByteStringTag == 4);
@@ -2684,8 +2674,8 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ daddu(a2, t0, t1);
 
   __ ld(t2, FieldMemOperand(subject, String::kLengthOffset));
-  // __ sra(a6, a6, kSmiTagSize);  // using t2 for a6 below.
-  __ dsra32(t2, t2, 0);
+
+  __ SmiUntag(t2);
   __ dsllv(t1, t2, a3);
   __ daddu(a3, t0, t1);
   // Argument 2 (a1): Previous index.
@@ -2743,17 +2733,12 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
 
   // Process the result from the native regexp code.
   __ bind(&success);
-  // TODO(plind): Refactor to use LoadSmiUntag here.
-  __ ld(a1,
-         FieldMemOperand(regexp_data, JSRegExp::kIrregexpCaptureCountOffset));
+
+  __ lw(a1, UntagSmiFieldMemOperand(
+      regexp_data, JSRegExp::kIrregexpCaptureCountOffset));
   // Calculate number of capture registers (number_of_captures + 1) * 2.
-  // Multiplying by 2 comes for free since r1 is smi-tagged.
-  STATIC_ASSERT(kSmiTag == 0);
-  // TODO(yuyin): define constants bwlow in dsrl.
-  // STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 1);
-  STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 32);
-  __ Daddu(a1, a1, Operand(Smi::FromInt(1)));
-  __ dsrl(a1, a1, 32 - 1);
+  __ Daddu(a1, a1, Operand(1));
+  __ dsll(a1, a1, 1);  // Multiply by 2.
 
   __ ld(a0, MemOperand(sp, kLastMatchInfoOffset));
   __ JumpIfSmi(a0, &runtime);
@@ -2770,15 +2755,14 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ ld(a0,
         FieldMemOperand(last_match_info_elements, FixedArray::kLengthOffset));
   __ Daddu(a2, a1, Operand(RegExpImpl::kLastMatchOverhead));
-  // __ sra(at, a0, kSmiTagSize);
-  __ dsra32(at, a0, 0);
+
+  __ SmiUntag(at, a0);
   __ Branch(&runtime, gt, a2, Operand(at));
 
   // a1: number of capture registers
   // subject: subject string
   // Store the capture count.
-  //__ sll(a2, a1, kSmiTagSize + kSmiShiftSize);  // To smi.
-  __ dsll32(a2, a1, 0);
+  __ SmiTag(a2, a1);  // To smi.
   __ sd(a2, FieldMemOperand(last_match_info_elements,
                              RegExpImpl::kLastCaptureCountOffset));
   // Store last subject and last input.
@@ -2823,8 +2807,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ lw(a3, MemOperand(a2, 0));
   __ daddiu(a2, a2, kIntSize);
   // Store the smi value in the last match info.
-  // __ sll(a3, a3, kSmiTagSize);  // Convert to Smi.
-  __ dsll32(a3, a3, 0);
+  __ SmiTag(a3);
   __ sd(a3, MemOperand(a0, 0));
   __ Branch(&next_capture, USE_DELAY_SLOT);
   __ daddiu(a0, a0, kPointerSize);  // In branch delay slot.
@@ -2876,8 +2859,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // (9) Sliced string.  Replace subject with parent.  Go to (4).
   // Load offset into t0 and replace subject string with parent.
   __ ld(t0, FieldMemOperand(subject, SlicedString::kOffsetOffset));
-  // __ sra(t0, t0, kSmiTagSize);
-  __ dsra32(t0, t0, 0);
+  __ SmiUntag(t0);
   __ ld(subject, FieldMemOperand(subject, SlicedString::kParentOffset));
   __ jmp(&check_underlying);  // Go to (4).
 #endif  // V8_INTERPRETED_REGEXP
@@ -3194,8 +3176,7 @@ void StringCharCodeAtGenerator::GenerateFast(MacroAssembler* masm) {
   __ ld(a4, FieldMemOperand(object_, String::kLengthOffset));
   __ Branch(index_out_of_range_, ls, a4, Operand(index_));
 
-  // __ sra(index_, index_, kSmiTagSize);
-  __ dsra32(index_, index_, 0);
+  __ SmiUntag(index_);
 
   StringCharLoadGenerator::Generate(masm,
                                     object_,
@@ -3203,8 +3184,7 @@ void StringCharCodeAtGenerator::GenerateFast(MacroAssembler* masm) {
                                     result_,
                                     &call_runtime_);
 
-  // __ sll(result_, result_, kSmiTagSize);
-  __ dsll32(result_, result_, 0);
+  __ SmiTag(result_);
   __ bind(&exit_);
 }
 
@@ -3389,8 +3369,7 @@ void StringCharCodeAtGenerator::GenerateSlow(
   // is too complex (e.g., when the string needs to be flattened).
   __ bind(&call_runtime_);
   call_helper.BeforeCall(masm);
-  // __ sll(index_, index_, kSmiTagSize);
-  __ dsll32(index_, index_, 0);
+  __ SmiTag(index_);
   __ Push(object_, index_);
   __ CallRuntime(Runtime::kStringCharCodeAtRT, 2);
 
@@ -3606,8 +3585,7 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   // v0: original string
   // a2: result string length
   __ ld(a4, FieldMemOperand(v0, String::kLengthOffset));
-  // __ sra(a4, a4, 1);
-  __ dsra32(a4, a4, 0);
+  __ SmiUntag(a4);
   // Return original string.
   __ Branch(&return_v0, eq, a2, Operand(a4));
   // Longer than original string's length or negative: unsafe arguments.
@@ -3643,8 +3621,7 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   // Sliced string.  Fetch parent and correct start index by offset.
   __ ld(a5, FieldMemOperand(v0, SlicedString::kParentOffset));
   __ ld(a4, FieldMemOperand(v0, SlicedString::kOffsetOffset));
-  // __ sra(a4, a4, 1);  // Add offset to index.
-  __ dsra32(a4, a4, 0);
+  __ SmiUntag(a4);  // Add offset to index.
   __ Daddu(a3, a3, a4);
   // Update instance type.
   __ ld(a1, FieldMemOperand(a5, HeapObject::kMapOffset));
@@ -3680,8 +3657,7 @@ void SubStringStub::Generate(MacroAssembler* masm) {
     __ bind(&two_byte_slice);
     __ AllocateTwoByteSlicedString(v0, a2, a6, a7, &runtime);
     __ bind(&set_slice_header);
-    // __ sll(a3, a3, 1);
-    __ dsll32(a3, a3, 0);
+    __ SmiTag(a3);
     __ sd(a5, FieldMemOperand(v0, SlicedString::kParentOffset));
     __ sd(a3, FieldMemOperand(v0, SlicedString::kOffsetOffset));
     __ jmp(&return_v0);
@@ -4437,8 +4413,7 @@ void NameDictionaryLookupStub::GeneratePositiveLookup(MacroAssembler* masm,
 
   // Compute the capacity mask.
   __ ld(scratch1, FieldMemOperand(elements, kCapacityOffset));
-  // __ sra(scratch1, scratch1, kSmiTagSize);  // convert smi to int
-  __ dsra32(scratch1, scratch1, 0);
+  __ SmiUntag(scratch1);
   __ Dsubu(scratch1, scratch1, Operand(1));
 
   // Generate an unrolled loop that performs a few probes before
@@ -4522,8 +4497,7 @@ void NameDictionaryLookupStub::Generate(MacroAssembler* masm) {
   Label in_dictionary, maybe_in_dictionary, not_in_dictionary;
 
   __ ld(mask, FieldMemOperand(dictionary, kCapacityOffset));
-  // __ sra(mask, mask, kSmiTagSize);
-  __ dsra32(mask, mask, 0);
+  __ SmiUntag(mask);
   __ Dsubu(mask, mask, Operand(1));
 
   __ lwu(hash, FieldMemOperand(key, Name::kHashFieldOffset));

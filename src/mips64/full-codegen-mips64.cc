@@ -2313,7 +2313,6 @@ void FullCodeGenerator::EmitInlineSmiBinaryOp(BinaryOperation* expr,
     case Token::SAR:
       __ GetLeastBitsFromSmi(scratch1, right, 5);
       __ dsrav(right, left, scratch1);
-      // TODO(yy): should add kSmiTagMask support for both mips and mips64.
       __ And(v0, right, Operand(0xffffffff00000000L));
       break;
     case Token::SHL: {
@@ -3922,20 +3921,16 @@ void FullCodeGenerator::EmitFastAsciiArrayJoin(CallRuntime* expr) {
   // smi but the other values are, so the result is a smi.
   __ ld(scratch1, FieldMemOperand(separator, SeqOneByteString::kLengthOffset));
   __ Dsubu(string_length, string_length, Operand(scratch1));
+  __ SmiUntag(scratch1);
   __ Dmult(array_length, scratch1);
   // Check for smi overflow. No overflow if higher 33 bits of 64-bit result are
   // zero.
-  // TODO(plind): Can be simplified by untagging the Smi here.
   __ mfhi(scratch2);
   __ Branch(&bailout, ne, scratch2, Operand(zero_reg));
   __ mflo(scratch2);
-  // TODO(yy) check the highest bit.
-  // __ dsrl32(scratch3, scratch2, 0);
-  __ And(scratch3, scratch2, Operand(0x80000000));
-  __ Branch(&bailout, ne, scratch3, Operand(zero_reg));
+  __ SmiUntag(string_length);
   __ AdduAndCheckForOverflow(string_length, string_length, scratch2, scratch3);
   __ BranchOnOverflow(&bailout, scratch3);
-  __ SmiUntag(string_length);
 
   // Get first element in the array to free up the elements register to be used
   // for the result.
@@ -4693,10 +4688,7 @@ void FullCodeGenerator::EnterFinallyBlock() {
   __ push(result_register());
   // Cook return address in link register to stack (smi encoded Code* delta).
   __ Dsubu(a1, ra, Operand(masm_->CodeObject()));
-  // ASSERT_EQ(1, kSmiTagSize + kSmiShiftSize);
-  STATIC_ASSERT(0 == kSmiTag);
-  // __ Addu(a1, a1, Operand(a1));  // Convert to smi.
-  __ dsll32(a1, a1, 0);
+  __ SmiTag(a1);
 
   // Store result register while executing finally block.
   __ push(a1);
@@ -4750,9 +4742,8 @@ void FullCodeGenerator::ExitFinallyBlock() {
 
   // Uncook return address and return.
   __ pop(result_register());
-  // ASSERT_EQ(1, kSmiTagSize + kSmiShiftSize);
-  // __ sra(a1, a1, 1);  // Un-smi-tag value.
-  __ dsra32(a1, a1, 0);
+
+  __ SmiUntag(a1);
   __ Daddu(at, a1, Operand(masm_->CodeObject()));
   __ Jump(at);
 }

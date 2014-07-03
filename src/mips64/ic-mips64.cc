@@ -121,9 +121,6 @@ static void GenerateDictionaryLoad(MacroAssembler* masm,
       NameDictionary::kElementsStartIndex * kPointerSize;
   const int kDetailsOffset = kElementsStartOffset + 2 * kPointerSize;
   __ ld(scratch1, FieldMemOperand(scratch2, kDetailsOffset));
-  // __ And(at,
-  //       scratch1,
-  //       Operand(PropertyDetails::TypeField::kMask << kSmiTagSize));
   __ And(at,
          scratch1,
          Operand(Smi::FromInt(PropertyDetails::TypeField::kMask)));
@@ -180,7 +177,6 @@ static void GenerateDictionaryStore(MacroAssembler* masm,
       (PropertyDetails::TypeField::kMask |
        PropertyDetails::AttributesField::encode(READ_ONLY));
   __ ld(scratch1, FieldMemOperand(scratch2, kDetailsOffset));
-  // __ And(at, scratch1, Operand(kTypeAndReadOnlyMask));
   __ And(at, scratch1, Operand(Smi::FromInt(kTypeAndReadOnlyMask)));
   __ Branch(miss, ne, at, Operand(zero_reg));
 
@@ -433,11 +429,8 @@ static MemOperand GenerateMappedArgumentsLookup(MacroAssembler* masm,
   const int kOffset =
       FixedArray::kHeaderSize + 2 * kPointerSize - kHeapObjectTag;
 
-  // TODO(plind): validate and cleanup here, we don't need Dmul.
-  // __ li(scratch3, Operand(kPointerSize >> 1));
-  // __ Dmul(scratch3, key, scratch3);
   __ SmiUntag(scratch3, key);
-  __ Dmul(scratch3, scratch3, Operand(kPointerSize));
+  __ dsll(scratch3, scratch3, kPointerSizeLog2);
   __ Daddu(scratch3, scratch3, Operand(kOffset));
 
   __ Daddu(scratch2, scratch1, scratch3);
@@ -449,10 +442,8 @@ static MemOperand GenerateMappedArgumentsLookup(MacroAssembler* masm,
   // we do not jump to the unmapped lookup (which requires the parameter
   // map in scratch1).
   __ ld(scratch1, FieldMemOperand(scratch1, FixedArray::kHeaderSize));
-  // __ li(scratch3, Operand(kPointerSize >> 1));
-  // __ Dmul(scratch3, scratch2, scratch3);
   __ SmiUntag(scratch3, scratch2);
-  __ Dmul(scratch3, scratch3, Operand(kPointerSize));
+  __ dsll(scratch3, scratch3, kPointerSizeLog2);
   __ Daddu(scratch3, scratch3, Operand(Context::kHeaderSize - kHeapObjectTag));
   __ Daddu(scratch2, scratch1, scratch3);
   return MemOperand(scratch2);
@@ -478,11 +469,8 @@ static MemOperand GenerateUnmappedArgumentsLookup(MacroAssembler* masm,
               DONT_DO_SMI_CHECK);
   __ ld(scratch, FieldMemOperand(backing_store, FixedArray::kLengthOffset));
   __ Branch(slow_case, Ugreater_equal, key, Operand(scratch));
-  // TODO(plind): clean this up, don't need Dmul().
-  // __ li(scratch, Operand(kPointerSize >> 1));
-  // __ Dmul(scratch, key, scratch);
   __ SmiUntag(scratch, key);
-  __ Dmul(scratch, scratch, Operand(kPointerSize));
+  __ dsll(scratch, scratch, kPointerSizeLog2);
   __ Daddu(scratch,
           scratch,
           Operand(FixedArray::kHeaderSize - kHeapObjectTag));
