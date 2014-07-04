@@ -112,7 +112,7 @@ endif
 ifdef soname_version
   GYPFLAGS += -Dsoname_version=$(soname_version)
 endif
-werror=no
+# werror=no
 ifeq ($(werror), no)
   GYPFLAGS += -Dwerror=''
 endif
