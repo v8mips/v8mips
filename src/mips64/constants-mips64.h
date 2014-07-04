@@ -20,7 +20,7 @@ enum ArchVariants {
   kMips32r2,
   kMips32r1,
   kLoongson,
-  kMips64r2  // TODO(plind): currently using kMips32r2 for m64 :(
+  kMips64r2
 };
 
 

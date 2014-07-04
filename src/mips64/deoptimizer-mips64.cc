@@ -243,7 +243,6 @@ void Deoptimizer::EntryGenerator::Generate() {
   __ bind(&pop_loop);
   __ pop(a4);
   __ sd(a4, MemOperand(a3, 0));
-  // __ daddiu(a3, a3, sizeof(uint32_t));
   __ daddiu(a3, a3, sizeof(uint64_t));
   __ bind(&pop_loop_header);
   __ BranchShort(&pop_loop, ne, a2, Operand(sp));
@@ -344,11 +343,9 @@ void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
     const int remaining_entries = (count() - i) * table_entry_size_;
     __ Daddu(t9, t9, remaining_entries);
     // 'at' was clobbered so we can only load the current entry value here.
-    // __ li(at, i);
     __ li(t8, i);
     __ jr(t9);  // Expose delay slot.
-    // __ sd(at, MemOperand(sp, 0 * kPointerSize));  // In the delay slot.
-    __ sd(t8, MemOperand(sp, 0 * kPointerSize));
+    __ sd(t8, MemOperand(sp, 0 * kPointerSize));  // In the delay slot.
 
     // Pad the rest of the code.
     while (table_entry_size_ > (masm()->SizeOfCodeGeneratedSince(&start))) {
