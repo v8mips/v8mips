@@ -1162,7 +1162,6 @@ void StoreRegistersStateStub::Generate(MacroAssembler* masm) {
 void RestoreRegistersStateStub::Generate(MacroAssembler* masm) {
   __ mov(t9, ra);
   __ pop(ra);
-  __ StoreToSafepointRegisterSlot(t9, t9);
   if (save_doubles_ == kSaveFPRegs) {
     __ PopSafepointRegistersAndDoubles();
   } else {

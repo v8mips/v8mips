@@ -125,16 +125,16 @@ void MacroAssembler::PopSafepointRegisters() {
 void MacroAssembler::PushSafepointRegistersAndDoubles() {
   PushSafepointRegisters();
   Dsubu(sp, sp, Operand(FPURegister::NumAllocatableRegisters() * kDoubleSize));
-  for (int i = 0; i < FPURegister::NumAllocatableRegisters(); i+=2) {
-    FPURegister reg = FPURegister::FromAllocationIndex(i);
+  for (int i = 0; i < FPURegister::NumAllocatableRegisters(); i++) {
+    FPURegister reg = FPURegister::FromAllocationIndex(2 * i);
     sdc1(reg, MemOperand(sp, i * kDoubleSize));
   }
 }
 
 
 void MacroAssembler::PopSafepointRegistersAndDoubles() {
-  for (int i = 0; i < FPURegister::NumAllocatableRegisters(); i+=2) {
-    FPURegister reg = FPURegister::FromAllocationIndex(i);
+  for (int i = 0; i < FPURegister::NumAllocatableRegisters(); i++) {
+    FPURegister reg = FPURegister::FromAllocationIndex(2 * i);
     ldc1(reg, MemOperand(sp, i * kDoubleSize));
   }
   Daddu(sp, sp, Operand(FPURegister::NumAllocatableRegisters() * kDoubleSize));
@@ -1267,6 +1267,7 @@ void MacroAssembler::Cvt_d_uw(FPURegister fd,
   Ext(at, rs, 0, 31);
   // Move the result to fd.
   mtc1(at, fd);
+  mthc1(zero_reg, fd);
 
   // Convert fd to a real FP value.
   cvt_d_w(fd, fd);

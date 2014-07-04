@@ -4716,7 +4716,7 @@ void LCodeGen::DoDeferredNumberTagIU(LInstruction* instr,
 
   if (FLAG_inline_new) {
     __ LoadRoot(tmp3, Heap::kHeapNumberMapRootIndex);
-    __ AllocateHeapNumber(dst, tmp1, tmp2, tmp3, &slow, DONT_TAG_RESULT);
+    __ AllocateHeapNumber(dst, tmp1, tmp2, tmp3, &slow, TAG_RESULT);
     __ Branch(&done);
   }
 
@@ -4727,7 +4727,6 @@ void LCodeGen::DoDeferredNumberTagIU(LInstruction* instr,
     // result register is stored, as this register is in the pointer map, but
     // contains an integer value.
     __ mov(dst, zero_reg);
-
     // Preserve the value of all registers.
     PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
 
@@ -4740,15 +4739,13 @@ void LCodeGen::DoDeferredNumberTagIU(LInstruction* instr,
     __ CallRuntimeSaveDoubles(Runtime::kAllocateHeapNumber);
     RecordSafepointWithRegisters(
         instr->pointer_map(), 0, Safepoint::kNoLazyDeopt);
-    __ Subu(v0, v0, kHeapObjectTag);
     __ StoreToSafepointRegisterSlot(v0, dst);
   }
 
   // Done. Put the value in dbl_scratch into the value of the allocated heap
   // number.
   __ bind(&done);
-  __ sdc1(dbl_scratch, MemOperand(dst, HeapNumber::kValueOffset));
-  __ Daddu(dst, dst, kHeapObjectTag);
+  __ sdc1(dbl_scratch, FieldMemOperand(dst, HeapNumber::kValueOffset));
 }
 
 

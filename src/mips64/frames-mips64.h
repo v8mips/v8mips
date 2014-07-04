@@ -98,14 +98,14 @@ const int kSafepointRegisterStackIndexMap[kNumRegs] = {
   3,   // a1
   4,   // a2
   5,   // a3
-  6,   // t0
-  7,   // t1
-  8,   // t2
-  9,   // t3
-  10,  // t4
-  11,  // t5
-  12,  // t6
-  13,  // t7
+  6,   // a4
+  7,   // a5
+  8,   // a6
+  9,   // a7
+  10,  // t0
+  11,  // t1
+  12,  // t2
+  13,  // t3
   14,  // s0
   15,  // s1
   16,  // s2
