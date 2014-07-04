@@ -440,7 +440,8 @@ void Decoder::Unknown(Instruction* instr) {
 
 int Decoder::DecodeBreakInstr(Instruction* instr) {
   // This is already known to be BREAK instr, just extract the code.
-  if (instr->Bits(25, 6) == kMaxStopCode) {  // This is stop(msg)
+  if (instr->Bits(25, 6) == static_cast<int>(kMaxStopCode)) {
+    // This is stop(msg).
     Format(instr, "break, code: 'code");
     out_buffer_pos_ += SNPrintF(out_buffer_ + out_buffer_pos_,
                                 "\n%p       %08lx       stop msg: %s",
