@@ -5,6 +5,7 @@
 #include "src/base/platform/time.h"
 
 #if V8_OS_POSIX
+#include <unistd.h> // for close()
 #include <fcntl.h>  // for O_RDONLY
 #include <sys/time.h>
 #endif
