@@ -1326,19 +1326,12 @@ int Serializer::RootIndex(HeapObject* heap_object, HowToCode from) {
   for (int i = 0; i < root_index_wave_front_; i++) {
     Object* root = heap->roots_array_start()[i];
     if (!root->IsSmi() && root == heap_object) {
-#if defined(V8_TARGET_ARCH_MIPS) || V8_OOL_CONSTANT_POOL
+#if defined(V8_TARGET_ARCH_MIPS) || V8_OOL_CONSTANT_POOL || \
+    defined(V8_TARGET_ARCH_MIPS64)
       if (from == kFromCode) {
         // In order to avoid code bloat in the deserializer we don't have
         // support for the encoding that specifies a particular root should
         // be written from within code.
-        return kInvalidRootIndex;
-      }
-#elif V8_TARGET_ARCH_MIPS64
-      if (from == kFromCode) {
-        // In order to avoid code bloat in the deserializer we don't have
-        // support for the encoding that specifies a particular root should
-        // be written into the lui/ori instructions on MIPS.  Therefore we
-        // should not generate such serialization data for MIPS.
         return kInvalidRootIndex;
       }
 #endif

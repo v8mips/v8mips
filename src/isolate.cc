@@ -1992,7 +1992,6 @@ bool Isolate::Init(Deserializer* des) {
     // cannot be serialized into the snapshot have been generated.
     HandleScope scope(this);
     CodeStub::GenerateFPStubs(this);
-
     StoreBufferOverflowStub::GenerateFixedRegStubsAheadOfTime(this);
     StubFailureTrampolineStub::GenerateAheadOfTime(this);
     // Ensure interface descriptors are initialized even when stubs have been
