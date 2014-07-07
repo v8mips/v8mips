@@ -368,28 +368,28 @@
   # BUG(3251035): Timeouts in long looping crankshaft optimization
   # tests. Skipping because having them timeout takes too long on the
   # buildbot.
-  'compiler/alloc-number': [SKIP],
-  'compiler/array-length': [SKIP],
-  'compiler/assignment-deopt': [SKIP],
-  'compiler/deopt-args': [SKIP],
-  'compiler/inline-compare': [SKIP],
-  'compiler/inline-global-access': [SKIP],
-  'compiler/optimized-function-calls': [SKIP],
-  'compiler/pic': [SKIP],
-  'compiler/property-calls': [SKIP],
-  'compiler/recursive-deopt': [SKIP],
-  'compiler/regress-4': [SKIP],
-  'compiler/regress-funcaller': [SKIP],
-  'compiler/regress-rep-change': [SKIP],
-  'compiler/regress-arguments': [SKIP],
-  'compiler/regress-funarguments': [SKIP],
-  'compiler/regress-3249650': [SKIP],
-  'compiler/simple-deopt': [SKIP],
-  'regress/regress-490': [SKIP],
-  'regress/regress-634': [SKIP],
-  'regress/regress-create-exception': [SKIP],
-  'regress/regress-3218915': [SKIP],
-  'regress/regress-3247124': [SKIP],
+  'compiler/alloc-number': [PASS, SLOW],
+  'compiler/array-length': [PASS, SLOW],
+  'compiler/assignment-deopt': [PASS, SLOW],
+  'compiler/deopt-args': [PASS, SLOW],
+  'compiler/inline-compare': [PASS, SLOW],
+  'compiler/inline-global-access': [PASS, SLOW],
+  'compiler/optimized-function-calls': [PASS, SLOW],
+  'compiler/pic': [PASS, SLOW],
+  'compiler/property-calls': [PASS, SLOW],
+  'compiler/recursive-deopt': [PASS, SLOW],
+  'compiler/regress-4': [PASS, SLOW],
+  'compiler/regress-funcaller': [PASS, SLOW],
+  'compiler/regress-rep-change': [PASS, SLOW],
+  'compiler/regress-arguments': [PASS, SLOW],
+  'compiler/regress-funarguments': [PASS, SLOW],
+  'compiler/regress-3249650': [PASS, SLOW],
+  'compiler/simple-deopt': [PASS, SLOW],
+  'regress/regress-490': [PASS, SLOW],
+  'regress/regress-634': [PASS, SLOW],
+  'regress/regress-create-exception': [PASS, SLOW],
+  'regress/regress-3218915': [PASS, SLOW],
+  'regress/regress-3247124': [PASS, SLOW],
 
   # Requires bigger stack size in the Genesis and if stack size is increased,
   # the test requires too much time to run.  However, the problem test covers
@@ -399,6 +399,11 @@
   # Currently always deopt on minus zero
   'math-floor-of-div-minus-zero': [SKIP],
 }],  # 'arch == mips64el'
+
+['arch == mips64el and simulator_run == False', {
+  # Random failures on HW, need investigation.
+  'debug-*': [SKIP],
+}],
 
 ##############################################################################
 # Native Client uses the ARM simulator so will behave similarly to arm
