@@ -3483,11 +3483,11 @@ void StringHelper::GenerateHashInit(MacroAssembler* masm,
   __ LoadRoot(hash, Heap::kHashSeedRootIndex);
   // Untag smi seed and add the character.
   __ SmiUntag(hash);
-  __ daddu(hash, hash, character);
-  __ dsll(at, hash, 10);
-  __ daddu(hash, hash, at);
+  __ addu(hash, hash, character);
+  __ sll(at, hash, 10);
+  __ addu(hash, hash, at);
   // hash ^= hash >> 6;
-  __ dsrl(at, hash, 6);
+  __ srl(at, hash, 6);
   __ xor_(hash, hash, at);
 }
 
@@ -3496,12 +3496,12 @@ void StringHelper::GenerateHashAddCharacter(MacroAssembler* masm,
                                             Register hash,
                                             Register character) {
   // hash += character;
-  __ daddu(hash, hash, character);
+  __ addu(hash, hash, character);
   // hash += hash << 10;
-  __ dsll(at, hash, 10);
-  __ daddu(hash, hash, at);
+  __ sll(at, hash, 10);
+  __ addu(hash, hash, at);
   // hash ^= hash >> 6;
-  __ dsrl(at, hash, 6);
+  __ srl(at, hash, 6);
   __ xor_(hash, hash, at);
 }
 
@@ -3509,14 +3509,14 @@ void StringHelper::GenerateHashAddCharacter(MacroAssembler* masm,
 void StringHelper::GenerateHashGetHash(MacroAssembler* masm,
                                        Register hash) {
   // hash += hash << 3;
-  __ dsll(at, hash, 3);
-  __ daddu(hash, hash, at);
+  __ sll(at, hash, 3);
+  __ addu(hash, hash, at);
   // hash ^= hash >> 11;
-  __ dsrl(at, hash, 11);
+  __ srl(at, hash, 11);
   __ xor_(hash, hash, at);
   // hash += hash << 15;
-  __ dsll(at, hash, 15);
-  __ daddu(hash, hash, at);
+  __ sll(at, hash, 15);
+  __ addu(hash, hash, at);
 
   __ li(at, Operand(String::kHashBitMask));
   __ and_(hash, hash, at);

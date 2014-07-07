@@ -80,7 +80,7 @@
         'test-func-name-inference.cc',
         'test-global-handles.cc',
         'test-global-object.cc',
-#        'test-hashing.cc',       # TODO(plind): Needs MIPS64 work.
+        'test-hashing.cc',
         'test-hashmap.cc',
         'test-heap.cc',
         'test-heap-profiler.cc',

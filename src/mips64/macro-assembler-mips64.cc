@@ -524,30 +524,31 @@ void MacroAssembler::GetNumberHash(Register reg0, Register scratch) {
   // with ComputeIntegerHash in utils.h.
   //
   // hash = ~hash + (hash << 15);
+  // The algorithm uses 32-bit integer values.
   nor(scratch, reg0, zero_reg);
-  dsll(at, reg0, 15);
-  daddu(reg0, scratch, at);
+  sll(at, reg0, 15);
+  addu(reg0, scratch, at);
 
   // hash = hash ^ (hash >> 12);
-  dsrl(at, reg0, 12);
+  srl(at, reg0, 12);
   xor_(reg0, reg0, at);
 
   // hash = hash + (hash << 2);
-  dsll(at, reg0, 2);
-  daddu(reg0, reg0, at);
+  sll(at, reg0, 2);
+  addu(reg0, reg0, at);
 
   // hash = hash ^ (hash >> 4);
-  dsrl(at, reg0, 4);
+  srl(at, reg0, 4);
   xor_(reg0, reg0, at);
 
   // hash = hash * 2057;
-  dsll(scratch, reg0, 11);
-  dsll(at, reg0, 3);
-  daddu(reg0, reg0, at);
-  daddu(reg0, reg0, scratch);
+  sll(scratch, reg0, 11);
+  sll(at, reg0, 3);
+  addu(reg0, reg0, at);
+  addu(reg0, reg0, scratch);
 
   // hash = hash ^ (hash >> 16);
-  dsrl(at, reg0, 16);
+  srl(at, reg0, 16);
   xor_(reg0, reg0, at);
 }
 
