@@ -266,7 +266,7 @@ struct FPURegister {
 // in pairs, starting with the even numbered register. So a double operation
 // on f0 really uses f0 and f1.
 // (Modern mips hardware also supports 32 64-bit registers, via setting
-// (priviledged) Status Register FR bit to 1. This is used by the N32 ABI,
+// (privileged) Status Register FR bit to 1. This is used by the N32 ABI,
 // but it is not in common use. Someday we will want to support this in v8.)
 
 // For O32 ABI, Floats and Doubles refer to same set of 32 32-bit registers.
@@ -532,7 +532,7 @@ class Assembler : public AssemblerBase {
   // a target is resolved and written.
   static const int kSpecialTargetSize = 0;
 
-  // Number of consecutive instructions used to store 32bit constant.
+  // Number of consecutive instructions used to store 32bit/64bit constant.
   // Before jump-optimizations, this constant was used in
   // RelocInfo::target_address_address() function to tell serializer address of
   // the instruction that follows LUI/ORI instruction pair. Now, with new jump
@@ -544,7 +544,6 @@ class Assembler : public AssemblerBase {
 
   // Distance between the instruction referring to the address of the call
   // target and the return address.
-  // static const int kCallTargetAddressOffset = 4 * kInstrSize;
   static const int kCallTargetAddressOffset = 6 * kInstrSize;
 
   // Distance between start of patched return sequence and the emitted address
@@ -564,7 +563,6 @@ class Assembler : public AssemblerBase {
   // Number of instructions used for the JS return sequence. The constant is
   // used by the debugger to patch the JS return sequence.
   static const int kJSReturnSequenceInstructions = 7;
-  // static const int kDebugBreakSlotInstructions = 4;
   static const int kDebugBreakSlotInstructions = 6;
   static const int kDebugBreakSlotLength =
       kDebugBreakSlotInstructions * kInstrSize;

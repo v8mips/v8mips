@@ -248,12 +248,12 @@ MemOperand::MemOperand(Register rm, int64_t unit, int64_t multiplier,
 // Specific instructions, constants, and masks.
 
 static const int kNegOffset = 0x00008000;
-// daddiu(sp, sp, 4) aka Pop() operation or part of Pop(r)
+// daddiu(sp, sp, 8) aka Pop() operation or part of Pop(r)
 // operations as post-increment of sp.
 const Instr kPopInstruction = DADDIU | (kRegister_sp_Code << kRsShift)
       | (kRegister_sp_Code << kRtShift)
       | (kPointerSize & kImm16Mask);  // NOLINT
-// daddiu(sp, sp, -4) part of Push(r) operation as pre-decrement of sp.
+// daddiu(sp, sp, -8) part of Push(r) operation as pre-decrement of sp.
 const Instr kPushInstruction = DADDIU | (kRegister_sp_Code << kRsShift)
       | (kRegister_sp_Code << kRtShift)
       | (-kPointerSize & kImm16Mask);  // NOLINT

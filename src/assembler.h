@@ -1105,7 +1105,6 @@ class PreservePositionScope BASE_EMBEDDED {
 // -----------------------------------------------------------------------------
 // Utility functions
 
-
 inline int NumberOfBitsSet(uint32_t x) {
   unsigned int num_bits_set;
   for (num_bits_set = 0; x; x >>= 1) {
