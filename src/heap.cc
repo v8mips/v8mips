@@ -408,7 +408,7 @@ void Heap::ReportStatisticsAfterGC() {
 }
 
 
-void Heap::GarbageCollectionPrologue() {
+void Heap::GarbageCollectionPrologue(GarbageCollector collector) {
   {  AllowHeapAllocation for_the_first_part_of_prologue;
     ClearJSFunctionResultCaches();
     gc_count_++;
@@ -439,7 +439,7 @@ void Heap::GarbageCollectionPrologue() {
   ReportStatisticsBeforeGC();
 #endif  // DEBUG
 
-  store_buffer()->GCPrologue();
+  store_buffer()->GCPrologue(collector == MARK_COMPACTOR);
 
   if (isolate()->concurrent_osr_enabled()) {
     isolate()->optimizing_compiler_thread()->AgeBufferedOsrJobs();
@@ -837,7 +837,7 @@ bool Heap::CollectGarbage(GarbageCollector collector,
   { GCTracer tracer(this, gc_reason, collector_reason);
     ASSERT(AllowHeapAllocation::IsAllowed());
     DisallowHeapAllocation no_allocation_during_gc;
-    GarbageCollectionPrologue();
+    GarbageCollectionPrologue(collector);
     // The GC count was incremented in the prologue.  Tell the tracer about
     // it.
     tracer.set_gc_count(gc_count_);
