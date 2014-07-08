@@ -2163,8 +2163,8 @@ void ArgumentsAccessStub::GenerateNewSloppyFast(MacroAssembler* masm) {
   // v0 = address of new object (tagged)
   // a1 = mapped parameter count (tagged)
   // a2 = argument count (smi-tagged)
-  // t0 = address of arguments map (tagged)
-  __ sd(t0, FieldMemOperand(v0, JSObject::kMapOffset));
+  // a4 = address of arguments map (tagged)
+  __ sd(a4, FieldMemOperand(v0, JSObject::kMapOffset));
   __ LoadRoot(a3, Heap::kEmptyFixedArrayRootIndex);
   __ sd(a3, FieldMemOperand(v0, JSObject::kPropertiesOffset));
   __ sd(a3, FieldMemOperand(v0, JSObject::kElementsOffset));
@@ -2341,7 +2341,7 @@ void ArgumentsAccessStub::GenerateNewStrict(MacroAssembler* masm) {
   __ ld(a4, MemOperand(a4, Context::SlotOffset(
       Context::STRICT_ARGUMENTS_MAP_INDEX)));
 
-  __ sd(t0, FieldMemOperand(v0, JSObject::kMapOffset));
+  __ sd(a4, FieldMemOperand(v0, JSObject::kMapOffset));
   __ LoadRoot(a3, Heap::kEmptyFixedArrayRootIndex);
   __ sd(a3, FieldMemOperand(v0, JSObject::kPropertiesOffset));
   __ sd(a3, FieldMemOperand(v0, JSObject::kElementsOffset));
