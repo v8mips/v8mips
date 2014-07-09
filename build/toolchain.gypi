@@ -355,6 +355,14 @@
                     'cflags': ['-msoft-float'],
                     'ldflags': ['-msoft-float'],
                   }],
+                  ['mips_arch_variant=="r6"', {
+                    'cflags': ['-mips64r6', '-mabi=64', '-Wa,-mips64r6'],
+                    'ldflags': [
+                      '-mips64r6', '-mabi=64',
+                      '-Wl,--dynamic-linker=$(LDSO_PATH)',
+                      '-Wl,--rpath=$(LD_R_PATH)',
+                    ],
+                  }],
                   ['mips_arch_variant=="r2"', {
                     'cflags': ['-mips64r2', '-mabi=64', '-Wa,-mips64r2'],
                     'ldflags': [
@@ -384,6 +392,9 @@
             'defines': [
               '__mips_soft_float=1'
             ],
+          }],
+          ['mips_arch_variant=="r6"', {
+            'defines': ['_MIPS_ARCH_MIPS64R6',],
           }],
           ['mips_arch_variant=="r2"', {
             'defines': ['_MIPS_ARCH_MIPS64R2',],
