@@ -1496,7 +1496,7 @@ void MacroAssembler::Move(FPURegister dst, double imm) {
 
 
 void MacroAssembler::Movz(Register rd, Register rs, Register rt) {
-  if (kArchVariant == kLoongson) {
+  if (kArchVariant == kLoongson || kArchVariant == kMips64r6) {
     Label done;
     Branch(&done, ne, rt, Operand(zero_reg));
     mov(rd, rs);
@@ -1508,7 +1508,7 @@ void MacroAssembler::Movz(Register rd, Register rs, Register rt) {
 
 
 void MacroAssembler::Movn(Register rd, Register rs, Register rt) {
-  if (kArchVariant == kLoongson) {
+  if (kArchVariant == kLoongson || kArchVariant == kMips64r6) {
     Label done;
     Branch(&done, eq, rt, Operand(zero_reg));
     mov(rd, rs);
