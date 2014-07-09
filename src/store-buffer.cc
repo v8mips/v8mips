@@ -11,6 +11,7 @@
 #include "src/base/atomicops.h"
 #include "src/counters.h"
 #include "src/store-buffer-inl.h"
+#include "src/utils.h"
 
 namespace v8 {
 namespace internal {
@@ -51,7 +52,9 @@ void StoreBuffer::SetUp() {
   // The store buffer may reach this limit during a full garbage collection.
   // Note that half of the semi-space should be good enough since half of the
   // memory in the semi-space are not object pointers.
-  old_store_buffer_length_ = heap_->MaxSemiSpaceSize() / sizeof(Address);
+  old_store_buffer_length_ =
+      Max(static_cast<int>(heap_->MaxSemiSpaceSize() / sizeof(Address)),
+          kOldRegularStoreBufferLength);
 
   old_virtual_memory_ =
       new base::VirtualMemory(old_store_buffer_length_ * kPointerSize);
@@ -521,7 +524,7 @@ void StoreBuffer::IteratePointersToNewSpace(ObjectSlotCallback slot_callback,
           Page* page = reinterpret_cast<Page*>(chunk);
           ASSERT(page->owner() == heap_->map_space() ||
                  page->owner() == heap_->old_pointer_space());
-          CHECK(page->WasSweptPrecisely());
+          CHECK(!page->WasSweptConservatively());
 
           HeapObjectIterator iterator(page, NULL);
           for (HeapObject* heap_object = iterator.Next();
