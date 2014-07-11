@@ -1146,7 +1146,11 @@ void Assembler::jr(Register rs) {
   if (rs.is(ra)) {
     positions_recorder()->WriteRecordedPositions();
   }
-  GenInstrRegister(SPECIAL, rs, zero_reg, zero_reg, 0, JR);
+  if (kArchVariant != kMips64r6) {
+    GenInstrRegister(SPECIAL, rs, zero_reg, zero_reg, 0, JR);
+  } else {
+    jalr(rs, at);
+  }
   BlockTrampolinePoolFor(1);  // For associated delay slot.
 }
 
