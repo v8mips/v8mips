@@ -856,6 +856,30 @@ void MacroAssembler::Ddiv(Register rs, const Operand& rt) {
   }
 }
 
+void MacroAssembler::Ddiv(Register rd, Register rs, const Operand& rt) {
+  if (kArchVariant != kMips64r6) {
+    if (rt.is_reg()) {
+      ddiv(rs, rt.rm());
+      mflo(rd);
+    } else {
+      // li handles the relocation.
+      ASSERT(!rs.is(at));
+      li(at, rt);
+      ddiv(rs, at);
+      mflo(rd);
+    }
+  } else {
+    if (rt.is_reg()) {
+      ddiv(rd, rs, rt.rm());
+    } else {
+      // li handles the relocation.
+      ASSERT(!rs.is(at));
+      li(at, rt);
+      ddiv(rd, rs, at);
+    }
+  }
+}
+
 
 void MacroAssembler::Divu(Register rs, const Operand& rt) {
   if (rt.is_reg()) {
@@ -877,6 +901,32 @@ void MacroAssembler::Ddivu(Register rs, const Operand& rt) {
     ASSERT(!rs.is(at));
     li(at, rt);
     ddivu(rs, at);
+  }
+}
+
+
+void MacroAssembler::Dmod(Register rd, Register rs, const Operand& rt) {
+
+  if (kArchVariant != kMips64r6) {
+    if (rt.is_reg()) {
+      ddiv(rs, rt.rm());
+      mfhi(rd);
+    } else {
+      // li handles the relocation.
+      ASSERT(!rs.is(at));
+      li(at, rt);
+      ddiv(rs, at);
+      mfhi(rd);
+    }
+  } else {
+    if (rt.is_reg()) {
+      dmod(rd, rs, rt.rm());
+    } else {
+      // li handles the relocation.
+      ASSERT(!rs.is(at));
+      li(at, rt);
+      dmod(rd, rs, at);
+    }
   }
 }
 

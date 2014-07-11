@@ -1266,10 +1266,17 @@ void Assembler::dmult(Register rs, Register rt) {
 }
 
 
+void Assembler::dmod(Register rd, Register rs, Register rt) {
+  // MIPS64R6
+  UNIMPLEMENTED_MIPS();
+}
+
+
 void Assembler::dmul(Register rd, Register rs, Register rt) {
   // MIPS64R6
   UNIMPLEMENTED_MIPS();
 }
+
 
 void Assembler::dmulh(Register rd, Register rs, Register rt) {
   // MIPS64R6
@@ -1286,6 +1293,11 @@ void Assembler::ddiv(Register rs, Register rt) {
   GenInstrRegister(SPECIAL, rs, rt, zero_reg, 0, DDIV);
 }
 
+
+void Assembler::ddiv(Register rd, Register rs, Register rt) {
+  // MIPS64R6
+  UNIMPLEMENTED_MIPS();
+}
 
 void Assembler::ddivu(Register rs, Register rt) {
   GenInstrRegister(SPECIAL, rs, rt, zero_reg, 0, DDIVU);

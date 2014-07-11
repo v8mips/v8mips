@@ -1128,7 +1128,7 @@ void LCodeGen::DoModI(LModI* instr) {
   const Register result_reg = ToRegister(instr->result());
 
   // div runs in the background while we check for special cases.
-  __ ddiv(left_reg, right_reg);
+  __ Dmod(result_reg, left_reg, right_reg);
 
   Label done;
   // Check for x % 0, we have to deopt in this case because we can't return a
@@ -1153,8 +1153,7 @@ void LCodeGen::DoModI(LModI* instr) {
   }
 
   // If we care about -0, test if the dividend is <0 and the result is 0.
-  __ Branch(USE_DELAY_SLOT, &done, ge, left_reg, Operand(zero_reg));
-  __ mfhi(result_reg);
+  __ Branch(&done, ge, left_reg, Operand(zero_reg));
 
   if (hmod->CheckFlag(HValue::kBailoutOnMinusZero)) {
     DeoptimizeIf(eq, instr->environment(), result_reg, Operand(zero_reg));
@@ -1244,7 +1243,7 @@ void LCodeGen::DoDivI(LDivI* instr) {
 
   // On MIPS div is asynchronous - it will run in the background while we
   // check for special cases.
-  __ ddiv(dividend, divisor);
+  __ Ddiv(result, dividend, divisor);
 
   // Check for x / 0.
   if (hdiv->CheckFlag(HValue::kCanBeDivByZero)) {
@@ -1269,11 +1268,15 @@ void LCodeGen::DoDivI(LDivI* instr) {
   }
 
   if (!hdiv->CheckFlag(HValue::kAllUsesTruncatingToInt32)) {
-    __ mfhi(result);
-    DeoptimizeIf(ne, instr->environment(), result, Operand(zero_reg));
-    __ mflo(result);
-  } else {
-    __ mflo(result);
+    // Calculate remainder.
+    Register remainder = ToRegister(instr->temp());
+    if (kArchVariant != kMips64r6) {
+      __ mfhi(remainder);
+      DeoptimizeIf(ne, instr->environment(), remainder, Operand(zero_reg));
+    } else {
+      __ dmod(remainder, dividend, divisor);
+    }
+    DeoptimizeIf(ne, instr->environment(), remainder, Operand(zero_reg));
   }
 }
 
@@ -1400,7 +1403,7 @@ void LCodeGen::DoFlooringDivI(LFlooringDivI* instr) {
 
   // On MIPS div is asynchronous - it will run in the background while we
   // check for special cases.
-  __ ddiv(dividend, divisor);
+  __ Ddiv(result, dividend, divisor);
 
   // Check for x / 0.
   if (hdiv->CheckFlag(HValue::kCanBeDivByZero)) {
@@ -1427,8 +1430,11 @@ void LCodeGen::DoFlooringDivI(LFlooringDivI* instr) {
   // We performed a truncating division. Correct the result if necessary.
   Label done;
   Register remainder = scratch0();
-  __ mfhi(remainder);
-  __ mflo(result);
+  if (kArchVariant != kMips64r6) {
+    __ mfhi(remainder);
+  } else {
+    __ dmod(remainder, dividend, divisor);
+  }
   __ Branch(&done, eq, remainder, Operand(zero_reg), USE_DELAY_SLOT);
   __ Xor(remainder, remainder, Operand(divisor));
   __ Branch(&done, ge, remainder, Operand(zero_reg));
