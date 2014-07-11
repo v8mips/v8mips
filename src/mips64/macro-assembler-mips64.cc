@@ -1496,49 +1496,102 @@ void MacroAssembler::BranchF(Label* target,
   ASSERT(nan || target);
   // Check for unordered (NaN) cases.
   if (nan) {
-    c(UN, D, cmp1, cmp2);
-    bc1t(nan);
+    if (kArchVariant != kMips64r6) {
+      c(UN, D, cmp1, cmp2);
+      bc1t(nan);
+    } else {
+      // Use f30 for comparison result. It is reserved scratch reg in Lithium.
+      ASSERT(!cmp1.is(f30) && !cmp2.is(f30));
+      cmp(UN, D, f30, cmp1, cmp2);
+      bc1nez(nan, f30);
+    }
   }
 
-  if (target) {
-    // Here NaN cases were either handled by this function or are assumed to
-    // have been handled by the caller.
-    // Unsigned conditions are treated as their signed counterpart.
-    switch (cc) {
-      case lt:
-        c(OLT, D, cmp1, cmp2);
-        bc1t(target);
-        break;
-      case gt:
-        c(ULE, D, cmp1, cmp2);
-        bc1f(target);
-        break;
-      case ge:
-        c(ULT, D, cmp1, cmp2);
-        bc1f(target);
-        break;
-      case le:
-        c(OLE, D, cmp1, cmp2);
-        bc1t(target);
-        break;
-      case eq:
-        c(EQ, D, cmp1, cmp2);
-        bc1t(target);
-        break;
-      case ueq:
-        c(UEQ, D, cmp1, cmp2);
-        bc1t(target);
-        break;
-      case ne:
-        c(EQ, D, cmp1, cmp2);
-        bc1f(target);
-        break;
-      case nue:
-        c(UEQ, D, cmp1, cmp2);
-        bc1f(target);
-        break;
-      default:
-        CHECK(0);
+  if (kArchVariant != kMips64r6) {
+    if (target) {
+      // Here NaN cases were either handled by this function or are assumed to
+      // have been handled by the caller.
+      // Unsigned conditions are treated as their signed counterpart.
+      // Use f30 for comparison result. It is reserved scratch reg in Lithium.
+      ASSERT(!cmp1.is(f30) && !cmp2.is(f30));
+      switch (cc) {
+        case lt:
+          c(OLT, D, cmp1, cmp2);
+          bc1t(target);
+          break;
+        case gt:
+          c(ULE, D, cmp1, cmp2);
+          bc1f(target);
+          break;
+        case ge:
+          c(ULT, D, cmp1, cmp2);
+          bc1f(target);
+          break;
+        case le:
+          c(OLE, D, cmp1, cmp2);
+          bc1t(target);
+          break;
+        case eq:
+          c(EQ, D, cmp1, cmp2);
+          bc1t(target);
+          break;
+        case ueq:
+          c(UEQ, D, cmp1, cmp2);
+          bc1t(target);
+          break;
+        case ne:
+          c(EQ, D, cmp1, cmp2);
+          bc1f(target);
+          break;
+        case nue:
+          c(UEQ, D, cmp1, cmp2);
+          bc1f(target);
+          break;
+        default:
+          CHECK(0);
+      }
+    }
+  } else {
+    if (target) {
+      // Here NaN cases were either handled by this function or are assumed to
+      // have been handled by the caller.
+      // Unsigned conditions are treated as their signed counterpart.
+      switch (cc) {
+        case lt:
+          cmp(OLT, D, f30, cmp1, cmp2);
+          bc1eqz(target, f30);
+          break;
+        case gt:
+          cmp(ULE, D, f30, cmp1, cmp2);
+          bc1nez(target, f30);
+          break;
+        case ge:
+          cmp(ULT, D, f30, cmp1, cmp2);
+          bc1nez(target, f30);
+          break;
+        case le:
+          cmp(OLE, D, f30, cmp1, cmp2);
+          bc1eqz(target, f30);
+          break;
+        case eq:
+          cmp(EQ, D, f30, cmp1, cmp2);
+          bc1eqz(target, f30);
+          break;
+        case ueq:
+          cmp(UEQ, D, f30, cmp1, cmp2);
+          bc1eqz(target, f30);
+          break;
+        case ne:
+          cmp(EQ, D, f30, cmp1, cmp2);
+          bc1nez(target, f30);
+          break;
+        case nue:
+          cmp(UEQ, D, f30, cmp1, cmp2);
+          bc1nez(target, f30);
+          break;
+        default:
+          CHECK(0);
+      }
     }
   }
 

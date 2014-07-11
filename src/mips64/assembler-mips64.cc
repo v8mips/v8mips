@@ -2066,6 +2066,22 @@ void Assembler::cvt_d_s(FPURegister fd, FPURegister fs) {
 
 
 // Conditions.
+void Assembler::cmp(FPUCondition cond, SecondaryField fmt,
+ FPURegister fd, FPURegister fs, FPURegister ft) {
+  UNIMPLEMENTED_MIPS();
+}
+
+
+void Assembler::bc1eqz(int16_t offset, FPURegister ft) {
+  UNIMPLEMENTED_MIPS();
+}
+
+
+void Assembler::bc1nez(int16_t offset, FPURegister ft) {
+  UNIMPLEMENTED_MIPS();
+}
+
+
 void Assembler::c(FPUCondition cond, SecondaryField fmt,
     FPURegister fs, FPURegister ft, uint16_t cc) {
   ASSERT(is_uint3(cc));

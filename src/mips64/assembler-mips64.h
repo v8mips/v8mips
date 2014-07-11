@@ -823,6 +823,17 @@ class Assembler : public AssemblerBase {
   void cvt_d_s(FPURegister fd, FPURegister fs);
 
   // Conditions and branches.
+  void cmp(FPUCondition cond, SecondaryField fmt,
+      FPURegister fd, FPURegister ft, FPURegister fs);
+
+  void bc1eqz(int16_t offset, FPURegister ft);
+  void bc1eqz(Label* L, FPURegister ft) {
+    UNIMPLEMENTED_MIPS();
+  }
+  void bc1nez(int16_t offset, FPURegister ft);
+  void bc1nez(Label* L, FPURegister ft) {
+    UNIMPLEMENTED_MIPS();
+  }
   void c(FPUCondition cond, SecondaryField fmt,
          FPURegister ft, FPURegister fs, uint16_t cc = 0);
 
