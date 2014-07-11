@@ -726,6 +726,8 @@ void MacroAssembler::Dmul(Register rd, Register rs, const Operand& rt) {
     if (kArchVariant == kLoongson) {
       dmult(rs, rt.rm());
       mflo(rd);
+    } else if (kArchVariant == kMips64r6) {
+      dmul(rd, rs, rt.rm());
     } else {
       // TODO(yuyin):
       // dmul(rd, rs, rt.rm());
@@ -739,11 +741,45 @@ void MacroAssembler::Dmul(Register rd, Register rs, const Operand& rt) {
     if (kArchVariant == kLoongson) {
       dmult(rs, at);
       mflo(rd);
+    } else if (kArchVariant == kMips64r6) {
+      dmul(rd, rs, at);
     } else {
       // TODO(yuyin):
       // dmul(rd, rs, at);
       dmult(rs, at);
       mflo(rd);
+    }
+  }
+}
+
+
+void MacroAssembler::DmulH(Register rd, Register rs, const Operand& rt) {
+  if (rt.is_reg()) {
+    if (kArchVariant == kLoongson) {
+      dmult(rs, rt.rm());
+      mfhi(rd);
+    } else if (kArchVariant == kMips64r6) {
+      dmulh(rd, rs, rt.rm());
+    } else {
+      // TODO(yuyin):
+      // dmul(rd, rs, rt.rm());
+      dmult(rs, rt.rm());
+      mfhi(rd);
+    }
+  } else {
+    // li handles the relocation.
+    ASSERT(!rs.is(at));
+    li(at, rt);
+    if (kArchVariant == kLoongson) {
+      dmult(rs, at);
+      mfhi(rd);
+    } else if (kArchVariant == kMips64r6) {
+      dmulh(rd, rs, at);
+    } else {
+      // TODO(yuyin):
+      // dmul(rd, rs, at);
+      dmult(rs, at);
+      mfhi(rd);
     }
   }
 }

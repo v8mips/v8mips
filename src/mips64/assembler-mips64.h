@@ -652,6 +652,8 @@ class Assembler : public AssemblerBase {
   void daddu(Register rd, Register rs, Register rt);
   void dsubu(Register rd, Register rs, Register rt);
   void dmult(Register rs, Register rt);
+  void dmul(Register rd, Register rs, Register rt);
+  void dmulh(Register rd, Register rs, Register rt);
   void dmultu(Register rs, Register rt);
   void ddiv(Register rs, Register rt);
   void ddivu(Register rs, Register rt);

@@ -1266,6 +1266,17 @@ void Assembler::dmult(Register rs, Register rt) {
 }
 
 
+void Assembler::dmul(Register rd, Register rs, Register rt) {
+  // MIPS64R6
+  UNIMPLEMENTED_MIPS();
+}
+
+void Assembler::dmulh(Register rd, Register rs, Register rt) {
+  // MIPS64R6
+  UNIMPLEMENTED_MIPS();
+}
+
+
 void Assembler::dmultu(Register rs, Register rt) {
   GenInstrRegister(SPECIAL, rs, rt, zero_reg, 0, DMULTU);
 }

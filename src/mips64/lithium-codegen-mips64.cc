@@ -1517,15 +1517,12 @@ void LCodeGen::DoMulI(LMulI* instr) {
       // hi:lo = left * right.
       if (instr->hydrogen()->representation().IsSmi()) {
         __ SmiUntag(result, left);
-        __ dmult(result, right);
-        __ mfhi(scratch);
-        __ mflo(result);
+        __ Dmul(result, result, right);
       } else {
-        __ dmult(left, right);
-        __ mfhi(scratch);
-        __ mflo(result);
+        __ Dmul(result, left, right);
       }
-      __ dsra32(at, result, 31);
+      __ dsra32(scratch, result, 0);
+      __ sra(at, result, 31);
       DeoptimizeIf(ne, instr->environment(), scratch, Operand(at));
       if (!instr->hydrogen()->representation().IsSmi()) {
         DeoptimizeIf(gt, instr->environment(), result, Operand(kMaxInt));
