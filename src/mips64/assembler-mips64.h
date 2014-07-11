@@ -457,6 +457,7 @@ class Assembler : public AssemblerBase {
   // position. Links the label to the current position if it is still unbound.
   // Manages the jump elimination optimization if the second parameter is true.
   int32_t branch_offset(Label* L, bool jump_elimination_allowed);
+  int32_t branch_offset21(Label* L, bool jump_elimination_allowed);
   int32_t shifted_branch_offset(Label* L, bool jump_elimination_allowed) {
     int32_t o = branch_offset(L, jump_elimination_allowed);
     ASSERT((o & 3) == 0);   // Assert the offset is aligned.
@@ -617,11 +618,70 @@ class Assembler : public AssemblerBase {
     beq(rs, rt, branch_offset(L, false) >> 2);
   }
   void bgez(Register rs, int16_t offset);
+  void bgezc(Register rt, int16_t offset); // TODO(bojan) - ambiguous spec.
+  void bgezc(Register rt, Label* L) { bgezc( rt, branch_offset(L, false)>>2); }
+  void bgeuc(Register rt, int16_t offset); // TODO(bojan) - ambiguous spec.
+  void bgeuc(Register rt, Label* L) { bgeuc( rt, branch_offset(L, false)>>2); }
+  void bgec(Register rt, int16_t offset); // TODO(bojan) - ambiguous spec.
+  void bgec(Register rt, Label* L) { bgec( rt, branch_offset(L, false)>>2); }
   void bgezal(Register rs, int16_t offset);
+  void bgezalc(Register rt, int16_t offset);
+  void bgezalc(Register rt, Label* L) {
+    bgezalc( rt, branch_offset(L, false)>>2);
+  }
+  void bgezall(Register rs, int16_t offset);
+  void bgezall(Register rs, Label* L) {
+    bgezall( rs, branch_offset(L, false)>>2);
+  }
   void bgtz(Register rs, int16_t offset);
+  void bgtzc(Register rt, int16_t offset); // TODO(bojan) - ambiguous spec.
+  void bgtzc(Register rt, Label* L) { bgtzc( rt, branch_offset(L, false)>>2); }
   void blez(Register rs, int16_t offset);
+  void blezc(Register rt, int16_t offset); // TODO(bojan) - ambiguous spec.
+  void blezc(Register rt, Label* L) { blezc( rt, branch_offset(L, false)>>2); }
   void bltz(Register rs, int16_t offset);
+  void bltzc(Register rt, int16_t offset); // TODO(bojan) - ambiguous spec.
+  void bltzc(Register rt, Label* L) { bltzc( rt, branch_offset(L, false)>>2); }
+  void bltuc(Register rt, int16_t offset); // TODO(bojan) - ambiguous spec.
+  void bltuc(Register rt, Label* L) { bltuc( rt, branch_offset(L, false)>>2); }
+  void bltc(Register rs, Register rt, int16_t offset); // TODO(bojan) - ambigu.
+  void bltc(Register rs, Register rt, Label* L) {
+    bltc( rs, rt, branch_offset(L, false)>>2);
+  }
+
   void bltzal(Register rs, int16_t offset);
+  void blezalc(Register rt, int16_t offset);
+  void blezalc(Register rt, Label* L) {
+    blezalc( rt, branch_offset(L, false)>>2);
+  }
+  void bltzalc(Register rt, int16_t offset);
+  void bltzalc(Register rt, Label* L) {
+    bltzalc( rt, branch_offset(L, false)>>2);
+  }
+  void bgtzalc(Register rt, int16_t offset);
+  void bgtzalc(Register rt, Label* L) {
+    bgtzalc( rt, branch_offset(L, false)>>2);
+  }
+  void beqzalc(Register rt, int16_t offset);
+  void beqzalc(Register rt, Label* L) {
+    beqzalc( rt, branch_offset(L, false)>>2);
+  }
+  void beqc(Register rt, int16_t offset); // TODO(bojan) - ambiguous spec.
+  void beqc(Register rt, Label* L) { beqc( rt, branch_offset(L, false)>>2); }
+  void beqzc(Register rt, int32_t offset); // TODO(bojan) - ambiguous spec.
+  void beqzc(Register rt, Label* L) {
+    beqzc( rt, branch_offset21(L, false)>>2);
+  }
+  void bnezalc(Register rt, int16_t offset);
+  void bnezalc(Register rt, Label* L) {
+    bnezalc( rt, branch_offset(L, false)>>2);
+  }
+  void bnec(Register rt, int16_t offset); // TODO(bojan) - ambiguous spec.
+  void bnec(Register rt, Label* L) { bnec( rt, branch_offset(L, false)>>2); }
+  void bnezc(Register rt, int32_t offset); // TODO(bojan) - ambiguous spec.
+  void bnezc(Register rt, Label* L) {
+    bnezc( rt, branch_offset21(L, false)>>2);
+  }
   void bne(Register rs, Register rt, int16_t offset);
   void bne(Register rs, Register rt, Label* L) {
     bne(rs, rt, branch_offset(L, false)>>2);
@@ -644,21 +704,36 @@ class Assembler : public AssemblerBase {
   // Arithmetic.
   void addu(Register rd, Register rs, Register rt);
   void subu(Register rd, Register rs, Register rt);
-  void mult(Register rs, Register rt);
-  void multu(Register rs, Register rt);
+
   void div(Register rs, Register rt);
   void divu(Register rs, Register rt);
+  void ddiv(Register rs, Register rt);
+  void ddivu(Register rs, Register rt);
+  void div(Register rd, Register rs, Register rt);
+  void divu(Register rd, Register rs, Register rt);
+  void ddiv(Register rd, Register rs, Register rt);
+  void ddivu(Register rd, Register rs, Register rt);
+  void mod(Register rd, Register rs, Register rt);
+  void modu(Register rd, Register rs, Register rt);
+  void dmod(Register rd, Register rs, Register rt);
+  void dmodu(Register rd, Register rs, Register rt);
+
   void mul(Register rd, Register rs, Register rt);
+  void muh(Register rd, Register rs, Register rt);
+  void mulu(Register rd, Register rs, Register rt);
+  void muhu(Register rd, Register rs, Register rt);
+  void mult(Register rs, Register rt);
+  void multu(Register rs, Register rt);
+  void dmul(Register rd, Register rs, Register rt);
+  void dmuh(Register rd, Register rs, Register rt);
+  void dmulu(Register rd, Register rs, Register rt);
+  void dmuhu(Register rd, Register rs, Register rt);
   void daddu(Register rd, Register rs, Register rt);
   void dsubu(Register rd, Register rs, Register rt);
   void dmult(Register rs, Register rt);
   void dmod(Register rd, Register rs, Register rt);
   void dmul(Register rd, Register rs, Register rt);
-  void dmulh(Register rd, Register rs, Register rt);
   void dmultu(Register rs, Register rt);
-  void ddiv(Register rs, Register rt);
-  void ddiv(Register rd, Register rs, Register rt);
-  void ddivu(Register rs, Register rt);
 
   void addiu(Register rd, Register rs, int32_t j);
   void daddiu(Register rd, Register rs, int32_t j);
@@ -755,6 +830,15 @@ class Assembler : public AssemblerBase {
   void movt(Register rd, Register rs, uint16_t cc = 0);
   void movf(Register rd, Register rs, uint16_t cc = 0);
 
+  void sel(SecondaryField fmt, FPURegister fd, FPURegister ft,
+      FPURegister fs, uint8_t sel);
+  void seleqz(Register rs, Register rt, Register rd);
+  void seleqz(SecondaryField fmt, FPURegister fd, FPURegister ft,
+      FPURegister fs);
+  void selnez(Register rs, Register rt, Register rd);
+  void selnez(SecondaryField fmt, FPURegister fd, FPURegister ft,
+      FPURegister fs);
+
   // Bit twiddling.
   void clz(Register rd, Register rs);
   void ins_(Register rt, Register rs, uint16_t pos, uint16_t size);
@@ -822,25 +906,31 @@ class Assembler : public AssemblerBase {
   void cvt_d_l(FPURegister fd, FPURegister fs);
   void cvt_d_s(FPURegister fd, FPURegister fs);
 
-  // Conditions and branches.
+  // Conditions and branches for MIPSr6.
   void cmp(FPUCondition cond, SecondaryField fmt,
-      FPURegister fd, FPURegister ft, FPURegister fs);
+         FPURegister fd, FPURegister ft, FPURegister fs);
 
   void bc1eqz(int16_t offset, FPURegister ft);
   void bc1eqz(Label* L, FPURegister ft) {
-    UNIMPLEMENTED_MIPS();
+    bc1eqz(branch_offset(L, false)>>2, ft);
   }
   void bc1nez(int16_t offset, FPURegister ft);
   void bc1nez(Label* L, FPURegister ft) {
-    UNIMPLEMENTED_MIPS();
+    bc1nez(branch_offset(L, false)>>2, ft);
   }
+
+  // Conditions and branches for non MIPSr6.
   void c(FPUCondition cond, SecondaryField fmt,
          FPURegister ft, FPURegister fs, uint16_t cc = 0);
 
   void bc1f(int16_t offset, uint16_t cc = 0);
-  void bc1f(Label* L, uint16_t cc = 0) { bc1f(branch_offset(L, false)>>2, cc); }
+  void bc1f(Label* L, uint16_t cc = 0) {
+    bc1f(branch_offset(L, false)>>2, cc);
+  }
   void bc1t(int16_t offset, uint16_t cc = 0);
-  void bc1t(Label* L, uint16_t cc = 0) { bc1t(branch_offset(L, false)>>2, cc); }
+  void bc1t(Label* L, uint16_t cc = 0) {
+    bc1t(branch_offset(L, false)>>2, cc);
+  }
   void fcmp(FPURegister src1, const double src2, FPUCondition cond);
 
   // Check the code size generated from label to here.

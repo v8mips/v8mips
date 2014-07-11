@@ -1033,17 +1033,26 @@ void ICCompareStub::GenerateGeneric(MacroAssembler* masm) {
 
   // Check if LESS condition is satisfied. If true, move conditionally
   // result to v0.
+  if (kArchVariant != kMips64r6) {
   __ c(OLT, D, f12, f14);
   __ Movt(v0, a4);
+  } else {
+    //TODO (bojan): implement -> needs sel.fmt
+
+  }
   // Use previous check to store conditionally to v0 oposite condition
   // (GREATER). If rhs is equal to lhs, this will be corrected in next
   // check.
   __ Movf(v0, a5);
   // Check if EQUAL condition is satisfied. If true, move conditionally
   // result to v0.
+  if (kArchVariant != kMips64r6) {
   __ c(EQ, D, f12, f14);
   __ Movt(v0, a6);
+  } else {
+      //TODO (bojan): implement -> needs select
 
+  }
   __ Ret();
 
   __ bind(&nan);

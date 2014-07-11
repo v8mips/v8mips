@@ -557,21 +557,34 @@ TEST(MIPS7) {
 
   __ ldc1(f4, MemOperand(a0, OFFSET_OF(T, a)) );
   __ ldc1(f6, MemOperand(a0, OFFSET_OF(T, b)) );
-  __ c(UN, D, f4, f6);
-  __ bc1f(&neither_is_nan);
+  if (kArchVariant != kMips64r6) {
+    __ c(UN, D, f4, f6);
+    __ bc1f(&neither_is_nan);
+  } else {
+    __ cmp(UN, D, f2, f4, f6);
+    __ bc1eqz(&neither_is_nan, f2);
+  }
   __ nop();
   __ sw(zero_reg, MemOperand(a0, OFFSET_OF(T, result)) );
   __ Branch(&outa_here);
 
   __ bind(&neither_is_nan);
 
-  if (kArchVariant == kLoongson) {
-    __ c(OLT, D, f6, f4);
-    __ bc1t(&less_than);
-  } else {
-    __ c(OLT, D, f6, f4, 2);
-    __ bc1t(&less_than, 2);
+  switch (kArchVariant) {
+    case kLoongson:
+      __ c(OLT, D, f6, f4);
+      __ bc1t(&less_than);
+      break;
+    case kMips64r6:
+      __ cmp(OLT, D, f2, f6, f4);
+      __ bc1nez(&less_than, f2);
+      break;
+    default:
+      __ c(OLT, D, f6, f4, 2);
+      __ bc1t(&less_than, 2);
+      break;
   }
+
   __ nop();
   __ sw(zero_reg, MemOperand(a0, OFFSET_OF(T, result)) );
   __ Branch(&outa_here);

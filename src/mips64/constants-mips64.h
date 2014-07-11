@@ -394,7 +394,9 @@ enum SecondaryField {
   TLT       =   ((6 << 3) + 2),
   TLTU      =   ((6 << 3) + 3),
   TEQ       =   ((6 << 3) + 4),
+  SELEQZ_S  =   ((6 << 3) + 5),
   TNE       =   ((6 << 3) + 6),
+  SELNEZ_S  =   ((6 << 3) + 7),
 
   DSLL      =   ((7 << 3) + 0),
   DSRL      =   ((7 << 3) + 2),
@@ -402,6 +404,23 @@ enum SecondaryField {
   DSLL32    =   ((7 << 3) + 4),
   DSRL32    =   ((7 << 3) + 6),
   DSRA32    =   ((7 << 3) + 7),
+
+  // Multiply integers in r6.
+  MUL_MUH   =   ((3 << 3) + 0), // MUL    / MUH.
+  MUL_MUH_U =   ((3 << 3) + 1), // MUL_U  / MUH_U.
+  D_MUL_MUH =   ((7 << 3) + 0), // DMUL   / DMUH.
+  D_MUL_MUH_U = ((7 << 3) + 1), // DMUL_U / DMUH_U.
+
+  MUL_OP    =   ((0 << 3) + 2),
+  MUH_OP    =   ((0 << 3) + 3),
+  DIV_OP    =   ((0 << 3) + 2),
+  MOD_OP    =   ((0 << 3) + 3),
+
+  DIV_MOD   =   ((3 << 3) + 2),
+  DIV_MOD_U =   ((3 << 3) + 3),
+  D_DIV_MOD =   ((3 << 3) + 6),
+  D_DIV_MOD_U = ((3 << 3) + 7),
+
   // drotr in special4?
 
   // SPECIAL2 Encoding of Function Field.
@@ -426,6 +445,7 @@ enum SecondaryField {
   BGEZ      =   ((0 << 3) + 1) << 16,
   BLTZAL    =   ((2 << 3) + 0) << 16,
   BGEZAL    =   ((2 << 3) + 1) << 16,
+  BGEZALL   =   ((2 << 3) + 3) << 16,
 
   // COP1 Encoding of rs Field.
   MFC1      =   ((0 << 3) + 0) << 21,
@@ -488,6 +508,47 @@ enum SecondaryField {
   CVT_D_W   =   ((4 << 3) + 1),
   CVT_S_L   =   ((4 << 3) + 0),
   CVT_D_L   =   ((4 << 3) + 1),
+  BC1EQZ    =   ((2 << 2) + 1) << 21,
+  BC1NEZ    =   ((3 << 2) + 1) << 21,
+  // COP1 CMP positive predicates Bit 5..4 = 00.
+  CMP_AF    =   ((0 << 3) + 0),
+  CMP_UN    =   ((0 << 3) + 1),
+  CMP_EQ    =   ((0 << 3) + 2),
+  CMP_UEQ   =   ((0 << 3) + 3),
+  CMP_LT    =   ((0 << 3) + 4),
+  CMP_ULT   =   ((0 << 3) + 5),
+  CMP_LE    =   ((0 << 3) + 6),
+  CMP_ULE   =   ((0 << 3) + 7),
+  CMP_SAF   =   ((1 << 3) + 0),
+  CMP_SUN   =   ((1 << 3) + 1),
+  CMP_SEQ   =   ((1 << 3) + 2),
+  CMP_SUEQ  =   ((1 << 3) + 3),
+  CMP_SSLT  =   ((1 << 3) + 4),
+  CMP_SSULT =   ((1 << 3) + 5),
+  CMP_SLE   =   ((1 << 3) + 6),
+  CMP_SULE  =   ((1 << 3) + 7),
+  // COP1 CMP negative predicates Bit 5..4 = 01.
+  CMP_AT    =   ((2 << 3) + 0), // Reserved, not implemented.
+  CMP_OR    =   ((2 << 3) + 1),
+  CMP_UNE   =   ((2 << 3) + 2),
+  CMP_NE    =   ((2 << 3) + 3),
+  CMP_UGE   =   ((2 << 3) + 4), // Reserved, not implemented.
+  CMP_OGE   =   ((2 << 3) + 5), // Reserved, not implemented.
+  CMP_UGT   =   ((2 << 3) + 6), // Reserved, not implemented.
+  CMP_OGT   =   ((2 << 3) + 7), // Reserved, not implemented.
+  CMP_SAT   =   ((3 << 3) + 0), // Reserved, not implemented.
+  CMP_SOR   =   ((3 << 3) + 1),
+  CMP_SUNE  =   ((3 << 3) + 2),
+  CMP_SNE   =   ((3 << 3) + 3),
+  CMP_SUGE  =   ((3 << 3) + 4), // Reserved, not implemented.
+  CMP_SOGE  =   ((3 << 3) + 5), // Reserved, not implemented.
+  CMP_SUGT  =   ((3 << 3) + 6), // Reserved, not implemented.
+  CMP_SOGT  =   ((3 << 3) + 7), // Reserved, not implemented.
+
+  SEL       =   ((2 << 3) + 0),
+  SELEQZ_C  =   ((2 << 3) + 4), // COP1 on FPR registers.
+  SELNEZ_C  =   ((2 << 3) + 7), // COP1 on FPR registers.
+
   // COP1 Encoding of Function Field When rs=PS.
   // COP1X Encoding of Function Field.
   MADD_D    =   ((4 << 3) + 1),
