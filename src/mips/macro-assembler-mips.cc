@@ -2575,7 +2575,7 @@ void MacroAssembler::Call(Address target,
   // Must record previous source positions before the
   // li() generates a new code target.
   positions_recorder()->WriteRecordedPositions();
-  li(t9, Operand(target_int, rmode), ADDRESS_LOAD);
+  li(t9, Operand(target_int, rmode));
   Call(t9, cond, rs, rt, bd);
   ASSERT_EQ(CallSize(target, rmode, cond, rs, rt, bd),
             SizeOfCodeGeneratedSince(&start));
