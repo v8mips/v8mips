@@ -2340,7 +2340,7 @@ void FullCodeGenerator::EmitInlineSmiBinaryOp(BinaryOperation* expr,
       __ BranchOnOverflow(&stub_call, scratch1);
       break;
     case Token::MUL: {
-      __ DmulH(v0, left, right);
+      __ Dmulh(v0, left, right);
       __ dsra32(scratch2, v0, 0);
       __ sra(scratch1, v0, 31);
       __ Branch(USE_DELAY_SLOT, &stub_call, ne, scratch2, Operand(scratch1));

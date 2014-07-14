@@ -753,13 +753,13 @@ void MacroAssembler::Dmul(Register rd, Register rs, const Operand& rt) {
 }
 
 
-void MacroAssembler::DmulH(Register rd, Register rs, const Operand& rt) {
+void MacroAssembler::Dmulh(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     if (kArchVariant == kLoongson) {
       dmult(rs, rt.rm());
       mfhi(rd);
     } else if (kArchVariant == kMips64r6) {
-      dmulh(rd, rs, rt.rm());
+      dmuh(rd, rs, rt.rm());
     } else {
       // TODO(yuyin):
       // dmul(rd, rs, rt.rm());
@@ -774,7 +774,7 @@ void MacroAssembler::DmulH(Register rd, Register rs, const Operand& rt) {
       dmult(rs, at);
       mfhi(rd);
     } else if (kArchVariant == kMips64r6) {
-      dmulh(rd, rs, at);
+      dmuh(rd, rs, at);
     } else {
       // TODO(yuyin):
       // dmul(rd, rs, at);

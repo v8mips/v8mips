@@ -731,8 +731,6 @@ class Assembler : public AssemblerBase {
   void daddu(Register rd, Register rs, Register rt);
   void dsubu(Register rd, Register rs, Register rt);
   void dmult(Register rs, Register rt);
-  void dmod(Register rd, Register rs, Register rt);
-  void dmul(Register rd, Register rs, Register rt);
   void dmultu(Register rs, Register rt);
 
   void addiu(Register rd, Register rs, int32_t j);
