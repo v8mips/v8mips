@@ -686,6 +686,16 @@ class Assembler : public AssemblerBase {
   void bne(Register rs, Register rt, Label* L) {
     bne(rs, rt, branch_offset(L, false)>>2);
   }
+  void bovc(Register rs, Register rt, int16_t offset);
+  void bovc(Register rs, Register rt, Label* L) {
+    bovc(rs, rt, branch_offset(L, false)>>2);
+  }
+  void bnvc(Register rs, Register rt, int16_t offset);
+  void bnvc(Register rs, Register rt, Label* L) {
+    bnvc(rs, rt, branch_offset(L, false)>>2);
+  }
+
+
 
   // Never use the int16_t b(l)cond version with a branch offset
   // instead of using the Label* version.
@@ -895,6 +905,10 @@ class Assembler : public AssemblerBase {
   void floor_l_d(FPURegister fd, FPURegister fs);
   void ceil_l_s(FPURegister fd, FPURegister fs);
   void ceil_l_d(FPURegister fd, FPURegister fs);
+  void min(SecondaryField fmt,FPURegister fd, FPURegister ft, FPURegister fs);
+  void mina(SecondaryField fmt,FPURegister fd, FPURegister ft, FPURegister fs);
+  void max(SecondaryField fmt,FPURegister fd, FPURegister ft, FPURegister fs);
+  void maxa(SecondaryField fmt,FPURegister fd, FPURegister ft, FPURegister fs);
 
   void cvt_s_w(FPURegister fd, FPURegister fs);
   void cvt_s_l(FPURegister fd, FPURegister fs);

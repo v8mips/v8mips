@@ -1155,6 +1155,18 @@ void Assembler::bne(Register rs, Register rt, int16_t offset) {
 }
 
 
+void Assembler::bovc(Register rs, Register rt, int16_t offset) {
+  ASSERT(kArchVariant == kMips64r6);
+  GenInstrImmediate(ADDI, rs, rt, offset);
+}
+
+
+void Assembler::bnvc(Register rs, Register rt, int16_t offset) {
+  ASSERT(kArchVariant == kMips64r6);
+  GenInstrImmediate(DADDI, rs, rt, offset);
+}
+
+
 void Assembler::blezalc(Register rt, int16_t offset) {
   ASSERT(kArchVariant == kMips64r6);
   ASSERT(!(rt.is(zero_reg)));
@@ -2228,6 +2240,38 @@ void Assembler::ceil_l_s(FPURegister fd, FPURegister fs) {
 
 void Assembler::ceil_l_d(FPURegister fd, FPURegister fs) {
   GenInstrRegister(COP1, D, f0, fs, fd, CEIL_L_D);
+}
+
+
+void Assembler::min(SecondaryField fmt,FPURegister fd, FPURegister ft,
+    FPURegister fs) {
+  ASSERT(kArchVariant == kMips64r6);
+  ASSERT((fmt == D) || (fmt == S));
+  GenInstrRegister(COP1, fmt, ft, fs, fd, MIN);
+}
+
+
+void Assembler::mina(SecondaryField fmt,FPURegister fd, FPURegister ft,
+    FPURegister fs) {
+  ASSERT(kArchVariant == kMips64r6);
+  ASSERT((fmt == D) || (fmt == S));
+  GenInstrRegister(COP1, fmt, ft, fs, fd, MINA);
+}
+
+
+void Assembler::max(SecondaryField fmt,FPURegister fd, FPURegister ft,
+    FPURegister fs) {
+  ASSERT(kArchVariant == kMips64r6);
+  ASSERT((fmt == D) || (fmt == S));
+  GenInstrRegister(COP1, fmt, ft, fs, fd, MAX);
+}
+
+
+void Assembler::maxa(SecondaryField fmt,FPURegister fd, FPURegister ft,
+    FPURegister fs) {
+  ASSERT(kArchVariant == kMips64r6);
+  ASSERT((fmt == D) || (fmt == S));
+  GenInstrRegister(COP1, fmt, ft, fs, fd, MAXA);
 }
 
 
