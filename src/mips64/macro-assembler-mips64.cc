@@ -1500,10 +1500,11 @@ void MacroAssembler::BranchF(Label* target,
       c(UN, D, cmp1, cmp2);
       bc1t(nan);
     } else {
-      // Use f30 for comparison result. It is reserved scratch reg in Lithium.
-      ASSERT(!cmp1.is(f30) && !cmp2.is(f30));
-      cmp(UN, D, f30, cmp1, cmp2);
-      bc1nez(nan, f30);
+      // Use f31 for comparison result. It has to be unavailable to lithium
+      // register allocator.
+      ASSERT(!cmp1.is(f31) && !cmp2.is(f31));
+      cmp(UN, D, f31, cmp1, cmp2);
+      bc1nez(nan, f31);
     }
   }
 
@@ -1511,9 +1512,6 @@ void MacroAssembler::BranchF(Label* target,
     if (target) {
       // Here NaN cases were either handled by this function or are assumed to
       // have been handled by the caller.
-      // Unsigned conditions are treated as their signed counterpart.
-      // Use f30 for comparison result. It is reserved scratch reg in Lithium.
-      ASSERT(!cmp1.is(f30) && !cmp2.is(f30));
       switch (cc) {
         case lt:
           c(OLT, D, cmp1, cmp2);
@@ -1556,38 +1554,40 @@ void MacroAssembler::BranchF(Label* target,
       // Here NaN cases were either handled by this function or are assumed to
       // have been handled by the caller.
       // Unsigned conditions are treated as their signed counterpart.
+      // Use f31 for comparison result, it is valid in fp64 (FR = 1) mode.
+      ASSERT(!cmp1.is(f31) && !cmp2.is(f31));
       switch (cc) {
         case lt:
-          cmp(OLT, D, f30, cmp1, cmp2);
-          bc1eqz(target, f30);
+          cmp(OLT, D, f31, cmp1, cmp2);
+          bc1eqz(target, f31);
           break;
         case gt:
-          cmp(ULE, D, f30, cmp1, cmp2);
-          bc1nez(target, f30);
+          cmp(ULE, D, f31, cmp1, cmp2);
+          bc1nez(target, f31);
           break;
         case ge:
-          cmp(ULT, D, f30, cmp1, cmp2);
-          bc1nez(target, f30);
+          cmp(ULT, D, f31, cmp1, cmp2);
+          bc1nez(target, f31);
           break;
         case le:
-          cmp(OLE, D, f30, cmp1, cmp2);
-          bc1eqz(target, f30);
+          cmp(OLE, D, f31, cmp1, cmp2);
+          bc1eqz(target, f31);
           break;
         case eq:
-          cmp(EQ, D, f30, cmp1, cmp2);
-          bc1eqz(target, f30);
+          cmp(EQ, D, f31, cmp1, cmp2);
+          bc1eqz(target, f31);
           break;
         case ueq:
-          cmp(UEQ, D, f30, cmp1, cmp2);
-          bc1eqz(target, f30);
+          cmp(UEQ, D, f31, cmp1, cmp2);
+          bc1eqz(target, f31);
           break;
         case ne:
-          cmp(EQ, D, f30, cmp1, cmp2);
-          bc1nez(target, f30);
+          cmp(EQ, D, f31, cmp1, cmp2);
+          bc1nez(target, f31);
           break;
         case nue:
-          cmp(UEQ, D, f30, cmp1, cmp2);
-          bc1nez(target, f30);
+          cmp(UEQ, D, f31, cmp1, cmp2);
+          bc1nez(target, f31);
           break;
         default:
           CHECK(0);
