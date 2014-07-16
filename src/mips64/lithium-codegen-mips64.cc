@@ -1522,18 +1522,16 @@ void LCodeGen::DoMulI(LMulI* instr) {
     if (overflow) {
       // hi:lo = left * right.
       if (instr->hydrogen()->representation().IsSmi()) {
-        __ SmiUntag(result, left);
-        __ Dmul(result, result, right);
+        __ Dmulh(result, left, right);
       } else {
         __ Dmul(result, left, right);
       }
       __ dsra32(scratch, result, 0);
       __ sra(at, result, 31);
-      DeoptimizeIf(ne, instr->environment(), scratch, Operand(at));
-      if (!instr->hydrogen()->representation().IsSmi()) {
-        DeoptimizeIf(gt, instr->environment(), result, Operand(kMaxInt));
-        DeoptimizeIf(lt, instr->environment(), result, Operand(kMinInt));
+      if (instr->hydrogen()->representation().IsSmi()) {
+        __ SmiTag(result);
       }
+      DeoptimizeIf(ne, instr->environment(), scratch, Operand(at));
     } else {
       if (instr->hydrogen()->representation().IsSmi()) {
         __ SmiUntag(result, left);
