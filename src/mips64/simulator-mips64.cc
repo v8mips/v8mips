@@ -2535,17 +2535,93 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               alu_out = get_fpu_register_signed_word(fs_reg);
               set_fpu_register_double(fd_reg, static_cast<double>(alu_out));
               break;
+            case CMP_AF: // Mips64r6 CMP.S instructions.
+            case CMP_UN:
+            case CMP_EQ:
+            case CMP_UEQ:
+            case CMP_LT:
+            case CMP_ULT:
+            case CMP_LE:
+            case CMP_ULE:
+            case CMP_OR:
+            case CMP_UNE:
+            case CMP_NE:
+              UNIMPLEMENTED_MIPS();
+              break;
             default:
               UNREACHABLE();
           }
           break;
         case L:
+          fs = get_fpu_register_double(fs_reg);
+          ft = get_fpu_register_double(ft_reg);
           switch (instr->FunctionFieldRaw()) {
           case CVT_D_L:  // Mips32r2 instruction.
             i64 = get_fpu_register(fs_reg);
             set_fpu_register_double(fd_reg, static_cast<double>(i64));
             break;
             case CVT_S_L:
+              UNIMPLEMENTED_MIPS();
+              break;
+            case CMP_AF: // Mips64r6 CMP.D instructions.
+              UNIMPLEMENTED_MIPS();
+              break;
+            case CMP_UN:
+              if (std::isnan(fs) || std::isnan(ft)) {
+                set_fpu_register(fd_reg, std::numeric_limits<int64_t>::max());
+              } else {
+                set_fpu_register(fd_reg, 0);
+              }
+              break;
+            case CMP_EQ:
+              if (fs == ft) {
+                set_fpu_register(fd_reg, std::numeric_limits<int64_t>::max());
+              } else {
+                set_fpu_register(fd_reg, 0);
+              }
+              break;
+            case CMP_UEQ:
+              if ((fs == ft) || (std::isnan(fs) || std::isnan(ft))) {
+                set_fpu_register(fd_reg, std::numeric_limits<int64_t>::max());
+              } else {
+                set_fpu_register(fd_reg, 0);
+              }
+              break;
+            case CMP_LT:
+              if (fs < ft) {
+                set_fpu_register(fd_reg, std::numeric_limits<int64_t>::max());
+              } else {
+                set_fpu_register(fd_reg, 0);
+              }
+              break;
+            case CMP_ULT:
+              if ((fs < ft) || (std::isnan(fs) || std::isnan(ft))) {
+                set_fpu_register(fd_reg, std::numeric_limits<int64_t>::max());
+              } else {
+                set_fpu_register(fd_reg, 0);
+              }
+              break;
+            case CMP_LE:
+              if (fs <= ft) {
+                set_fpu_register(fd_reg, std::numeric_limits<int64_t>::max());
+              } else {
+                set_fpu_register(fd_reg, 0);
+              }
+              break;
+            case CMP_ULE:
+              if ((fs <= ft) || (std::isnan(fs) || std::isnan(ft))) {
+                set_fpu_register(fd_reg, std::numeric_limits<int64_t>::max());
+              } else {
+                set_fpu_register(fd_reg, 0);
+              }
+              break;
+            case CMP_OR:
+              UNIMPLEMENTED_MIPS();
+              break;
+            case CMP_UNE:
+              UNIMPLEMENTED_MIPS();
+              break;
+            case CMP_NE:
               UNIMPLEMENTED_MIPS();
               break;
             default:
