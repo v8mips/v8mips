@@ -639,8 +639,16 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
           else
             Format(instr, "sll     'rd, 'rt, 'sa");
           break;
-        case DSLL:
-          Format(instr, "dsll    'rd, 'rt, 'sa");
+        case DSLL: // @Mips64r6 == D_MUL_MUH.
+          if (kArchVariant != kMips64r6) {
+            Format(instr, "dsll    'rd, 'rt, 'sa");
+          } else {
+            if (instr->SaValue() == MUL_OP) {
+              Format(instr, "dmul   'rd, 'rs, 'rt");
+            } else {
+              Format(instr, "dmuh   'rd, 'rs, 'rt");
+            }
+          }
           break;
         case DSLL32:
           Format(instr, "dsll32  'rd, 'rt, 'sa");
@@ -719,11 +727,34 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
         case MFLO:
           Format(instr, "mflo    'rd");
           break;
-        case MULT:
-          Format(instr, "mult    'rs, 'rt");
+        case D_MUL_MUH_U:
+          if (instr->SaValue() == MUL_OP) {
+            Format(instr, "dmulu  'rd, 'rs, 'rt");
+          } else {
+            Format(instr, "dmuhu  'rd, 'rs, 'rt");
+          }
           break;
-        case DMULT:
-          Format(instr, "dmult   'rs, 'rt");
+        case MULT: // @Mips64r6 == MUL_MUH.
+          if (kArchVariant != kMips64r6) {
+            Format(instr, "mult    'rs, 'rt");
+          } else {
+            if (instr->SaValue() == MUL_OP) {
+              Format(instr, "mul    'rd, 'rs, 'rt");
+            } else {
+              Format(instr, "muh    'rd, 'rs, 'rt");
+            }
+          }
+          break;
+        case DMULT: // @Mips64r6 == MUL_MUH_U.
+          if (kArchVariant != kMips64r6) {
+            Format(instr, "dmult   'rs, 'rt");
+          } else {
+            if (instr->SaValue() == MUL_OP) {
+              Format(instr, "mulu   'rd, 'rs, 'rt");
+            } else {
+              Format(instr, "muhu   'rd, 'rs, 'rt");
+            }
+          }
           break;
         case MULTU:
           Format(instr, "multu   'rs, 'rt");
@@ -731,17 +762,49 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
         case DMULTU:
           Format(instr, "dmultu  'rs, 'rt");
           break;
-        case DIV:
-          Format(instr, "div     'rs, 'rt");
+        case DIV: // @Mips64r6 == DIV_MOD.
+          if (kArchVariant != kMips64r6) {
+            Format(instr, "div     'rs, 'rt");
+          } else {
+            if (instr->SaValue() == DIV_OP) {
+              Format(instr, "div    'rd, 'rs, 'rt");
+            } else {
+              Format(instr, "mod    'rd, 'rs, 'rt");
+            }
+          }
           break;
-        case DDIV:
-          Format(instr, "ddiv    'rs, 'rt");
+        case DDIV: // @Mips64r6 == D_DIV_MOD.
+          if (kArchVariant != kMips64r6) {
+            Format(instr, "ddiv    'rs, 'rt");
+          } else {
+            if (instr->SaValue() == DIV_OP) {
+              Format(instr, "ddiv   'rd, 'rs, 'rt");
+            } else {
+              Format(instr, "dmod   'rd, 'rs, 'rt");
+            }
+          }
           break;
-        case DIVU:
-          Format(instr, "divu    'rs, 'rt");
+        case DIVU: // @Mips64r6 == DIV_MOD_U.
+          if (kArchVariant != kMips64r6) {
+            Format(instr, "divu    'rs, 'rt");
+          } else {
+            if (instr->SaValue() == DIV_OP) {
+              Format(instr, "divu   'rd, 'rs, 'rt");
+            } else {
+              Format(instr, "modu   'rd, 'rs, 'rt");
+            }
+          }
           break;
-        case DDIVU:
-          Format(instr, "ddivu   'rs, 'rt");
+        case DDIVU: // @Mips64r6 == D_DIV_MOD_U.
+          if (kArchVariant != kMips64r6) {
+            Format(instr, "ddivu   'rs, 'rt");
+          } else {
+            if (instr->SaValue() == DIV_OP) {
+              Format(instr, "ddivu  'rd, 'rs, 'rt");
+            } else {
+              Format(instr, "dmodu 'rd, 'rs, 'rt");
+            }
+          }
           break;
         case ADD:
           Format(instr, "add     'rd, 'rs, 'rt");
@@ -824,6 +887,12 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
             Format(instr, "movf    'rd, 'rs, 'bc");
           }
           break;
+        case SELEQZ_S:
+          Format(instr, "seleqz    'rd, 'rs, 'rt");
+          break;
+        case SELNEZ_S:
+          Format(instr, "selnez    'rd, 'rs, 'rt");
+          break;
         default:
           UNREACHABLE();
       }
@@ -871,7 +940,6 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
 
 void Decoder::DecodeTypeImmediate(Instruction* instr) {
   switch (instr->OpcodeFieldRaw()) {
-    // ------------- REGIMM class.
     case COP1:
       switch (instr->RsFieldRaw()) {
         case BC1:
@@ -881,10 +949,150 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
             Format(instr, "bc1f    'bc, 'imm16u");
           }
           break;
+        case BC1EQZ:
+          Format(instr, "bc1eqz    'ft, 'imm16u");
+          break;
+        case BC1NEZ:
+          Format(instr, "bc1nez    'ft, 'imm16u");
+          break;
+        case W: // CMP.S instruction.
+          switch (instr->FunctionValue()) {
+            case CMP_AF:
+              Format(instr, "cmp.af.S    'ft, 'fs, 'fd");
+              break;
+            case CMP_UN:
+              Format(instr, "cmp.un.S    'ft, 'fs, 'fd");
+              break;
+            case CMP_EQ:
+              Format(instr, "cmp.eq.S    'ft, 'fs, 'fd");
+              break;
+            case CMP_UEQ:
+              Format(instr, "cmp.ueq.S   'ft, 'fs, 'fd");
+              break;
+            case CMP_LT:
+              Format(instr, "cmp.lt.S    'ft, 'fs, 'fd");
+              break;
+            case CMP_ULT:
+              Format(instr, "cmp.ult.S   'ft, 'fs, 'fd");
+              break;
+            case CMP_LE:
+              Format(instr, "cmp.le.S    'ft, 'fs, 'fd");
+              break;
+            case CMP_ULE:
+              Format(instr, "cmp.ule.S   'ft, 'fs, 'fd");
+              break;
+            case CMP_OR:
+              Format(instr, "cmp.or.S    'ft, 'fs, 'fd");
+              break;
+            case CMP_UNE:
+              Format(instr, "cmp.une.S   'ft, 'fs, 'fd");
+              break;
+            case CMP_NE:
+              Format(instr, "cmp.ne.S    'ft, 'fs, 'fd");
+              break;
+            default:
+              UNREACHABLE();
+          }
+          break;
+        case L: // CMP.D instruction.
+          switch (instr->FunctionValue()) {
+            case CMP_AF:
+              Format(instr, "cmp.af.D    'ft, 'fs, 'fd");
+              break;
+            case CMP_UN:
+              Format(instr, "cmp.un.D    'ft, 'fs, 'fd");
+              break;
+            case CMP_EQ:
+              Format(instr, "cmp.eq.D    'ft, 'fs, 'fd");
+              break;
+            case CMP_UEQ:
+              Format(instr, "cmp.ueq.D   'ft, 'fs, 'fd");
+              break;
+            case CMP_LT:
+              Format(instr, "cmp.lt.D    'ft, 'fs, 'fd");
+              break;
+            case CMP_ULT:
+              Format(instr, "cmp.ult.D   'ft, 'fs, 'fd");
+              break;
+            case CMP_LE:
+              Format(instr, "cmp.le.D    'ft, 'fs, 'fd");
+              break;
+            case CMP_ULE:
+              Format(instr, "cmp.ule.D   'ft, 'fs, 'fd");
+              break;
+            case CMP_OR:
+              Format(instr, "cmp.or.D    'ft, 'fs, 'fd");
+              break;
+            case CMP_UNE:
+              Format(instr, "cmp.une.D   'ft, 'fs, 'fd");
+              break;
+            case CMP_NE:
+              Format(instr, "cmp.ne.D    'ft, 'fs, 'fd");
+              break;
+            default:
+              UNREACHABLE();
+          }
+          break;
+        case S:
+          switch (instr->FunctionValue()) {
+            case SEL:
+              Format(instr, "sel.S    'ft, 'fs, 'fd");
+              break;
+            case SELEQZ_C:
+              Format(instr, "seleqz.S 'ft, 'fs, 'fd");
+              break;
+            case SELNEZ_C:
+              Format(instr, "selnez.S 'ft, 'fs, 'fd");
+              break;
+            case MIN:
+              Format(instr, "min.S    'ft, 'fs, 'fd");
+              break;
+            case MINA:
+              Format(instr, "mina.S   'ft, 'fs, 'fd");
+              break;
+            case MAX:
+              Format(instr, "max.S    'ft, 'fs, 'fd");
+              break;
+            case MAXA:
+              Format(instr, "maxa.S   'ft, 'fs, 'fd");
+              break;
+            default:
+              UNREACHABLE();
+          }
+          break;
+        case D:
+          switch (instr->FunctionValue()) {
+            case SEL:
+              Format(instr, "sel.D    'ft, 'fs, 'fd");
+              break;
+            case SELEQZ_C:
+              Format(instr, "seleqz.D 'ft, 'fs, 'fd");
+              break;
+            case SELNEZ_C:
+              Format(instr, "selnez.D 'ft, 'fs, 'fd");
+              break;
+            case MIN:
+              Format(instr, "min.D    'ft, 'fs, 'fd");
+              break;
+            case MINA:
+              Format(instr, "mina.D   'ft, 'fs, 'fd");
+              break;
+            case MAX:
+              Format(instr, "max.D    'ft, 'fs, 'fd");
+              break;
+            case MAXA:
+              Format(instr, "maxa.D   'ft, 'fs, 'fd");
+              break;
+            default:
+              UNREACHABLE();
+          }
+          break;
         default:
           UNREACHABLE();
       }
+
       break;  // Case COP1.
+    // ------------- REGIMM class.
     case REGIMM:
       switch (instr->RtFieldRaw()) {
         case BLTZ:
@@ -898,6 +1106,15 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
           break;
         case BGEZAL:
           Format(instr, "bgezal  'rs, 'imm16u");
+          break;
+        case BGEZALL:
+          Format(instr, "bgezall 'rs, 'imm16u");
+          break;
+        case DAHI:
+          Format(instr, "dahi    'rs, 'imm16u");
+          break;
+        case DATI:
+          Format(instr, "dati    'rs, 'imm16u");
           break;
         default:
           UNREACHABLE();
@@ -918,10 +1135,18 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
       break;
     // ------------- Arithmetic instructions.
     case ADDI:
-      Format(instr, "addi    'rt, 'rs, 'imm16s");
+      if (kArchVariant != kMips64r6) {
+        Format(instr, "addi    'rt, 'rs, 'imm16s");
+      } else {
+        Format(instr, "bovc    'rt, 'rs, 'imm16s");
+      }
       break;
     case DADDI:
-      Format(instr, "daddi   'rt, 'rs, 'imm16s");
+      if (kArchVariant != kMips64r6) {
+        Format(instr, "daddi   'rt, 'rs, 'imm16s");
+      } else {
+        Format(instr, "bnvc    'rt, 'rs, 'imm16s");
+      }
       break;
     case ADDIU:
       Format(instr, "addiu   'rt, 'rs, 'imm16s");
@@ -945,7 +1170,18 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
       Format(instr, "xori    'rt, 'rs, 'imm16x");
       break;
     case LUI:
-      Format(instr, "lui     'rt, 'imm16x");
+      if (kArchVariant != kMips64r6) {
+        Format(instr, "lui     'rt, 'imm16x");
+      } else {
+        if (instr->RsValue() != 0) {
+          Format(instr, "aui     'rt, 'imm16x");
+        } else {
+          Format(instr, "lui     'rt, 'imm16x");
+        }
+      }
+      break;
+    case DAUI:
+      Format(instr, "daui    'rt, 'imm16x");
       break;
     // ------------- Memory instructions.
     case LB:

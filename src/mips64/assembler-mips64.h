@@ -457,9 +457,17 @@ class Assembler : public AssemblerBase {
   // position. Links the label to the current position if it is still unbound.
   // Manages the jump elimination optimization if the second parameter is true.
   int32_t branch_offset(Label* L, bool jump_elimination_allowed);
+  int32_t branch_offset_compact(Label* L, bool jump_elimination_allowed);
   int32_t branch_offset21(Label* L, bool jump_elimination_allowed);
+  int32_t branch_offset21_compact(Label* L, bool jump_elimination_allowed);
   int32_t shifted_branch_offset(Label* L, bool jump_elimination_allowed) {
     int32_t o = branch_offset(L, jump_elimination_allowed);
+    ASSERT((o & 3) == 0);   // Assert the offset is aligned.
+    return o >> 2;
+  }
+  int32_t shifted_branch_offset_compact(Label* L,
+      bool jump_elimination_allowed) {
+    int32_t o = branch_offset_compact(L, jump_elimination_allowed);
     ASSERT((o & 3) == 0);   // Assert the offset is aligned.
     return o >> 2;
   }
@@ -619,15 +627,21 @@ class Assembler : public AssemblerBase {
   }
   void bgez(Register rs, int16_t offset);
   void bgezc(Register rt, int16_t offset); // TODO(bojan) - ambiguous spec.
-  void bgezc(Register rt, Label* L) { bgezc( rt, branch_offset(L, false)>>2); }
+  void bgezc(Register rt, Label* L) {
+    bgezc( rt, branch_offset_compact(L, false)>>2);
+  }
   void bgeuc(Register rt, int16_t offset); // TODO(bojan) - ambiguous spec.
-  void bgeuc(Register rt, Label* L) { bgeuc( rt, branch_offset(L, false)>>2); }
+  void bgeuc(Register rt, Label* L) {
+    bgeuc( rt, branch_offset_compact(L, false)>>2);
+  }
   void bgec(Register rt, int16_t offset); // TODO(bojan) - ambiguous spec.
-  void bgec(Register rt, Label* L) { bgec( rt, branch_offset(L, false)>>2); }
+  void bgec(Register rt, Label* L) {
+    bgec( rt, branch_offset_compact(L, false)>>2);
+  }
   void bgezal(Register rs, int16_t offset);
   void bgezalc(Register rt, int16_t offset);
   void bgezalc(Register rt, Label* L) {
-    bgezalc( rt, branch_offset(L, false)>>2);
+    bgezalc( rt, branch_offset_compact(L, false)>>2);
   }
   void bgezall(Register rs, int16_t offset);
   void bgezall(Register rs, Label* L) {
@@ -635,52 +649,64 @@ class Assembler : public AssemblerBase {
   }
   void bgtz(Register rs, int16_t offset);
   void bgtzc(Register rt, int16_t offset); // TODO(bojan) - ambiguous spec.
-  void bgtzc(Register rt, Label* L) { bgtzc( rt, branch_offset(L, false)>>2); }
+  void bgtzc(Register rt, Label* L) {
+    bgtzc( rt, branch_offset_compact(L, false)>>2);
+  }
   void blez(Register rs, int16_t offset);
   void blezc(Register rt, int16_t offset); // TODO(bojan) - ambiguous spec.
-  void blezc(Register rt, Label* L) { blezc( rt, branch_offset(L, false)>>2); }
+  void blezc(Register rt, Label* L) {
+    blezc( rt, branch_offset_compact(L, false)>>2);
+  }
   void bltz(Register rs, int16_t offset);
   void bltzc(Register rt, int16_t offset); // TODO(bojan) - ambiguous spec.
-  void bltzc(Register rt, Label* L) { bltzc( rt, branch_offset(L, false)>>2); }
+  void bltzc(Register rt, Label* L) {
+    bltzc( rt, branch_offset_compact(L, false)>>2);
+  }
   void bltuc(Register rt, int16_t offset); // TODO(bojan) - ambiguous spec.
-  void bltuc(Register rt, Label* L) { bltuc( rt, branch_offset(L, false)>>2); }
+  void bltuc(Register rt, Label* L) {
+    bltuc( rt, branch_offset_compact(L, false)>>2);
+  }
   void bltc(Register rs, Register rt, int16_t offset); // TODO(bojan) - ambigu.
   void bltc(Register rs, Register rt, Label* L) {
-    bltc( rs, rt, branch_offset(L, false)>>2);
+    bltc( rs, rt, branch_offset_compact(L, false)>>2);
   }
 
   void bltzal(Register rs, int16_t offset);
   void blezalc(Register rt, int16_t offset);
   void blezalc(Register rt, Label* L) {
-    blezalc( rt, branch_offset(L, false)>>2);
+    blezalc( rt, branch_offset_compact(L, false)>>2);
   }
   void bltzalc(Register rt, int16_t offset);
   void bltzalc(Register rt, Label* L) {
-    bltzalc( rt, branch_offset(L, false)>>2);
+    bltzalc( rt, branch_offset_compact(L, false)>>2);
   }
   void bgtzalc(Register rt, int16_t offset);
   void bgtzalc(Register rt, Label* L) {
-    bgtzalc( rt, branch_offset(L, false)>>2);
+    bgtzalc( rt, branch_offset_compact(L, false)>>2);
   }
   void beqzalc(Register rt, int16_t offset);
   void beqzalc(Register rt, Label* L) {
-    beqzalc( rt, branch_offset(L, false)>>2);
+    beqzalc( rt, branch_offset_compact(L, false)>>2);
   }
-  void beqc(Register rt, int16_t offset); // TODO(bojan) - ambiguous spec.
-  void beqc(Register rt, Label* L) { beqc( rt, branch_offset(L, false)>>2); }
+  void beqc(Register rs, Register rt, int16_t offset);
+  void beqc(Register rs, Register rt, Label* L) {
+    beqc(rs, rt, branch_offset_compact(L, false)>>2);
+  }
   void beqzc(Register rt, int32_t offset); // TODO(bojan) - ambiguous spec.
   void beqzc(Register rt, Label* L) {
-    beqzc( rt, branch_offset21(L, false)>>2);
+    beqzc( rt, branch_offset21_compact(L, false)>>2);
   }
   void bnezalc(Register rt, int16_t offset);
   void bnezalc(Register rt, Label* L) {
-    bnezalc( rt, branch_offset(L, false)>>2);
+    bnezalc( rt, branch_offset_compact(L, false)>>2);
   }
-  void bnec(Register rt, int16_t offset); // TODO(bojan) - ambiguous spec.
-  void bnec(Register rt, Label* L) { bnec( rt, branch_offset(L, false)>>2); }
+  void bnec(Register rs, Register rt, int16_t offset);
+  void bnec(Register rs, Register rt, Label* L) {
+    bnec(rs, rt, branch_offset_compact(L, false)>>2);
+  }
   void bnezc(Register rt, int32_t offset); // TODO(bojan) - ambiguous spec.
   void bnezc(Register rt, Label* L) {
-    bnezc( rt, branch_offset21(L, false)>>2);
+    bnezc( rt, branch_offset21_compact(L, false)>>2);
   }
   void bne(Register rs, Register rt, int16_t offset);
   void bne(Register rs, Register rt, Label* L) {
@@ -688,14 +714,12 @@ class Assembler : public AssemblerBase {
   }
   void bovc(Register rs, Register rt, int16_t offset);
   void bovc(Register rs, Register rt, Label* L) {
-    bovc(rs, rt, branch_offset(L, false)>>2);
+    bovc(rs, rt, branch_offset_compact(L, false)>>2);
   }
   void bnvc(Register rs, Register rt, int16_t offset);
   void bnvc(Register rs, Register rt, Label* L) {
-    bnvc(rs, rt, branch_offset(L, false)>>2);
+    bnvc(rs, rt, branch_offset_compact(L, false)>>2);
   }
-
-
 
   // Never use the int16_t b(l)cond version with a branch offset
   // instead of using the Label* version.
@@ -756,6 +780,10 @@ class Assembler : public AssemblerBase {
   void ori(Register rd, Register rs, int32_t j);
   void xori(Register rd, Register rs, int32_t j);
   void lui(Register rd, int32_t j);
+  void aui(Register rs, Register rt, int32_t j);
+  void daui(Register rs, Register rt, int32_t j);
+  void dahi(Register rs, int32_t j);
+  void dati(Register rs, int32_t j);
 
   // Shifts.
   // Please note: sll(zero_reg, zero_reg, x) instructions are reserved as nop

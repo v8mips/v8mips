@@ -1033,6 +1033,34 @@ int32_t Assembler::branch_offset(Label* L, bool jump_elimination_allowed) {
   return offset;
 }
 
+
+int32_t Assembler::branch_offset_compact(Label* L, bool jump_elimination_allowed) {
+  int32_t target_pos;
+
+  if (L->is_bound()) {
+    target_pos = L->pos();
+  } else {
+    if (L->is_linked()) {
+      target_pos = L->pos();
+      L->link_to(pc_offset());
+    } else {
+      L->link_to(pc_offset());
+      if (!trampoline_emitted_) {
+        unbound_labels_count_++;
+        next_buffer_check_ -= kTrampolineSlotsSize;
+      }
+      return kEndOfChain;
+    }
+  }
+
+  int32_t offset = target_pos - pc_offset();
+  ASSERT((offset & 3) == 0);
+  ASSERT(is_int16(offset >> 2));
+
+  return offset;
+}
+
+
 int32_t Assembler::branch_offset21(Label* L, bool jump_elimination_allowed) {
   int32_t target_pos;
 
@@ -1053,6 +1081,34 @@ int32_t Assembler::branch_offset21(Label* L, bool jump_elimination_allowed) {
   }
 
   int32_t offset = target_pos - (pc_offset() + kBranchPCOffset);
+  ASSERT((offset & 3) == 0);
+  ASSERT(((offset >> 2) & 0xFFF00000) == 0); // Offset is 21bit width.
+
+  return offset;
+}
+
+
+int32_t Assembler::branch_offset21_compact(Label* L,
+    bool jump_elimination_allowed) {
+  int32_t target_pos;
+
+  if (L->is_bound()) {
+    target_pos = L->pos();
+  } else {
+    if (L->is_linked()) {
+      target_pos = L->pos();
+      L->link_to(pc_offset());
+    } else {
+      L->link_to(pc_offset());
+      if (!trampoline_emitted_) {
+        unbound_labels_count_++;
+        next_buffer_check_ -= kTrampolineSlotsSize;
+      }
+      return kEndOfChain;
+    }
+  }
+
+  int32_t offset = target_pos - pc_offset();
   ASSERT((offset & 3) == 0);
   ASSERT(((offset >> 2) & 0xFFF00000) == 0); // Offset is 21bit width.
 
@@ -1159,12 +1215,14 @@ void Assembler::bne(Register rs, Register rt, int16_t offset) {
 
 void Assembler::bovc(Register rs, Register rt, int16_t offset) {
   ASSERT(kArchVariant == kMips64r6);
+  ASSERT(rs.code() >= rt.code());
   GenInstrImmediate(ADDI, rs, rt, offset);
 }
 
 
 void Assembler::bnvc(Register rs, Register rt, int16_t offset) {
   ASSERT(kArchVariant == kMips64r6);
+  ASSERT(rs.code() >= rt.code());
   GenInstrImmediate(DADDI, rs, rt, offset);
 }
 
@@ -1215,6 +1273,20 @@ void Assembler::bnezalc(Register rt, int16_t offset) {
   ASSERT(kArchVariant == kMips64r6);
   ASSERT(!(rt.is(zero_reg)));
   GenInstrImmediate(DADDI, zero_reg, rt, offset);
+}
+
+
+void Assembler::beqc(Register rs, Register rt, int16_t offset) {
+  ASSERT(kArchVariant == kMips64r6);
+  ASSERT(rs.code() > rt.code());
+  // TODO (bojan) -- ambiguous spec.
+}
+
+
+void Assembler::bnec(Register rs, Register rt, int16_t offset) {
+  ASSERT(kArchVariant == kMips64r6);
+  ASSERT(rs.code() > rt.code());
+  // TODO (bojan) -- ambiguous spec.
 }
 
 
@@ -1750,6 +1822,30 @@ void Assembler::swr(Register rd, const MemOperand& rs) {
 void Assembler::lui(Register rd, int32_t j) {
   ASSERT(is_uint16(j));
   GenInstrImmediate(LUI, zero_reg, rd, j);
+}
+
+
+void Assembler::aui(Register rs, Register rt, int32_t j) {
+  ASSERT(is_uint16(j));
+  GenInstrImmediate(LUI, rs, rt, j);
+}
+
+
+void Assembler::daui(Register rs, Register rt, int32_t j) {
+  ASSERT(is_uint16(j));
+  GenInstrImmediate(DAUI, rs, rt, j);
+}
+
+
+void Assembler::dahi(Register rs, int32_t j) {
+  ASSERT(is_uint16(j));
+  GenInstrImmediate(REGIMM, rs, DAHI, j);
+}
+
+
+void Assembler::dati(Register rs, int32_t j) {
+  ASSERT(is_uint16(j));
+  GenInstrImmediate(REGIMM, rs, DATI, j);
 }
 
 

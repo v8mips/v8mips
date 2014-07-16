@@ -295,15 +295,17 @@ enum Opcode {
   ANDI      =   ((1 << 3) + 4) << kOpcodeShift,
   ORI       =   ((1 << 3) + 5) << kOpcodeShift,
   XORI      =   ((1 << 3) + 6) << kOpcodeShift,
-  LUI       =   ((1 << 3) + 7) << kOpcodeShift,
+  LUI       =   ((1 << 3) + 7) << kOpcodeShift, // LUI/AUI family.
+  DAUI      =   ((3 << 3) + 5) << kOpcodeShift,
 
+  BEQC      =   ((2 << 3) + 0) << kOpcodeShift,
   COP1      =   ((2 << 3) + 1) << kOpcodeShift,  // Coprocessor 1 class.
   BEQL      =   ((2 << 3) + 4) << kOpcodeShift,
   BNEL      =   ((2 << 3) + 5) << kOpcodeShift,
   BLEZL     =   ((2 << 3) + 6) << kOpcodeShift,
   BGTZL     =   ((2 << 3) + 7) << kOpcodeShift,
 
-  DADDI     =   ((3 << 3) + 0) << kOpcodeShift,
+  DADDI     =   ((3 << 3) + 0) << kOpcodeShift,  // This is also BNEC.
   DADDIU    =   ((3 << 3) + 1) << kOpcodeShift,
   LDL       =   ((3 << 3) + 2) << kOpcodeShift,
   LDR       =   ((3 << 3) + 3) << kOpcodeShift,
@@ -446,6 +448,8 @@ enum SecondaryField {
   BLTZAL    =   ((2 << 3) + 0) << 16,
   BGEZAL    =   ((2 << 3) + 1) << 16,
   BGEZALL   =   ((2 << 3) + 3) << 16,
+  DAHI      =   ((0 << 3) + 6) << 16,
+  DATI      =   ((3 << 3) + 6) << 16,
 
   // COP1 Encoding of rs Field.
   MFC1      =   ((0 << 3) + 0) << 21,
