@@ -2001,8 +2001,29 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
         case SLL:
           *alu_out = (int32_t)rt << sa;
           break;
-        case DSLL:
-          *alu_out = rt << sa;
+        case DSLL: // Mips64r6 DMUL, DMUH
+          if (kArchVariant != kMips64r6)
+          {
+            *alu_out = rt << sa;
+          } else {
+            ASSERT(false);
+            if (instr->RsFieldRaw() != 0)
+            {
+              switch (instr->SaValue()) {
+                case MUL_OP:
+                  *i128resultL = rs * rt;
+                  break;
+                case MUH_OP:
+                  *i128resultH = MultiplyHighSigned(rs, rt);
+                  break;
+                default:
+                  UNIMPLEMENTED_MIPS();
+                  break;
+              }
+            } else {
+              *alu_out = rt << sa;
+            }
+          }
           break;
         case DSLL32:
           *alu_out = rt << sa << 32;
@@ -2586,18 +2607,66 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
         case DMULTU:
           UNIMPLEMENTED_MIPS();
           break;
+        case DSLL:
+          if (kArchVariant != kMips64r6)
+          {
+            set_register(rd_reg, alu_out);
+            TraceRegWr(alu_out);
+          } else { // case D_MUL_MUH:
+            switch (instr->SaValue()) {
+              case MUL_OP:
+                set_register(rd_reg, static_cast<int64_t>(i128resultL));
+                break;
+              case MUH_OP:
+                set_register(rd_reg, static_cast<int64_t>(i128resultH));
+                break;
+              default:
+                UNIMPLEMENTED_MIPS();
+                break;
+            }
+          }
+          break;
         case DIV:
         case DDIV:
-          // Divide by zero and overflow was not checked in the configuration
-          // step - div and divu do not raise exceptions. On division by 0
-          // the result will be UNPREDICTABLE. On overflow (INT_MIN/-1),
-          // return INT_MIN which is what the hardware does.
-          if (rs == INT_MIN && rt == -1) {
-            set_register(LO, INT_MIN);
-            set_register(HI, 0);
-          } else if (rt != 0) {
-            set_register(LO, rs / rt);
-            set_register(HI, rs % rt);
+          ASSERT(false);
+          switch(kArchVariant) {
+            case kMips64r1:
+            case kMips64r2:
+              // Divide by zero and overflow was not checked in the
+              // configuration step - div and divu do not raise exceptions. On
+              // division by 0 the result will be UNPREDICTABLE. On overflow
+              // (INT_MIN/-1), return INT_MIN which is what the hardware does.
+              if (rs == INT_MIN && rt == -1) {
+                set_register(LO, INT_MIN);
+                set_register(HI, 0);
+              } else if (rt != 0) {
+                set_register(LO, rs / rt);
+                set_register(HI, rs % rt);
+              }
+              break;
+            case kMips64r6:
+              switch (instr->SaValue()) {
+                case DIV_OP:
+                  if (rs == INT_MIN && rt == -1) {
+                    set_register(rd_reg, INT_MIN);
+                  } else if (rt != 0) {
+                    set_register(rd_reg, rs / rt);
+                  }
+                  break;
+                case MOD_OP:
+                  if (rs == INT_MIN && rt == -1) {
+                    set_register(rd_reg, 0);
+                  } else if (rt != 0) {
+                    set_register(rd_reg, rs % rt);
+                  }
+                  break;
+                default:
+                  UNIMPLEMENTED_MIPS();
+                  break;
+              }
+              break;
+            default:
+              break;
           }
           break;
         case DIVU:
@@ -2742,6 +2811,25 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
             next_pc = current_pc + kBranchReturnOffset;
           }
           break;
+        case BC1EQZ:
+          do_branch = (ft_reg && 0x1) ? false : true;
+          execute_branch_delay_instruction = true;
+          // Set next_pc.
+          if (do_branch) {
+            next_pc = current_pc + (imm16 << 2) + Instruction::kInstrSize;
+          } else {
+            next_pc = current_pc + kBranchReturnOffset;
+          }
+          break;
+        case BC1NEZ:
+          do_branch = (ft_reg && 0x1) ? true : false;
+          execute_branch_delay_instruction = true;
+          // Set next_pc.
+          if (do_branch) {
+            next_pc = current_pc + (imm16 << 2) + Instruction::kInstrSize;
+          } else {
+            next_pc = current_pc + kBranchReturnOffset;
+          }
         default:
           UNREACHABLE();
       }
