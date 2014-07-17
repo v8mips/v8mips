@@ -332,6 +332,7 @@ enum Opcode {
   LWC1      =   ((6 << 3) + 1) << kOpcodeShift,
   LLD       =   ((6 << 3) + 4) << kOpcodeShift,
   LDC1      =   ((6 << 3) + 5) << kOpcodeShift,
+  BEQZC     =   ((6 << 3) + 6) << kOpcodeShift,
   LD        =   ((6 << 3) + 7) << kOpcodeShift,
 
   PREF      =   ((6 << 3) + 3) << kOpcodeShift,
@@ -339,6 +340,7 @@ enum Opcode {
   SWC1      =   ((7 << 3) + 1) << kOpcodeShift,
   SCD       =   ((7 << 3) + 4) << kOpcodeShift,
   SDC1      =   ((7 << 3) + 5) << kOpcodeShift,
+  BNEZC     =   ((7 << 3) + 6) << kOpcodeShift,
   SD        =   ((7 << 3) + 7) << kOpcodeShift,
 
   COP1X     =   ((1 << 4) + 3) << kOpcodeShift

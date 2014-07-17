@@ -1128,24 +1128,94 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
       Format(instr, "bne     'rs, 'rt, 'imm16u");
       break;
     case BLEZ:
-      Format(instr, "blez    'rs, 'imm16u");
+      if ((instr->RtFieldRaw() == 0)
+          && (instr->RsFieldRaw() != 0)) {
+        Format(instr, "blez    'rs, 'imm16u");
+      } else if ((instr->RtFieldRaw() != instr->RsFieldRaw())
+          && (instr->RsFieldRaw() != 0) && (instr->RtFieldRaw() != 0)) {
+        Format(instr, "bgeuc    'rs, 'rt, 'imm16u");
+      } else if ((instr->RtFieldRaw() == instr->RsFieldRaw())
+          && (instr->RtFieldRaw() != 0)) {
+        Format(instr, "bgezalc  'rs, 'imm16u");
+      } else if ((instr->RsFieldRaw() == 0)
+          && (instr->RtFieldRaw() != 0)) {
+        Format(instr, "blezalc  'rs, 'imm16u");
+      } else {
+        UNREACHABLE();
+      }
       break;
     case BGTZ:
-      Format(instr, "bgtz    'rs, 'imm16u");
+      if ((instr->RtFieldRaw() == 0)
+          && (instr->RsFieldRaw() != 0)) {
+        Format(instr, "bgtz    'rs, 'imm16u");
+      } else if ((instr->RtFieldRaw() != instr->RsFieldRaw())
+          && (instr->RsFieldRaw() != 0) && (instr->RtFieldRaw() != 0)) {
+        Format(instr, "bltuc   'rs, 'rt, 'imm16u");
+      } else if ((instr->RtFieldRaw() == instr->RsFieldRaw())
+          && (instr->RtFieldRaw() != 0)) {
+        Format(instr, "bltzalc 'rt, 'imm16u");
+      } else if ((instr->RsFieldRaw() == 0)
+          && (instr->RtFieldRaw() != 0)) {
+        Format(instr, "bgtzalc 'rt, 'imm16u");
+      } else {
+        UNREACHABLE();
+      }
+      break;
+    case BLEZL:
+      if ((instr->RtFieldRaw() == instr->RsFieldRaw())
+          && (instr->RtFieldRaw() != 0)) {
+        Format(instr, "bgezc    'rt, 'imm16u");
+      } else if ((instr->RtFieldRaw() != instr->RsFieldRaw())
+          && (instr->RsFieldRaw() != 0) && (instr->RtFieldRaw() != 0)) {
+        Format(instr, "bgec     'rs, 'rt, 'imm16u");
+      } else if ((instr->RsFieldRaw() == 0)
+          && (instr->RtFieldRaw() != 0)) {
+        Format(instr, "blezc    'rt, 'imm16u");
+      } else {
+        UNREACHABLE();
+      }
+      break;
+    case BGTZL:
+      if ((instr->RtFieldRaw() == instr->RsFieldRaw())
+          && (instr->RtFieldRaw() != 0)) {
+        Format(instr, "bltzc    'rt, 'imm16u");
+      } else if ((instr->RtFieldRaw() != instr->RsFieldRaw())
+          && (instr->RsFieldRaw() != 0) && (instr->RtFieldRaw() != 0)) {
+        Format(instr, "bltc     'rs, 'rt, 'imm16u");
+      } else if ((instr->RsFieldRaw() == 0)
+          && (instr->RtFieldRaw() != 0)) {
+        Format(instr, "bgtzc    'rt, 'imm16u");
+      } else {
+        UNREACHABLE();
+      }
       break;
     // ------------- Arithmetic instructions.
     case ADDI:
       if (kArchVariant != kMips64r6) {
         Format(instr, "addi    'rt, 'rs, 'imm16s");
       } else {
-        Format(instr, "bovc    'rt, 'rs, 'imm16s");
+        // Check if BOVC or BEQC instruction.
+        if (instr->RsFieldRaw() >= instr->RtFieldRaw()) {
+          Format(instr, "bovc    'rt, 'rs, 'imm16s");
+        } else if (instr->RsFieldRaw() < instr->RtFieldRaw()) {
+          Format(instr, "beqc    'rt, 'rs, 'imm16s");
+        } else {
+          UNREACHABLE();
+        }
       }
       break;
     case DADDI:
       if (kArchVariant != kMips64r6) {
         Format(instr, "daddi   'rt, 'rs, 'imm16s");
       } else {
-        Format(instr, "bnvc    'rt, 'rs, 'imm16s");
+        // Check if BNVC or BNEC instruction.
+        if (instr->RsFieldRaw() >= instr->RtFieldRaw()) {
+          Format(instr, "bnvc    'rt, 'rs, 'imm16s");
+        } else if (instr->RsFieldRaw() < instr->RtFieldRaw()) {
+          Format(instr, "bnec    'rt, 'rs, 'imm16s");
+        } else {
+          UNREACHABLE();
+        }
       }
       break;
     case ADDIU:
