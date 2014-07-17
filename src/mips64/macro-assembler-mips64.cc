@@ -1503,7 +1503,7 @@ void MacroAssembler::BranchF(Label* target,
       // Use f31 for comparison result. It has to be unavailable to lithium
       // register allocator.
       ASSERT(!cmp1.is(f31) && !cmp2.is(f31));
-      cmp(UN, D, f31, cmp1, cmp2);
+      cmp(UN, L, f31, cmp1, cmp2);
       bc1nez(nan, f31);
     }
   }
@@ -1558,36 +1558,36 @@ void MacroAssembler::BranchF(Label* target,
       ASSERT(!cmp1.is(f31) && !cmp2.is(f31));
       switch (cc) {
         case lt:
-          cmp(OLT, D, f31, cmp1, cmp2);
-          bc1eqz(target, f31);
+          cmp(OLT, L, f31, cmp1, cmp2);
+          bc1nez(target, f31);
           break;
         case gt:
-          cmp(ULE, D, f31, cmp1, cmp2);
-          bc1nez(target, f31);
+          cmp(ULE, L, f31, cmp1, cmp2);
+          bc1eqz(target, f31);
           break;
         case ge:
-          cmp(ULT, D, f31, cmp1, cmp2);
-          bc1nez(target, f31);
+          cmp(ULT, L, f31, cmp1, cmp2);
+          bc1eqz(target, f31);
           break;
         case le:
-          cmp(OLE, D, f31, cmp1, cmp2);
-          bc1eqz(target, f31);
+          cmp(OLE, L, f31, cmp1, cmp2);
+          bc1nez(target, f31);
           break;
         case eq:
-          cmp(EQ, D, f31, cmp1, cmp2);
-          bc1eqz(target, f31);
+          cmp(EQ, L, f31, cmp1, cmp2);
+          bc1nez(target, f31);
           break;
         case ueq:
-          cmp(UEQ, D, f31, cmp1, cmp2);
-          bc1eqz(target, f31);
+          cmp(UEQ, L, f31, cmp1, cmp2);
+          bc1nez(target, f31);
           break;
         case ne:
-          cmp(EQ, D, f31, cmp1, cmp2);
-          bc1nez(target, f31);
+          cmp(EQ, L, f31, cmp1, cmp2);
+          bc1eqz(target, f31);
           break;
         case nue:
-          cmp(UEQ, D, f31, cmp1, cmp2);
-          bc1nez(target, f31);
+          cmp(UEQ, L, f31, cmp1, cmp2);
+          bc1eqz(target, f31);
           break;
         default:
           CHECK(0);
