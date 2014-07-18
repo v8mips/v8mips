@@ -1956,6 +1956,8 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
     case COP1:    // Coprocessor instructions.
       switch (instr->RsFieldRaw()) {
         case BC1:   // Handled in DecodeTypeImmed, should never come here.
+        case BC1EQZ:
+        case BC1NEZ:
           UNREACHABLE();
           break;
         case CFC1:
@@ -2002,11 +2004,10 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           *alu_out = (int32_t)rt << sa;
           break;
         case DSLL: // Mips64r6 DMUL, DMUH
-          if (kArchVariant != kMips64r6)
+          if (rs_reg == 0)
           {
             *alu_out = rt << sa;
           } else {
-            ASSERT(false);
             if (instr->RsFieldRaw() != 0)
             {
               switch (instr->SaValue()) {
@@ -2316,6 +2317,8 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
     case COP1:
       switch (instr->RsFieldRaw()) {
         case BC1:   // Branch on coprocessor condition.
+        case BC1EQZ:
+        case BC1NEZ:
           UNREACHABLE();
           break;
         case CFC1:
@@ -2556,10 +2559,10 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           fs = get_fpu_register_double(fs_reg);
           ft = get_fpu_register_double(ft_reg);
           switch (instr->FunctionFieldRaw()) {
-          case CVT_D_L:  // Mips32r2 instruction.
-            i64 = get_fpu_register(fs_reg);
-            set_fpu_register_double(fd_reg, static_cast<double>(i64));
-            break;
+            case CVT_D_L:  // Mips32r2 instruction.
+              i64 = get_fpu_register(fs_reg);
+              set_fpu_register_double(fd_reg, static_cast<double>(i64));
+              break;
             case CVT_S_L:
               UNIMPLEMENTED_MIPS();
               break;
@@ -2568,49 +2571,49 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               break;
             case CMP_UN:
               if (std::isnan(fs) || std::isnan(ft)) {
-                set_fpu_register(fd_reg, std::numeric_limits<int64_t>::max());
+                set_fpu_register(fd_reg, -1);
               } else {
                 set_fpu_register(fd_reg, 0);
               }
               break;
             case CMP_EQ:
               if (fs == ft) {
-                set_fpu_register(fd_reg, std::numeric_limits<int64_t>::max());
+                set_fpu_register(fd_reg, -1);
               } else {
                 set_fpu_register(fd_reg, 0);
               }
               break;
             case CMP_UEQ:
               if ((fs == ft) || (std::isnan(fs) || std::isnan(ft))) {
-                set_fpu_register(fd_reg, std::numeric_limits<int64_t>::max());
+                set_fpu_register(fd_reg, -1);
               } else {
                 set_fpu_register(fd_reg, 0);
               }
               break;
             case CMP_LT:
               if (fs < ft) {
-                set_fpu_register(fd_reg, std::numeric_limits<int64_t>::max());
+                set_fpu_register(fd_reg, -1);
               } else {
                 set_fpu_register(fd_reg, 0);
               }
               break;
             case CMP_ULT:
               if ((fs < ft) || (std::isnan(fs) || std::isnan(ft))) {
-                set_fpu_register(fd_reg, std::numeric_limits<int64_t>::max());
+                set_fpu_register(fd_reg, -1);
               } else {
                 set_fpu_register(fd_reg, 0);
               }
               break;
             case CMP_LE:
               if (fs <= ft) {
-                set_fpu_register(fd_reg, std::numeric_limits<int64_t>::max());
+                set_fpu_register(fd_reg, -1);
               } else {
                 set_fpu_register(fd_reg, 0);
               }
               break;
             case CMP_ULE:
               if ((fs <= ft) || (std::isnan(fs) || std::isnan(ft))) {
-                set_fpu_register(fd_reg, std::numeric_limits<int64_t>::max());
+                set_fpu_register(fd_reg, -1);
               } else {
                 set_fpu_register(fd_reg, 0);
               }
@@ -2684,7 +2687,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           UNIMPLEMENTED_MIPS();
           break;
         case DSLL:
-          if (kArchVariant != kMips64r6)
+          if (rs_reg == 0)
           {
             set_register(rd_reg, alu_out);
             TraceRegWr(alu_out);
@@ -2704,7 +2707,6 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           break;
         case DIV:
         case DDIV:
-          ASSERT(false);
           switch(kArchVariant) {
             case kMips64r1:
             case kMips64r2:
@@ -2841,6 +2843,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
   int16_t  imm16  = instr->Imm16Value();
 
   int32_t  ft_reg = instr->FtValue();  // Destination register.
+  int64_t  ft     = get_fpu_register(ft_reg);
 
   // Zero extended immediate.
   uint32_t  oe_imm16 = 0xffff & imm16;
@@ -2888,7 +2891,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
           }
           break;
         case BC1EQZ:
-          do_branch = (ft_reg && 0x1) ? false : true;
+          do_branch = (ft & 0x1) ? false : true;
           execute_branch_delay_instruction = true;
           // Set next_pc.
           if (do_branch) {
@@ -2898,7 +2901,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
           }
           break;
         case BC1NEZ:
-          do_branch = (ft_reg && 0x1) ? true : false;
+          do_branch = (ft & 0x1) ? true : false;
           execute_branch_delay_instruction = true;
           // Set next_pc.
           if (do_branch) {
@@ -2906,6 +2909,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
           } else {
             next_pc = current_pc + kBranchReturnOffset;
           }
+          break;
         default:
           UNREACHABLE();
       }
