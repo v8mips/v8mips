@@ -485,7 +485,9 @@ bool Assembler::IsBranch(Instr instr) {
       opcode == BGTZL ||
       (opcode == REGIMM && (rt_field == BLTZ || rt_field == BGEZ ||
                             rt_field == BLTZAL || rt_field == BGEZAL)) ||
-      (opcode == COP1 && rs_field == BC1);  // Coprocessor branch.
+      (opcode == COP1 && rs_field == BC1) ||  // Coprocessor branch.
+      (opcode == COP1 && rs_field == BC1EQZ) ||
+      (opcode == COP1 && rs_field == BC1NEZ);
 }
 
 
@@ -2002,7 +2004,7 @@ void Assembler::ins_(Register rt, Register rs, uint16_t pos, uint16_t size) {
 void Assembler::ext_(Register rt, Register rs, uint16_t pos, uint16_t size) {
   // Should be called via MacroAssembler::Ext.
   // Ext instr has 'rt' field as dest, and two uint5: msb, lsb.
-  ASSERT(kArchVariant == kMips64r2);
+  ASSERT(kArchVariant == kMips64r2 || kArchVariant == kMips64r6);
   GenInstrRegister(SPECIAL3, rs, rt, size - 1, pos, EXT);
 }
 
