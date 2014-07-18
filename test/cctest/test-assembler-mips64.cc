@@ -561,7 +561,7 @@ TEST(MIPS7) {
     __ c(UN, D, f4, f6);
     __ bc1f(&neither_is_nan);
   } else {
-    __ cmp(UN, D, f2, f4, f6);
+    __ cmp(UN, L, f2, f4, f6);
     __ bc1eqz(&neither_is_nan, f2);
   }
   __ nop();
@@ -576,7 +576,7 @@ TEST(MIPS7) {
       __ bc1t(&less_than);
       break;
     case kMips64r6:
-      __ cmp(OLT, D, f2, f6, f4);
+      __ cmp(OLT, L, f2, f6, f4);
       __ bc1nez(&less_than, f2);
       break;
     default:
