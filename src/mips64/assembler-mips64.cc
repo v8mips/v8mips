@@ -2312,7 +2312,7 @@ void Assembler::cmp(FPUCondition cond, SecondaryField fmt,
     FPURegister fd, FPURegister fs, FPURegister ft) {
   ASSERT(kArchVariant == kMips64r6);
   ASSERT((fmt & ~(31 << kRsShift)) == 0);
-  Instr instr = COP1 | fmt << kRsShift | ft.code() << kFtShift |
+  Instr instr = COP1 | fmt | ft.code() << kFtShift |
       fs.code() << kFsShift | fd.code() << kFdShift | (0 << 5) | cond;
   emit(instr);
 }
