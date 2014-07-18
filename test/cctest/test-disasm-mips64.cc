@@ -121,68 +121,70 @@ TEST(Type0) {
           "00701023       subu    v0, v1, s0");
   COMPARE(dsubu(v0, v1, s0),
           "0070102f       dsubu   v0, v1, s0");
+  if (kArchVariant != kMips64r6) {
+    COMPARE(mult(a0, a1),
+            "00850018       mult    a0, a1");
+    COMPARE(dmult(a0, a1),
+            "0085001c       dmult   a0, a1");
+    COMPARE(mult(a6, a7),
+            "014b0018       mult    a6, a7");
+    COMPARE(dmult(a6, a7),
+            "014b001c       dmult   a6, a7");
+    COMPARE(mult(v0, v1),
+            "00430018       mult    v0, v1");
+    COMPARE(dmult(v0, v1),
+            "0043001c       dmult   v0, v1");
 
-  COMPARE(mult(a0, a1),
-          "00850018       mult    a0, a1");
-  COMPARE(dmult(a0, a1),
-          "0085001c       dmult   a0, a1");
-  COMPARE(mult(a6, a7),
-          "014b0018       mult    a6, a7");
-  COMPARE(dmult(a6, a7),
-          "014b001c       dmult   a6, a7");
-  COMPARE(mult(v0, v1),
-          "00430018       mult    v0, v1");
-  COMPARE(dmult(v0, v1),
-          "0043001c       dmult   v0, v1");
+    COMPARE(multu(a0, a1),
+            "00850019       multu   a0, a1");
+    COMPARE(dmultu(a0, a1),
+            "0085001d       dmultu  a0, a1");
+    COMPARE(multu(a6, a7),
+            "014b0019       multu   a6, a7");
+    COMPARE(dmultu(a6, a7),
+            "014b001d       dmultu  a6, a7");
+    COMPARE(multu(v0, v1),
+            "00430019       multu   v0, v1");
+    COMPARE(dmultu(v0, v1),
+            "0043001d       dmultu  v0, v1");
 
-  COMPARE(multu(a0, a1),
-          "00850019       multu   a0, a1");
-  COMPARE(dmultu(a0, a1),
-          "0085001d       dmultu  a0, a1");
-  COMPARE(multu(a6, a7),
-          "014b0019       multu   a6, a7");
-  COMPARE(dmultu(a6, a7),
-          "014b001d       dmultu  a6, a7");
-  COMPARE(multu(v0, v1),
-          "00430019       multu   v0, v1");
-  COMPARE(dmultu(v0, v1),
-          "0043001d       dmultu  v0, v1");
+    COMPARE(div(a0, a1),
+            "0085001a       div     a0, a1");
+    COMPARE(div(a6, a7),
+            "014b001a       div     a6, a7");
+    COMPARE(div(v0, v1),
+            "0043001a       div     v0, v1");
+    COMPARE(ddiv(a0, a1),
+            "0085001e       ddiv    a0, a1");
+    COMPARE(ddiv(a6, a7),
+            "014b001e       ddiv    a6, a7");
+    COMPARE(ddiv(v0, v1),
+            "0043001e       ddiv    v0, v1");
 
-  COMPARE(div(a0, a1),
-          "0085001a       div     a0, a1");
-  COMPARE(div(a6, a7),
-          "014b001a       div     a6, a7");
-  COMPARE(div(v0, v1),
-          "0043001a       div     v0, v1");
-  COMPARE(ddiv(a0, a1),
-          "0085001e       ddiv    a0, a1");
-  COMPARE(ddiv(a6, a7),
-          "014b001e       ddiv    a6, a7");
-  COMPARE(ddiv(v0, v1),
-          "0043001e       ddiv    v0, v1");
+    COMPARE(divu(a0, a1),
+            "0085001b       divu    a0, a1");
+    COMPARE(divu(a6, a7),
+            "014b001b       divu    a6, a7");
+    COMPARE(divu(v0, v1),
+            "0043001b       divu    v0, v1");
+    COMPARE(ddivu(a0, a1),
+            "0085001f       ddivu   a0, a1");
+    COMPARE(ddivu(a6, a7),
+            "014b001f       ddivu   a6, a7");
+    COMPARE(ddivu(v0, v1),
+            "0043001f       ddivu   v0, v1");
 
-  COMPARE(divu(a0, a1),
-          "0085001b       divu    a0, a1");
-  COMPARE(divu(a6, a7),
-          "014b001b       divu    a6, a7");
-  COMPARE(divu(v0, v1),
-          "0043001b       divu    v0, v1");
-  COMPARE(ddivu(a0, a1),
-          "0085001f       ddivu   a0, a1");
-  COMPARE(ddivu(a6, a7),
-          "014b001f       ddivu   a6, a7");
-  COMPARE(ddivu(v0, v1),
-          "0043001f       ddivu   v0, v1");
-
-  if (kArchVariant != kLoongson) {
-    COMPARE(mul(a0, a1, a2),
-            "70a62002       mul     a0, a1, a2");
-    COMPARE(mul(a6, a7, t0),
-            "716c5002       mul     a6, a7, t0");
-    COMPARE(mul(v0, v1, s0),
-            "70701002       mul     v0, v1, s0");
+    if (kArchVariant != kLoongson) {
+      COMPARE(mul(a0, a1, a2),
+              "70a62002       mul     a0, a1, a2");
+      COMPARE(mul(a6, a7, t0),
+              "716c5002       mul     a6, a7, t0");
+      COMPARE(mul(v0, v1, s0),
+              "70701002       mul     v0, v1, s0");
+    }
+  } else {
+    // TODO(bojan).
   }
-
   COMPARE(addiu(a0, a1, 0x0),
           "24a40000       addiu   a0, a1, 0");
   COMPARE(addiu(s0, s1, 32767),
