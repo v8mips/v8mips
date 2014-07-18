@@ -605,6 +605,36 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
             case CVT_S_L:
               Format(instr, "cvt.s.l 'fd, 'fs");
               break;
+            case CMP_UN:
+              Format(instr, "cmp.un.d  'fd,  'fs, 'ft");
+              break;
+            case CMP_EQ:
+              Format(instr, "cmp.eq.d  'fd,  'fs, 'ft");
+              break;
+            case CMP_UEQ:
+              Format(instr, "cmp.ueq.d  'fd,  'fs, 'ft");
+              break;
+            case CMP_LT:
+              Format(instr, "cmp.lt.d  'fd,  'fs, 'ft");
+              break;
+            case CMP_ULT:
+              Format(instr, "cmp.ult.d  'fd,  'fs, 'ft");
+              break;
+            case CMP_LE:
+              Format(instr, "cmp.le.d  'fd,  'fs, 'ft");
+              break;
+            case CMP_ULE:
+              Format(instr, "cmp.ule.d  'fd,  'fs, 'ft");
+              break;
+            case CMP_OR:
+              Format(instr, "cmp.or.d  'fd,  'fs, 'ft");
+              break;
+            case CMP_UNE:
+              Format(instr, "cmp.une.d  'fd,  'fs, 'ft");
+              break;
+            case CMP_NE:
+              Format(instr, "cmp.ne.d  'fd,  'fs, 'ft");
+              break;
             default:
               UNREACHABLE();
           }
@@ -640,7 +670,7 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
             Format(instr, "sll     'rd, 'rt, 'sa");
           break;
         case DSLL: // @Mips64r6 == D_MUL_MUH.
-          if (kArchVariant != kMips64r6) {
+          if (instr->RsValue() == 0) {
             Format(instr, "dsll    'rd, 'rt, 'sa");
           } else {
             if (instr->SaValue() == MUL_OP) {
