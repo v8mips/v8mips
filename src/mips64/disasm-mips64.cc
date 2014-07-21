@@ -669,9 +669,12 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
           else
             Format(instr, "sll     'rd, 'rt, 'sa");
           break;
-        case DSLL: // @Mips64r6 == D_MUL_MUH.
-          if (instr->RsValue() == 0) {
+        case DSLL:
             Format(instr, "dsll    'rd, 'rt, 'sa");
+          break;
+        case D_MUL_MUH:  // Eqauls to DMUL.
+          if (kArchVariant != kMips64r6) {
+            Format(instr, "dmult   'rs, 'rt");
           } else {
             if (instr->SaValue() == MUL_OP) {
               Format(instr, "dmul   'rd, 'rs, 'rt");
@@ -757,11 +760,15 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
         case MFLO:
           Format(instr, "mflo    'rd");
           break;
-        case D_MUL_MUH_U:
-          if (instr->SaValue() == MUL_OP) {
-            Format(instr, "dmulu  'rd, 'rs, 'rt");
+        case D_MUL_MUH_U:  // Equals to DMULTU.
+          if (kArchVariant != kMips64r6) {
+              Format(instr, "dmultu  'rs, 'rt");
           } else {
-            Format(instr, "dmuhu  'rd, 'rs, 'rt");
+            if (instr->SaValue() == MUL_OP) {
+              Format(instr, "dmulu  'rd, 'rs, 'rt");
+            } else {
+              Format(instr, "dmuhu  'rd, 'rs, 'rt");
+            }
           }
           break;
         case MULT: // @Mips64r6 == MUL_MUH.
@@ -775,22 +782,17 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
             }
           }
           break;
-        case DMULT: // @Mips64r6 == MUL_MUH_U.
+        case MULTU:  // @Mips64r6 == MUL_MUH_U.
           if (kArchVariant != kMips64r6) {
-            Format(instr, "dmult   'rs, 'rt");
+            Format(instr, "multu    'rs, 'rt");
           } else {
             if (instr->SaValue() == MUL_OP) {
-              Format(instr, "mulu   'rd, 'rs, 'rt");
+              Format(instr, "mulu    'rd, 'rs, 'rt");
             } else {
-              Format(instr, "muhu   'rd, 'rs, 'rt");
+              Format(instr, "muhu    'rd, 'rs, 'rt");
             }
           }
-          break;
-        case MULTU:
-          Format(instr, "multu   'rs, 'rt");
-          break;
-        case DMULTU:
-          Format(instr, "dmultu  'rs, 'rt");
+
           break;
         case DIV: // @Mips64r6 == DIV_MOD.
           if (kArchVariant != kMips64r6) {

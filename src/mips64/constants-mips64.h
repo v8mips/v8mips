@@ -412,8 +412,8 @@ enum SecondaryField {
   // Multiply integers in r6.
   MUL_MUH   =   ((3 << 3) + 0), // MUL    / MUH.
   MUL_MUH_U =   ((3 << 3) + 1), // MUL_U  / MUH_U.
-  D_MUL_MUH =   ((7 << 3) + 0), // DMUL   / DMUH.
-  D_MUL_MUH_U = ((7 << 3) + 1), // DMUL_U / DMUH_U.
+  D_MUL_MUH =   ((7 << 2) + 0), // DMUL   / DMUH.
+  D_MUL_MUH_U = ((7 << 2) + 1), // DMUL_U / DMUH_U.
 
   MUL_OP    =   ((0 << 3) + 2),
   MUH_OP    =   ((0 << 3) + 3),
