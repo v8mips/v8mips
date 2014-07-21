@@ -1518,11 +1518,13 @@ void Assembler::dmuhu(Register rd, Register rs, Register rt) {
 
 
 void Assembler::mult(Register rs, Register rt) {
+  ASSERT(kArchVariant != kMips64r6);
   GenInstrRegister(SPECIAL, rs, rt, zero_reg, 0, MULT);
 }
 
 
 void Assembler::multu(Register rs, Register rt) {
+  ASSERT(kArchVariant != kMips64r6);
   GenInstrRegister(SPECIAL, rs, rt, zero_reg, 0, MULTU);
 }
 

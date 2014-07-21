@@ -2003,28 +2003,8 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
         case SLL:
           *alu_out = (int32_t)rt << sa;
           break;
-        case DSLL: // Mips64r6 DMUL, DMUH
-          if (rs_reg == 0)
-          {
+        case DSLL:
             *alu_out = rt << sa;
-          } else {
-            if (instr->RsFieldRaw() != 0)
-            {
-              switch (instr->SaValue()) {
-                case MUL_OP:
-                  *i128resultL = rs * rt;
-                  break;
-                case MUH_OP:
-                  *i128resultH = MultiplyHighSigned(rs, rt);
-                  break;
-                default:
-                  UNIMPLEMENTED_MIPS();
-                  break;
-              }
-            } else {
-              *alu_out = rt << sa;
-            }
-          }
           break;
         case DSLL32:
           *alu_out = rt << sa << 32;
@@ -2099,7 +2079,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
         case MFLO:
           *alu_out = get_register(LO);
           break;
-        case MULT:
+        case MULT:  // MULT == D_MUL_MUH
           // TODO(plind) - Unify MULT/DMULT with single set of 64-bit HI/Lo
           // regs.
           // TODO(plind) - make the 32-bit MULT ops conform to spec regarding
@@ -2110,10 +2090,24 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
         case MULTU:
           *u64hilo = static_cast<uint64_t>(rs_u) * static_cast<uint64_t>(rt_u);
           break;
-        case DMULT:
-          *i128resultH = MultiplyHighSigned(rs, rt);
-          *i128resultL = rs * rt;
-          break;
+        case DMULT:  // DMULT == D_MUL_MUH
+          if (kArchVariant != kMips64r6) {
+            *i128resultH = MultiplyHighSigned(rs, rt);
+            *i128resultL = rs * rt;
+            break;
+          } else {
+            switch (instr->SaValue()) {
+              case MUL_OP:
+                *i128resultL = rs * rt;
+                break;
+              case MUH_OP:
+                *i128resultH = MultiplyHighSigned(rs, rt);
+                break;
+              default:
+                UNIMPLEMENTED_MIPS();
+                break;
+            }
+          }
         case DMULTU:
           UNIMPLEMENTED_MIPS();
           break;
@@ -2672,26 +2666,33 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
         }
         // Instructions using HI and LO registers.
         case MULT:
-          set_register(LO, static_cast<int32_t>(i64hilo & 0xffffffff));
-          set_register(HI, static_cast<int32_t>(i64hilo >> 32));
+          if (kArchVariant != kMips64r6) {
+            set_register(LO, static_cast<int32_t>(i64hilo & 0xffffffff));
+            set_register(HI, static_cast<int32_t>(i64hilo >> 32));
+          } else {
+            switch (instr->SaValue()) {
+              case MUL_OP:
+                set_register(rd_reg,
+                    static_cast<int32_t>(i64hilo & 0xffffffff));
+                break;
+              case MUH_OP:
+                set_register(rd_reg, static_cast<int32_t>(i64hilo >> 32));
+                break;
+              default:
+                UNIMPLEMENTED_MIPS();
+                break;
+            }
+          }
           break;
         case MULTU:
           set_register(LO, static_cast<int32_t>(u64hilo & 0xffffffff));
           set_register(HI, static_cast<int32_t>(u64hilo >> 32));
           break;
-        case DMULT:
-          set_register(LO, static_cast<int64_t>(i128resultL));
-          set_register(HI, static_cast<int64_t>(i128resultH));
-          break;
-        case DMULTU:
-          UNIMPLEMENTED_MIPS();
-          break;
-        case DSLL:
-          if (rs_reg == 0)
-          {
-            set_register(rd_reg, alu_out);
-            TraceRegWr(alu_out);
-          } else { // case D_MUL_MUH:
+        case DMULT:  // DMULT == D_MUL_MUH
+          if (kArchVariant != kMips64r6) {
+            set_register(LO, static_cast<int64_t>(i128resultL));
+            set_register(HI, static_cast<int64_t>(i128resultH));
+          } else {
             switch (instr->SaValue()) {
               case MUL_OP:
                 set_register(rd_reg, static_cast<int64_t>(i128resultL));
@@ -2704,6 +2705,12 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
                 break;
             }
           }
+          break;
+        case DMULTU:
+          UNIMPLEMENTED_MIPS();
+          break;
+        case DSLL:
+          set_register(rd_reg, alu_out);
           break;
         case DIV:
         case DDIV:
