@@ -2073,8 +2073,18 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
         case DSRAV:
           *alu_out = rt >> rs;
           break;
-        case MFHI:
-          *alu_out = get_register(HI);
+        case MFHI:  // MFHI == CLZ on R6.
+          if (kArchVariant != kMips64r6) {
+            ASSERT(instr->SaValue() == 0);
+            *alu_out = get_register(HI);
+          } else {
+            // MIPS spec: If no bits were set in GPR rs, the result written to
+            // GPR rd is 32.
+            // GCC __builtin_clz: If input is 0, the result is undefined.
+            ASSERT(instr->SaValue() == 1);
+            *alu_out =
+                rs_u == 0 ? 32 : CompilerIntrinsics::CountLeadingZeros(rs_u);
+          }
           break;
         case MFLO:
           *alu_out = get_register(LO);

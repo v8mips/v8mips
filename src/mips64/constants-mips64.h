@@ -363,6 +363,7 @@ enum SecondaryField {
   BREAK     =   ((1 << 3) + 5),
 
   MFHI      =   ((2 << 3) + 0),
+  CLZ_R6    =   ((2 << 3) + 0),
   MFLO      =   ((2 << 3) + 2),
   DSLLV     =   ((2 << 3) + 4),
   DSRLV     =   ((2 << 3) + 6),

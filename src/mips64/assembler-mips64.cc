@@ -2170,8 +2170,12 @@ void Assembler::selnez(SecondaryField fmt, FPURegister fd,
 
 // Bit twiddling.
 void Assembler::clz(Register rd, Register rs) {
-  // Clz instr requires same GPR number in 'rd' and 'rt' fields.
-  GenInstrRegister(SPECIAL2, rs, rd, rd, 0, CLZ);
+  if (kArchVariant != kMips64r6) {
+    // Clz instr requires same GPR number in 'rd' and 'rt' fields.
+    GenInstrRegister(SPECIAL2, rs, rd, rd, 0, CLZ);
+  } else {
+    GenInstrRegister(SPECIAL, rs, zero_reg, rd, 1, CLZ_R6);
+  }
 }
 
 
