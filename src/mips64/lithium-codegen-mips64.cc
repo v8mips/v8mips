@@ -1272,7 +1272,6 @@ void LCodeGen::DoDivI(LDivI* instr) {
     Register remainder = ToRegister(instr->temp());
     if (kArchVariant != kMips64r6) {
       __ mfhi(remainder);
-      DeoptimizeIf(ne, instr->environment(), remainder, Operand(zero_reg));
     } else {
       __ dmod(remainder, dividend, divisor);
     }
