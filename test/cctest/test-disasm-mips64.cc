@@ -121,6 +121,7 @@ TEST(Type0) {
           "00701023       subu    v0, v1, s0");
   COMPARE(dsubu(v0, v1, s0),
           "0070102f       dsubu   v0, v1, s0");
+
   if (kArchVariant != kMips64r6) {
     COMPARE(mult(a0, a1),
             "00850018       mult    a0, a1");
@@ -182,9 +183,140 @@ TEST(Type0) {
       COMPARE(mul(v0, v1, s0),
               "70701002       mul     v0, v1, s0");
     }
-  } else {
-    // TODO(bojan).
+  } else { // MIPS64r6.
+    COMPARE(mul(a0, a1, a2),
+            "00853098       mul    a0, a1, a2");
+    COMPARE(muh(a0, a1, a2),
+            "008530d8       muh    a0, a1, a2");
+    COMPARE(dmul(a0, a1, a2),
+            "008530b8       dmul   a0, a1, a2");
+    COMPARE(dmuh(a0, a1, a2),
+            "008530f8       dmuh   a0, a1, a2");
+    COMPARE(mul(a5, a6, a7),
+            "012a5898       mul    a5, a6, a7");
+    COMPARE(muh(a5, a6, a7),
+            "012a58d8       muh    a5, a6, a7");
+    COMPARE(dmul(a5, a6, a7),
+            "012a58b8       dmul   a5, a6, a7");
+    COMPARE(dmuh(a5, a6, a7),
+            "012a58f8       dmuh   a5, a6, a7");
+    COMPARE(mul(v0, v1, a0),
+            "00432098       mul    v0, v1, a0");
+    COMPARE(muh(v0, v1, a0),
+            "004320d8       muh    v0, v1, a0");
+    COMPARE(dmul(v0, v1, a0),
+            "004320b8       dmul   v0, v1, a0");
+    COMPARE(dmuh(v0, v1, a0),
+            "004320f8       dmuh   v0, v1, a0");
+
+    COMPARE(mulu(a0, a1, a2),
+            "00853099       mulu   a0, a1, a2");
+    COMPARE(muhu(a0, a1, a2),
+            "008530d9       muhu   a0, a1, a2");
+    COMPARE(dmulu(a0, a1, a2),
+            "008530b9       dmulu  a0, a1, a2");
+    COMPARE(dmuhu(a0, a1, a2),
+            "008530f9       dmuhu  a0, a1, a2");
+    COMPARE(mulu(a5, a6, a7),
+            "012a5899       mulu   a5, a6, a7");
+    COMPARE(muhu(a5, a6, a7),
+            "012a58d9       muhu   a5, a6, a7");
+    COMPARE(dmulu(a5, a6, a7),
+            "012a58b9       dmulu  a5, a6, a7");
+    COMPARE(dmuhu(a5, a6, a7),
+            "012a58f9       dmuhu  a5, a6, a7");
+    COMPARE(mulu(v0, v1, a0),
+            "00432099       mulu   v0, v1, a0");
+    COMPARE(muhu(v0, v1, a0),
+            "004320d9       muhu   v0, v1, a0");
+    COMPARE(dmulu(v0, v1, a0),
+            "004320b9       dmulu  v0, v1, a0");
+    COMPARE(dmuhu(v0, v1, a0),
+            "004320f9       dmuhu  v0, v1, a0");
+
+    COMPARE(div(a0, a1, a2),
+            "0085309a       div    a0, a1, a2");
+    COMPARE(mod(a0, a1, a2),
+            "008530da       mod    a0, a1, a2");
+    COMPARE(ddiv(a0, a1, a2),
+            "0085309e       ddiv   a0, a1, a2");
+    COMPARE(dmod(a0, a1, a2),
+            "0085309e       dmod   a0, a1, a2");
+    COMPARE(div(a5, a6, a7),
+            "012a589a       div    a5, a6, a7");
+    COMPARE(mod(a5, a6, a7),
+            "012a58da       mod    a5, a6, a7");
+    COMPARE(ddiv(a5, a6, a7),
+            "012a589e       ddiv   a5, a6, a7");
+    COMPARE(dmod(a5, a6, a7),
+            "012a58de       dmod   a5, a6, a7");
+    COMPARE(div(v0, v1, a0),
+            "0043209a       div    v0, v1, a0");
+    COMPARE(mod(v0, v1, a0),
+            "004320da       mod    v0, v1, a0");
+    COMPARE(ddiv(v0, v1, a0),
+            "0043209e       ddiv   v0, v1, a0");
+    COMPARE(dmod(v0, v1, a0),
+            "004320de       dmod   v0, v1, a0");
+
+    COMPARE(divu(a0, a1, a2),
+            "0085309b       divu   a0, a1, a2");
+    COMPARE(modu(a0, a1, a2),
+            "008530db       modu   a0, a1, a2");
+    COMPARE(ddivu(a0, a1, a2),
+            "0085309f       ddivu  a0, a1, a2");
+    COMPARE(dmodu(a0, a1, a2),
+            "008530df       dmodu  a0, a1, a2");
+    COMPARE(divu(a5, a6, a7),
+            "012a589b       divu   a5, a6, a7");
+    COMPARE(modu(a5, a6, a7),
+            "012a58db       modu   a5, a6, a7");
+    COMPARE(ddivu(a5, a6, a7),
+            "012a589f       ddivu  a5, a6, a7");
+    COMPARE(dmodu(a5, a6, a7),
+            "012a58df       dmodu  a5, a6, a7");
+    COMPARE(divu(v0, v1, a0),
+            "0043209b       divu   v0, v1, a0");
+    COMPARE(modu(v0, v1, a0),
+            "004320db       modu   v0, v1, a0");
+    COMPARE(ddivu(v0, v1, a0),
+            "0043209f       ddivu  v0, v1, a0");
+    COMPARE(dmodu(v0, v1, a0),
+            "004320df       dmodu  v0, v1, a0");
+
+    COMPARE(bovc(a0, a0, static_cast<int16_t>(0)),
+            "20840000       bovc  a0, a0, 0");
+    COMPARE(bovc(a1, a0, static_cast<int16_t>(0)),
+            "20a40000       bovc  a1, a0, 0");
+    COMPARE(bovc(a1, a0, 32767),
+            "20a47fff       bovc  a1, a0, 32767");
+    COMPARE(bovc(a1, a0, -32768),
+            "20a48000       bovc  a1, a0, -32768");
+
+    COMPARE(bnvc(a0, a0, static_cast<int16_t>(0)),
+            "60840000       bnvc  a0, a0, 0");
+    COMPARE(bnvc(a1, a0, static_cast<int16_t>(0)),
+            "60a40000       bnvc  a1, a0, 0");
+    COMPARE(bnvc(a1, a0, 32767),
+            "60a47fff       bnvc  a1, a0, 32767");
+    COMPARE(bnvc(a1, a0, -32768),
+            "60a48000       bnvc  a1, a0, -32768");
+
+    COMPARE(beqzc(a0, 0),
+            "d8800000       beqzc a0, 0");
+    COMPARE(beqzc(a0, 1048575),
+            "d87fffff       beqzc a0, 1048575");
+    COMPARE(beqzc(a0, -1048576),
+            "d8900000       beqzc a0, -1048576");
+
+    COMPARE(bnezc(a0, 0),
+            "f8800000       bnezc a0, 0");
+    COMPARE(bnezc(a0, 1048575),
+            "f87fffff       bnezc a0, 1048575");
+    COMPARE(bnezc(a0, -1048576),
+            "f8900000       bnezc a0, -1048576");
   }
+
   COMPARE(addiu(a0, a1, 0x0),
           "24a40000       addiu   a0, a1, 0");
   COMPARE(addiu(s0, s1, 32767),
