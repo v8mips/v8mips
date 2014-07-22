@@ -228,6 +228,8 @@ const int kLuiShift      = 16;
 
 const int kImm16Shift = 0;
 const int kImm16Bits  = 16;
+const int kImm21Shift = 0;
+const int kImm21Bits  = 21;
 const int kImm26Shift = 0;
 const int kImm26Bits  = 26;
 const int kImm28Shift = 0;
@@ -364,6 +366,7 @@ enum SecondaryField {
 
   MFHI      =   ((2 << 3) + 0),
   CLZ_R6    =   ((2 << 3) + 0),
+  CLO_R6    =   ((2 << 3) + 1),
   MFLO      =   ((2 << 3) + 2),
   DSLLV     =   ((2 << 3) + 4),
   DSRLV     =   ((2 << 3) + 6),
@@ -903,6 +906,11 @@ class Instruction {
   inline int32_t Imm16Value() const {
     ASSERT(InstructionType() == kImmediateType);
     return Bits(kImm16Shift + kImm16Bits - 1, kImm16Shift);
+  }
+
+  inline int32_t Imm21Value() const {
+    ASSERT(InstructionType() == kImmediateType);
+    return Bits(kImm21Shift + kImm21Bits - 1, kImm21Shift);
   }
 
   inline int32_t Imm26Value() const {

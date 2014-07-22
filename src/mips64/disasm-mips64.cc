@@ -86,6 +86,7 @@ class Decoder {
   void PrintUImm16(Instruction* instr);
   void PrintSImm16(Instruction* instr);
   void PrintXImm16(Instruction* instr);
+  void PrintXImm21(Instruction* instr);
   void PrintXImm26(Instruction* instr);
   void PrintCode(Instruction* instr);   // For break and trap instructions.
   // Printing of instruction name.
@@ -247,6 +248,13 @@ void Decoder::PrintXImm16(Instruction* instr) {
 }
 
 
+// Print 21-bit immediate value.
+void Decoder::PrintXImm21(Instruction* instr) {
+  uint32_t imm = instr->Imm21Value();
+  out_buffer_pos_ += SNPrintF(out_buffer_ + out_buffer_pos_, "0x%x", imm);
+}
+
+
 // Print 26-bit immediate value.
 void Decoder::PrintXImm26(Instruction* instr) {
   uint32_t imm = instr->Imm26Value() << kImmFieldShift;
@@ -361,7 +369,11 @@ int Decoder::FormatOption(Instruction* instr, const char* format) {
           PrintXImm16(instr);
         }
         return 6;
-      } else {
+      } else if (format[3] == '2' && format[4] == '1') {
+        ASSERT(STRING_STARTS_WITH(format, "imm21x"));
+        PrintXImm21(instr);
+        return 6;
+      } else if (format[3] == '2' && format[4] == '6') {
         ASSERT(STRING_STARTS_WITH(format, "imm26x"));
         PrintXImm26(instr);
         return 6;
@@ -755,7 +767,17 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
           Format(instr, "dsrav   'rd, 'rt, 'rs");
           break;
         case MFHI:
-          Format(instr, "mfhi    'rd");
+          if (instr->Bits(25, 16) == 0) {
+            Format(instr, "mfhi    'rd");
+          } else {
+            if ((instr->FunctionFieldRaw() == CLZ_R6)
+                && (instr->FdValue() == 1)) {
+              Format(instr, "clz     'rd, 'rs");
+            } else if ((instr->FunctionFieldRaw() == CLO_R6)
+                && (instr->FdValue() == 1)) {
+              Format(instr, "clo     'rd, 'rs");
+            }
+          }
           break;
         case MFLO:
           Format(instr, "mflo    'rd");
@@ -784,12 +806,12 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
           break;
         case MULTU:  // @Mips64r6 == MUL_MUH_U.
           if (kArchVariant != kMips64r6) {
-            Format(instr, "multu    'rs, 'rt");
+            Format(instr, "multu   'rs, 'rt");
           } else {
             if (instr->SaValue() == MUL_OP) {
-              Format(instr, "mulu    'rd, 'rs, 'rt");
+              Format(instr, "mulu   'rd, 'rs, 'rt");
             } else {
-              Format(instr, "muhu    'rd, 'rs, 'rt");
+              Format(instr, "muhu   'rd, 'rs, 'rt");
             }
           }
 
@@ -834,7 +856,7 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
             if (instr->SaValue() == DIV_OP) {
               Format(instr, "ddivu  'rd, 'rs, 'rt");
             } else {
-              Format(instr, "dmodu 'rd, 'rs, 'rt");
+              Format(instr, "dmodu  'rd, 'rs, 'rt");
             }
           }
           break;
@@ -935,7 +957,9 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
           Format(instr, "mul     'rd, 'rs, 'rt");
           break;
         case CLZ:
-          Format(instr, "clz     'rd, 'rs");
+          if (kArchVariant != kMips64r6) {
+            Format(instr, "clz     'rd, 'rs");
+          }
           break;
         default:
           UNREACHABLE();
@@ -1221,6 +1245,16 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
         UNREACHABLE();
       }
       break;
+    case BEQZC:
+      if (instr->RsFieldRaw() != 0) {
+        Format(instr, "beqzc   'rs, 'imm21x");
+      }
+      break;
+    case BNEZC:
+      if (instr->RsFieldRaw() != 0) {
+        Format(instr, "bnezc   'rs, 'imm21x");
+      }
+      break;
     // ------------- Arithmetic instructions.
     case ADDI:
       if (kArchVariant != kMips64r6) {
@@ -1228,9 +1262,9 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
       } else {
         // Check if BOVC or BEQC instruction.
         if (instr->RsFieldRaw() >= instr->RtFieldRaw()) {
-          Format(instr, "bovc    'rt, 'rs, 'imm16s");
+          Format(instr, "bovc  'rs, 'rt, 'imm16s");
         } else if (instr->RsFieldRaw() < instr->RtFieldRaw()) {
-          Format(instr, "beqc    'rt, 'rs, 'imm16s");
+          Format(instr, "beqc  'rs, 'rt, 'imm16s");
         } else {
           UNREACHABLE();
         }
@@ -1242,9 +1276,9 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
       } else {
         // Check if BNVC or BNEC instruction.
         if (instr->RsFieldRaw() >= instr->RtFieldRaw()) {
-          Format(instr, "bnvc    'rt, 'rs, 'imm16s");
+          Format(instr, "bnvc  'rs, 'rt, 'imm16s");
         } else if (instr->RsFieldRaw() < instr->RtFieldRaw()) {
-          Format(instr, "bnec    'rt, 'rs, 'imm16s");
+          Format(instr, "bnec  'rs, 'rt, 'imm16s");
         } else {
           UNREACHABLE();
         }
