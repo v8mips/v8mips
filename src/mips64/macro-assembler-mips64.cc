@@ -721,6 +721,27 @@ void MacroAssembler::Mul(Register rd, Register rs, const Operand& rt) {
 }
 
 
+void MacroAssembler::Mulh(Register rd, Register rs, const Operand& rt) {
+  if (rt.is_reg()) {
+    if (kArchVariant != kMips64r6) {
+      mult(rs, rt.rm());
+      mfhi(rd);
+    } else {
+      muh(rd, rs, rt.rm());
+    }
+  } else {
+    // li handles the relocation.
+    ASSERT(!rs.is(at));
+    li(at, rt);
+    if (kArchVariant != kMips64r6) {
+      mult(rs, at);
+      mfhi(rd);
+    } else {
+      muh(rd, rs, at);
+    }
+  }
+}
+
 void MacroAssembler::Dmul(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     if (kArchVariant == kLoongson) {
@@ -2536,47 +2557,65 @@ void MacroAssembler::BranchAndLinkShort(int16_t offset, Condition cond,
 
       // Signed comparison.
       case greater:
+        // rs > rt
         slt(scratch, r2, rs);
-        daddiu(scratch, scratch, -1);
-        bgezal(scratch, offset);
+        beq(scratch, zero_reg, 2);
+        nop();
+        bal( offset);
         break;
       case greater_equal:
+        // rs >= rt
         slt(scratch, rs, r2);
-        daddiu(scratch, scratch, -1);
-        bltzal(scratch, offset);
+        bne(scratch, zero_reg, 2);
+        nop();
+        bal(offset);
         break;
       case less:
+        // rs < r2
         slt(scratch, rs, r2);
-        daddiu(scratch, scratch, -1);
-        bgezal(scratch, offset);
+        bne(scratch, zero_reg, 2);
+        nop();
+        bal(offset);
         break;
       case less_equal:
+        // rs <= r2
         slt(scratch, r2, rs);
-        daddiu(scratch, scratch, -1);
-        bltzal(scratch, offset);
+        bne(scratch, zero_reg, 2);
+        nop();
+        bal(offset);
         break;
+
 
       // Unsigned comparison.
       case Ugreater:
+        // rs > rt
         sltu(scratch, r2, rs);
-        daddiu(scratch, scratch, -1);
-        bgezal(scratch, offset);
+        beq(scratch, zero_reg, 2);
+        nop();
+        bal( offset);
         break;
       case Ugreater_equal:
+        // rs >= rt
         sltu(scratch, rs, r2);
-        daddiu(scratch, scratch, -1);
-        bltzal(scratch, offset);
+        bne(scratch, zero_reg, 2);
+        nop();
+        bal(offset);
         break;
       case Uless:
+        // rs < r2
         sltu(scratch, rs, r2);
-        daddiu(scratch, scratch, -1);
-        bgezal(scratch, offset);
+        bne(scratch, zero_reg, 2);
+        nop();
+        bal(offset);
         break;
       case Uless_equal:
+        // rs <= r2
         sltu(scratch, r2, rs);
-        daddiu(scratch, scratch, -1);
-        bltzal(scratch, offset);
+        bne(scratch, zero_reg, 2);
+        nop();
+        bal(offset);
         break;
+
 
       default:
         UNREACHABLE();
@@ -2634,54 +2673,71 @@ void MacroAssembler::BranchAndLinkShort(Label* L, Condition cond, Register rs,
 
       // Signed comparison.
       case greater:
+        // rs > rt
         slt(scratch, r2, rs);
-        daddiu(scratch, scratch, -1);
+        beq(scratch, zero_reg, 2);
+        nop();
         offset = shifted_branch_offset(L, false);
-        bgezal(scratch, offset);
+        bal( offset);
         break;
       case greater_equal:
+        // rs >= rt
         slt(scratch, rs, r2);
-        daddiu(scratch, scratch, -1);
+        bne(scratch, zero_reg, 2);
+        nop();
         offset = shifted_branch_offset(L, false);
-        bltzal(scratch, offset);
+        bal(offset);
         break;
       case less:
+        // rs < r2
         slt(scratch, rs, r2);
-        daddiu(scratch, scratch, -1);
+        bne(scratch, zero_reg, 2);
+        nop();
         offset = shifted_branch_offset(L, false);
-        bgezal(scratch, offset);
+        bal(offset);
         break;
       case less_equal:
+        // rs <= r2
         slt(scratch, r2, rs);
-        daddiu(scratch, scratch, -1);
+        bne(scratch, zero_reg, 2);
+        nop();
         offset = shifted_branch_offset(L, false);
-        bltzal(scratch, offset);
+        bal(offset);
         break;
+
 
       // Unsigned comparison.
       case Ugreater:
+        // rs > rt
         sltu(scratch, r2, rs);
-        daddiu(scratch, scratch, -1);
+        beq(scratch, zero_reg, 2);
+        nop();
         offset = shifted_branch_offset(L, false);
-        bgezal(scratch, offset);
+        bal( offset);
         break;
       case Ugreater_equal:
+        // rs >= rt
         sltu(scratch, rs, r2);
-        daddiu(scratch, scratch, -1);
+        bne(scratch, zero_reg, 2);
+        nop();
         offset = shifted_branch_offset(L, false);
-        bltzal(scratch, offset);
+        bal(offset);
         break;
       case Uless:
+        // rs < r2
         sltu(scratch, rs, r2);
-        daddiu(scratch, scratch, -1);
+        bne(scratch, zero_reg, 2);
+        nop();
         offset = shifted_branch_offset(L, false);
-        bgezal(scratch, offset);
+        bal(offset);
         break;
       case Uless_equal:
+        // rs <= r2
         sltu(scratch, r2, rs);
-        daddiu(scratch, scratch, -1);
+        bne(scratch, zero_reg, 2);
+        nop();
         offset = shifted_branch_offset(L, false);
-        bltzal(scratch, offset);
+        bal(offset);
         break;
 
       default:
@@ -6082,8 +6138,7 @@ void MacroAssembler::TruncatingDiv(Register result,
   ASSERT(!result.is(at));
   MultiplierAndShift ms(divisor);
   li(at, Operand(ms.multiplier()));
-  Mult(dividend, Operand(at));
-  mfhi(result);
+  Mulh(result, dividend, Operand(at));
   if (divisor > 0 && ms.multiplier() < 0) {
     Addu(result, result, Operand(dividend));
   }

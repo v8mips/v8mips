@@ -1195,6 +1195,7 @@ void Assembler::bgec(Register rs, Register rt, int16_t offset) {
 
 
 void Assembler::bgezal(Register rs, int16_t offset) {
+  ASSERT(kArchVariant != kMips64r6 || rs.is(zero_reg));
   BlockTrampolinePoolScope block_trampoline_pool(this);
   positions_recorder()->WriteRecordedPositions();
   GenInstrImmediate(REGIMM, rs, BGEZAL, offset);
@@ -1263,6 +1264,7 @@ void Assembler::bltz(Register rs, int16_t offset) {
 
 
 void Assembler::bltzal(Register rs, int16_t offset) {
+  ASSERT(kArchVariant != kMips64r6 || rs.is(zero_reg));
   BlockTrampolinePoolScope block_trampoline_pool(this);
   positions_recorder()->WriteRecordedPositions();
   GenInstrImmediate(REGIMM, rs, BLTZAL, offset);
@@ -1516,11 +1518,13 @@ void Assembler::dmuhu(Register rd, Register rs, Register rt) {
 
 
 void Assembler::mult(Register rs, Register rt) {
+  ASSERT(kArchVariant != kMips64r6);
   GenInstrRegister(SPECIAL, rs, rt, zero_reg, 0, MULT);
 }
 
 
 void Assembler::multu(Register rs, Register rt) {
+  ASSERT(kArchVariant != kMips64r6);
   GenInstrRegister(SPECIAL, rs, rt, zero_reg, 0, MULTU);
 }
 
@@ -2166,8 +2170,12 @@ void Assembler::selnez(SecondaryField fmt, FPURegister fd,
 
 // Bit twiddling.
 void Assembler::clz(Register rd, Register rs) {
-  // Clz instr requires same GPR number in 'rd' and 'rt' fields.
-  GenInstrRegister(SPECIAL2, rs, rd, rd, 0, CLZ);
+  if (kArchVariant != kMips64r6) {
+    // Clz instr requires same GPR number in 'rd' and 'rt' fields.
+    GenInstrRegister(SPECIAL2, rs, rd, rd, 0, CLZ);
+  } else {
+    GenInstrRegister(SPECIAL, rs, zero_reg, rd, 1, CLZ_R6);
+  }
 }
 
 
