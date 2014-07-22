@@ -324,6 +324,8 @@ Instruction::Type Instruction::InstructionType() const {
     case BNEL:
     case BLEZL:
     case BGTZL:
+    case BEQZC:
+    case BNEZC:
     case LB:
     case LH:
     case LWL:
