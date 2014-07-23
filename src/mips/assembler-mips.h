@@ -654,8 +654,11 @@ class Assembler : public AssemblerBase {
   void mult(Register rs, Register rt);
   void multu(Register rs, Register rt);
   void div(Register rs, Register rt);
+  void div(Register rd, Register rs, Register rt);
   void divu(Register rs, Register rt);
   void mul(Register rd, Register rs, Register rt);
+  void muh(Register rd, Register rs, Register rt);
+  void mod(Register rd, Register rs, Register rt);
 
   void addiu(Register rd, Register rs, int32_t j);
 
@@ -794,6 +797,19 @@ class Assembler : public AssemblerBase {
   void cvt_d_w(FPURegister fd, FPURegister fs);
   void cvt_d_l(FPURegister fd, FPURegister fs);
   void cvt_d_s(FPURegister fd, FPURegister fs);
+
+  // Conditions and branches for MIPSr6.
+  void cmp(FPUCondition cond, SecondaryField fmt,
+         FPURegister fd, FPURegister ft, FPURegister fs);
+
+  void bc1eqz(int16_t offset, FPURegister ft);
+  void bc1eqz(Label* L, FPURegister ft) {
+    bc1eqz(branch_offset(L, false)>>2, ft);
+  }
+  void bc1nez(int16_t offset, FPURegister ft);
+  void bc1nez(Label* L, FPURegister ft) {
+    bc1nez(branch_offset(L, false)>>2, ft);
+  }
 
   // Conditions and branches.
   void c(FPUCondition cond, SecondaryField fmt,

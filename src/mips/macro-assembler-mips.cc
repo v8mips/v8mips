@@ -657,6 +657,54 @@ void MacroAssembler::Mul(Register rd, Register rs, const Operand& rt) {
 }
 
 
+void MacroAssembler::Mul(Register rd_hi, Register rd_lo,
+    Register rs, const Operand& rt) {
+  if (rt.is_reg()) {
+    if (kArchVariant != kMips32r6) {
+      mult(rs, rt.rm());
+      mflo(rd_lo);
+      mfhi(rd_hi);
+    } else {
+      mul(rd_lo, rs, rt.rm());
+      muh(rd_hi, rs, rt.rm());
+    }
+  } else {
+    // li handles the relocation.
+    ASSERT(!rs.is(at));
+    li(at, rt);
+    if (kArchVariant != kMips32r6) {
+      mult(rs, at);
+      mflo(rd_lo);
+      mfhi(rd_hi);
+    } else {
+      mul(rd_lo, rs, at);
+      muh(rd_hi, rs, at);
+    }
+  }
+}
+
+void MacroAssembler::Mulh(Register rd, Register rs, const Operand& rt) {
+  if (rt.is_reg()) {
+    if (kArchVariant != kMips32r6) {
+      mult(rs, rt.rm());
+      mfhi(rd);
+    } else {
+      muh(rd, rs, rt.rm());
+    }
+  } else {
+    // li handles the relocation.
+    ASSERT(!rs.is(at));
+    li(at, rt);
+    if (kArchVariant != kMips32r6) {
+      mult(rs, at);
+      mfhi(rd);
+    } else {
+      muh(rd, rs, at);
+    }
+  }
+}
+
+
 void MacroAssembler::Mult(Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     mult(rs, rt.rm());
@@ -689,6 +737,55 @@ void MacroAssembler::Div(Register rs, const Operand& rt) {
     ASSERT(!rs.is(at));
     li(at, rt);
     div(rs, at);
+  }
+}
+
+
+void MacroAssembler::Div(Register rem, Register res,
+    Register rs, const Operand& rt) {
+  if (rt.is_reg()) {
+    if (kArchVariant != kMips32r6) {
+      div(rs, rt.rm());
+      mflo(res);
+      mfhi(rem);
+   } else {
+      div(res, rs, rt.rm());
+      mod(rem, rs, rt.rm());
+   }
+  } else {
+    // li handles the relocation.
+    ASSERT(!rs.is(at));
+    li(at, rt);
+    if (kArchVariant != kMips32r6) {
+      div(rs, at);
+      mflo(res);
+      mfhi(rem);
+    } else {
+      div(res, rs, at);
+      mod(rem, rs, at);
+    }
+  }
+}
+
+
+void MacroAssembler::Mod(Register rd, Register rs, const Operand& rt) {
+  if (rt.is_reg()) {
+    if (kArchVariant != kMips32r6) {
+      div(rs, rt.rm());
+      mfhi(rd);
+   } else {
+      mod(rd, rs, rt.rm());
+   }
+  } else {
+    // li handles the relocation.
+    ASSERT(!rs.is(at));
+    li(at, rt);
+    if (kArchVariant != kMips32r6) {
+      div(rs, at);
+      mfhi(rd);
+    } else {
+      mod(rd, rs, at);
+    }
   }
 }
 
@@ -1216,49 +1313,102 @@ void MacroAssembler::BranchF(Label* target,
   ASSERT(nan || target);
   // Check for unordered (NaN) cases.
   if (nan) {
-    c(UN, D, cmp1, cmp2);
-    bc1t(nan);
+    if (kArchVariant != kMips32r6) {
+      c(UN, D, cmp1, cmp2);
+      bc1t(nan);
+    } else {
+      // Use f31 for comparison result. It has to be unavailable to lithium
+      // register allocator.
+      ASSERT(!cmp1.is(f26) && !cmp2.is(f26));
+      cmp(UN, L, f26, cmp1, cmp2);
+      bc1nez(nan, f26);
+    }
   }
 
-  if (target) {
-    // Here NaN cases were either handled by this function or are assumed to
-    // have been handled by the caller.
-    // Unsigned conditions are treated as their signed counterpart.
-    switch (cc) {
-      case lt:
-        c(OLT, D, cmp1, cmp2);
-        bc1t(target);
-        break;
-      case gt:
-        c(ULE, D, cmp1, cmp2);
-        bc1f(target);
-        break;
-      case ge:
-        c(ULT, D, cmp1, cmp2);
-        bc1f(target);
-        break;
-      case le:
-        c(OLE, D, cmp1, cmp2);
-        bc1t(target);
-        break;
-      case eq:
-        c(EQ, D, cmp1, cmp2);
-        bc1t(target);
-        break;
-      case ueq:
-        c(UEQ, D, cmp1, cmp2);
-        bc1t(target);
-        break;
-      case ne:
-        c(EQ, D, cmp1, cmp2);
-        bc1f(target);
-        break;
-      case nue:
-        c(UEQ, D, cmp1, cmp2);
-        bc1f(target);
-        break;
-      default:
-        CHECK(0);
+  if (kArchVariant != kMips32r6) {
+    if (target) {
+      // Here NaN cases were either handled by this function or are assumed to
+      // have been handled by the caller.
+      switch (cc) {
+        case lt:
+          c(OLT, D, cmp1, cmp2);
+          bc1t(target);
+          break;
+        case gt:
+          c(ULE, D, cmp1, cmp2);
+          bc1f(target);
+          break;
+        case ge:
+          c(ULT, D, cmp1, cmp2);
+          bc1f(target);
+          break;
+        case le:
+          c(OLE, D, cmp1, cmp2);
+          bc1t(target);
+          break;
+        case eq:
+          c(EQ, D, cmp1, cmp2);
+          bc1t(target);
+          break;
+        case ueq:
+          c(UEQ, D, cmp1, cmp2);
+          bc1t(target);
+          break;
+        case ne:
+          c(EQ, D, cmp1, cmp2);
+          bc1f(target);
+          break;
+        case nue:
+          c(UEQ, D, cmp1, cmp2);
+          bc1f(target);
+          break;
+        default:
+          CHECK(0);
+      }
+    }
+  } else {
+    if (target) {
+      // Here NaN cases were either handled by this function or are assumed to
+      // have been handled by the caller.
+      // Unsigned conditions are treated as their signed counterpart.
+      // Use f31 for comparison result, it is valid in fp64 (FR = 1) mode.
+      ASSERT(!cmp1.is(f26) && !cmp2.is(f26));
+      switch (cc) {
+        case lt:
+          cmp(OLT, L, f26, cmp1, cmp2);
+          bc1nez(target, f26);
+          break;
+        case gt:
+          cmp(ULE, L, f26, cmp1, cmp2);
+          bc1eqz(target, f26);
+          break;
+        case ge:
+          cmp(ULT, L, f26, cmp1, cmp2);
+          bc1eqz(target, f26);
+          break;
+        case le:
+          cmp(OLE, L, f26, cmp1, cmp2);
+          bc1nez(target, f26);
+          break;
+        case eq:
+          cmp(EQ, L, f26, cmp1, cmp2);
+          bc1nez(target, f26);
+          break;
+        case ueq:
+          cmp(UEQ, L, f26, cmp1, cmp2);
+          bc1nez(target, f26);
+          break;
+        case ne:
+          cmp(EQ, L, f26, cmp1, cmp2);
+          bc1eqz(target, f26);
+          break;
+        case nue:
+          cmp(UEQ, L, f26, cmp1, cmp2);
+          bc1eqz(target, f26);
+          break;
+        default:
+          CHECK(0);
+      }
     }
   }
 
@@ -1302,7 +1452,7 @@ void MacroAssembler::Move(FPURegister dst, double imm) {
 
 
 void MacroAssembler::Movz(Register rd, Register rs, Register rt) {
-  if (kArchVariant == kLoongson) {
+  if (kArchVariant == kLoongson || kArchVariant == kMips32r6) {
     Label done;
     Branch(&done, ne, rt, Operand(zero_reg));
     mov(rd, rs);
@@ -1314,7 +1464,7 @@ void MacroAssembler::Movz(Register rd, Register rs, Register rt) {
 
 
 void MacroAssembler::Movn(Register rd, Register rs, Register rt) {
-  if (kArchVariant == kLoongson) {
+  if (kArchVariant == kLoongson || kArchVariant == kMips32r6) {
     Label done;
     Branch(&done, eq, rt, Operand(zero_reg));
     mov(rd, rs);
@@ -2240,7 +2390,7 @@ void MacroAssembler::BranchAndLinkShort(int16_t offset, Condition cond,
     li(r2, rt);
   }
 
-  {
+  if (kArchVariant != kMips32r6) {
     BlockTrampolinePoolScope block_trampoline_pool(this);
     switch (cond) {
       case cc_always:
@@ -2304,7 +2454,88 @@ void MacroAssembler::BranchAndLinkShort(int16_t offset, Condition cond,
       default:
         UNREACHABLE();
     }
+  } else {
+    BlockTrampolinePoolScope block_trampoline_pool(this);
+    switch (cond) {
+      case cc_always:
+        bal(offset);
+        break;
+      case eq:
+        bne(rs, r2, 2);
+        nop();
+        bal(offset);
+        break;
+      case ne:
+        beq(rs, r2, 2);
+        nop();
+        bal(offset);
+        break;
+
+      // Signed comparison.
+      case greater:
+        // rs > rt
+        slt(scratch, r2, rs);
+        beq(scratch, zero_reg, 2);
+        nop();
+        bal( offset);
+        break;
+      case greater_equal:
+        // rs >= rt
+        slt(scratch, rs, r2);
+        bne(scratch, zero_reg, 2);
+        nop();
+        bal(offset);
+        break;
+      case less:
+        // rs < r2
+        slt(scratch, rs, r2);
+        bne(scratch, zero_reg, 2);
+        nop();
+        bal(offset);
+        break;
+      case less_equal:
+        // rs <= r2
+        slt(scratch, r2, rs);
+        bne(scratch, zero_reg, 2);
+        nop();
+        bal(offset);
+        break;
+
+
+      // Unsigned comparison.
+      case Ugreater:
+        // rs > rt
+        sltu(scratch, r2, rs);
+        beq(scratch, zero_reg, 2);
+        nop();
+        bal( offset);
+        break;
+      case Ugreater_equal:
+        // rs >= rt
+        sltu(scratch, rs, r2);
+        bne(scratch, zero_reg, 2);
+        nop();
+        bal(offset);
+        break;
+      case Uless:
+        // rs < r2
+        sltu(scratch, rs, r2);
+        bne(scratch, zero_reg, 2);
+        nop();
+        bal(offset);
+        break;
+      case Uless_equal:
+        // rs <= r2
+        sltu(scratch, r2, rs);
+        bne(scratch, zero_reg, 2);
+        nop();
+        bal(offset);
+        break;
+      default:
+        UNREACHABLE();
+    }
   }
+
   // Emit a nop in the branch delay slot if required.
   if (bdslot == PROTECT)
     nop();
@@ -2335,7 +2566,7 @@ void MacroAssembler::BranchAndLinkShort(Label* L, Condition cond, Register rs,
     li(r2, rt);
   }
 
-  {
+  if (kArchVariant != kMips32r6) {
     BlockTrampolinePoolScope block_trampoline_pool(this);
     switch (cond) {
       case cc_always:
@@ -2410,7 +2641,100 @@ void MacroAssembler::BranchAndLinkShort(Label* L, Condition cond, Register rs,
       default:
         UNREACHABLE();
     }
+  } else {
+    BlockTrampolinePoolScope block_trampoline_pool(this);
+    switch (cond) {
+      case cc_always:
+        offset = shifted_branch_offset(L, false);
+        bal(offset);
+        break;
+      case eq:
+        bne(rs, r2, 2);
+        nop();
+        offset = shifted_branch_offset(L, false);
+        bal(offset);
+        break;
+      case ne:
+        beq(rs, r2, 2);
+        nop();
+        offset = shifted_branch_offset(L, false);
+        bal(offset);
+        break;
+
+      // Signed comparison.
+      case greater:
+        // rs > rt
+        slt(scratch, r2, rs);
+        beq(scratch, zero_reg, 2);
+        nop();
+        offset = shifted_branch_offset(L, false);
+        bal( offset);
+        break;
+      case greater_equal:
+        // rs >= rt
+        slt(scratch, rs, r2);
+        bne(scratch, zero_reg, 2);
+        nop();
+        offset = shifted_branch_offset(L, false);
+        bal(offset);
+        break;
+      case less:
+        // rs < r2
+        slt(scratch, rs, r2);
+        bne(scratch, zero_reg, 2);
+        nop();
+        offset = shifted_branch_offset(L, false);
+        bal(offset);
+        break;
+      case less_equal:
+        // rs <= r2
+        slt(scratch, r2, rs);
+        bne(scratch, zero_reg, 2);
+        nop();
+        offset = shifted_branch_offset(L, false);
+        bal(offset);
+        break;
+
+
+      // Unsigned comparison.
+      case Ugreater:
+        // rs > rt
+        sltu(scratch, r2, rs);
+        beq(scratch, zero_reg, 2);
+        nop();
+        offset = shifted_branch_offset(L, false);
+        bal( offset);
+        break;
+      case Ugreater_equal:
+        // rs >= rt
+        sltu(scratch, rs, r2);
+        bne(scratch, zero_reg, 2);
+        nop();
+        offset = shifted_branch_offset(L, false);
+        bal(offset);
+        break;
+      case Uless:
+        // rs < r2
+        sltu(scratch, rs, r2);
+        bne(scratch, zero_reg, 2);
+        nop();
+        offset = shifted_branch_offset(L, false);
+        bal(offset);
+        break;
+      case Uless_equal:
+        // rs <= r2
+        sltu(scratch, r2, rs);
+        bne(scratch, zero_reg, 2);
+        nop();
+        offset = shifted_branch_offset(L, false);
+        bal(offset);
+        break;
+
+      default:
+        UNREACHABLE();
+    }
   }
+
   // Check that offset could actually hold on an int16_t.
   ASSERT(is_int16(offset));
 
@@ -5741,8 +6065,7 @@ void MacroAssembler::TruncatingDiv(Register result,
   ASSERT(!result.is(at));
   MultiplierAndShift ms(divisor);
   li(at, Operand(ms.multiplier()));
-  Mult(dividend, Operand(at));
-  mfhi(result);
+  Mulh(result, dividend, Operand(at));
   if (divisor > 0 && ms.multiplier() < 0) {
     Addu(result, result, Operand(dividend));
   }

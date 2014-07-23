@@ -582,13 +582,27 @@ class MacroAssembler: public Assembler {
     instr(rs, Operand(j));                                                     \
   }
 
+#define DEFINE_INSTRUCTION3(instr)                                             \
+  void instr(Register rd_hi, Register rd_lo, Register rs, const Operand& rt);  \
+  void instr(Register rd_hi, Register rd_lo, Register rs, Register rt) {       \
+    instr(rd_hi, rd_lo, rs, Operand(rt));                                      \
+  }                                                                            \
+  void instr(Register rd_hi, Register rd_lo, Register rs, int32_t j) {         \
+    instr(rd_hi, rd_lo, rs, Operand(j));                                       \
+  }
+
   DEFINE_INSTRUCTION(Addu);
   DEFINE_INSTRUCTION(Subu);
   DEFINE_INSTRUCTION(Mul);
+  DEFINE_INSTRUCTION(Mod);
+  DEFINE_INSTRUCTION(Mulh);
   DEFINE_INSTRUCTION2(Mult);
   DEFINE_INSTRUCTION2(Multu);
   DEFINE_INSTRUCTION2(Div);
   DEFINE_INSTRUCTION2(Divu);
+
+  DEFINE_INSTRUCTION3(Div);
+  DEFINE_INSTRUCTION3(Mul);
 
   DEFINE_INSTRUCTION(And);
   DEFINE_INSTRUCTION(Or);
