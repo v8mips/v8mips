@@ -272,6 +272,9 @@
                     'cflags': ['-msoft-float'],
                     'ldflags': ['-msoft-float'],
                   }],
+                  ['mips_arch_variant=="r6"', {
+                    'cflags': ['-mips32r6', '-Wa,-mips32r6'],
+                  }],
                   ['mips_arch_variant=="r2"', {
                     'cflags': ['-mips32r2', '-Wa,-mips32r2'],
                   }],
@@ -297,6 +300,9 @@
               '__mips_soft_float=1'
             ],
           }],
+          ['mips_arch_variant=="r6"', {
+            'defines': ['_MIPS_ARCH_MIPS32R6',],
+          }],
           ['mips_arch_variant=="r2"', {
             'defines': ['_MIPS_ARCH_MIPS32R2',],
           }],
@@ -320,6 +326,9 @@
                   }, {
                     'cflags': ['-msoft-float'],
                     'ldflags': ['-msoft-float'],
+                  }],
+                  ['mips_arch_variant=="r6"', {
+                    'cflags': ['-mips32r6', '-Wa,-mips32r6'],
                   }],
                   ['mips_arch_variant=="r2"', {
                     'cflags': ['-mips32r2', '-Wa,-mips32r2'],
@@ -348,6 +357,9 @@
             'defines': [
               '__mips_soft_float=1'
             ],
+          }],
+          ['mips_arch_variant=="r6"', {
+            'defines': ['_MIPS_ARCH_MIPS32R6',],
           }],
           ['mips_arch_variant=="r2"', {
             'defines': ['_MIPS_ARCH_MIPS32R2',],
