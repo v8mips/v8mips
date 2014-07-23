@@ -1133,7 +1133,11 @@ void Assembler::jr(Register rs) {
   if (rs.is(ra)) {
     positions_recorder()->WriteRecordedPositions();
   }
-  GenInstrRegister(SPECIAL, rs, zero_reg, zero_reg, 0, JR);
+  if (kArchVariant != kMips32r6) {
+    GenInstrRegister(SPECIAL, rs, zero_reg, zero_reg, 0, JR);
+  } else {
+    jalr(rs, at);
+  }
   BlockTrampolinePoolFor(1);  // For associated delay slot.
 }
 
@@ -1208,6 +1212,13 @@ void Assembler::mul(Register rd, Register rs, Register rt) {
   GenInstrRegister(SPECIAL2, rs, rt, rd, 0, MUL);
 }
 
+void Assembler::muh(Register rd, Register rs, Register rt) {
+  UNIMPLEMENTED_MIPS();
+}
+
+void Assembler::mod(Register rd, Register rs, Register rt) {
+  UNIMPLEMENTED_MIPS();
+}
 
 void Assembler::mult(Register rs, Register rt) {
   GenInstrRegister(SPECIAL, rs, rt, zero_reg, 0, MULT);
@@ -1869,6 +1880,27 @@ void Assembler::cvt_d_s(FPURegister fd, FPURegister fs) {
   GenInstrRegister(COP1, S, f0, fs, fd, CVT_D_S);
 }
 
+
+// Conditions for >= MIPSr6.
+void Assembler::cmp(FPUCondition cond, SecondaryField fmt,
+    FPURegister fd, FPURegister fs, FPURegister ft) {
+  ASSERT(kArchVariant == kMips64r6);
+  UNIMPLEMENTED_MIPS();
+}
+
+
+void Assembler::bc1eqz(int16_t offset, FPURegister ft) {
+  ASSERT(kArchVariant == kMips64r6);
+  UNIMPLEMENTED_MIPS();
+}
+
+
+void Assembler::bc1nez(int16_t offset, FPURegister ft) {
+
+  ASSERT(kArchVariant == kMips64r6);
+  UNIMPLEMENTED_MIPS();
+}
+// Conditions for < MIPSr6
 
 // Conditions.
 void Assembler::c(FPUCondition cond, SecondaryField fmt,
