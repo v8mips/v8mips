@@ -202,7 +202,6 @@ class Genesis BASE_EMBEDDED {
   // Installs the contents of the native .js files on the global objects.
   // Used for creating a context from scratch.
   void InstallNativeFunctions();
-  void InstallExperimentalBuiltinFunctionIds();
   void InstallExperimentalNativeFunctions();
   Handle<JSFunction> InstallInternalArray(Handle<JSBuiltinsObject> builtins,
                                           const char* name,
@@ -1504,15 +1503,8 @@ bool Genesis::CompileScriptCached(Isolate* isolate,
     Handle<String> script_name =
         factory->NewStringFromUtf8(name).ToHandleChecked();
     function_info = Compiler::CompileScript(
-        source,
-        script_name,
-        0,
-        0,
-        false,
-        top_context,
-        extension,
-        NULL,
-        NO_CACHED_DATA,
+        source, script_name, 0, 0, false, top_context, extension, NULL,
+        ScriptCompiler::kNoCompileOptions,
         use_runtime_context ? NATIVES_CODE : NOT_NATIVES_CODE);
     if (function_info.is_null()) return false;
     if (cache != NULL) cache->Add(name, function_info);
@@ -1918,6 +1910,12 @@ bool Genesis::InstallNatives() {
     Handle<JSFunction> apply =
         InstallFunction(proto, "apply", JS_OBJECT_TYPE, JSObject::kHeaderSize,
                         MaybeHandle<JSObject>(), Builtins::kFunctionApply);
+    if (FLAG_vector_ics) {
+      // Apply embeds an IC, so we need a type vector of size 1 in the shared
+      // function info.
+      Handle<FixedArray> feedback_vector = factory()->NewTypeFeedbackVector(1);
+      apply->shared()->set_feedback_vector(*feedback_vector);
+    }
 
     // Make sure that Function.prototype.call appears to be compiled.
     // The code will never be called, but inline caching for call will
@@ -2023,11 +2021,9 @@ bool Genesis::InstallExperimentalNatives() {
     INSTALL_EXPERIMENTAL_NATIVE(i, iteration, "string-iterator.js")
     INSTALL_EXPERIMENTAL_NATIVE(i, strings, "harmony-string.js")
     INSTALL_EXPERIMENTAL_NATIVE(i, arrays, "harmony-array.js")
-    INSTALL_EXPERIMENTAL_NATIVE(i, maths, "harmony-math.js")
   }
 
   InstallExperimentalNativeFunctions();
-  InstallExperimentalBuiltinFunctionIds();
   return true;
 }
 
@@ -2076,15 +2072,6 @@ void Genesis::InstallBuiltinFunctionIds() {
   }
   FUNCTIONS_WITH_ID_LIST(INSTALL_BUILTIN_ID)
 #undef INSTALL_BUILTIN_ID
-}
-
-
-void Genesis::InstallExperimentalBuiltinFunctionIds() {
-  HandleScope scope(isolate());
-  if (FLAG_harmony_maths) {
-    Handle<JSObject> holder = ResolveBuiltinIdHolder(native_context(), "Math");
-    InstallBuiltinFunctionId(holder, "clz32", kMathClz32);
-  }
 }
 
 

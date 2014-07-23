@@ -59,15 +59,10 @@ static Handle<JSFunction> Compile(const char* source) {
   Isolate* isolate = CcTest::i_isolate();
   Handle<String> source_code = isolate->factory()->NewStringFromUtf8(
       CStrVector(source)).ToHandleChecked();
-  Handle<SharedFunctionInfo> shared_function =
-      Compiler::CompileScript(source_code,
-                              Handle<String>(),
-                              0,
-                              0,
-                              false,
-                              Handle<Context>(isolate->native_context()),
-                              NULL, NULL, NO_CACHED_DATA,
-                              NOT_NATIVES_CODE);
+  Handle<SharedFunctionInfo> shared_function = Compiler::CompileScript(
+      source_code, Handle<String>(), 0, 0, false,
+      Handle<Context>(isolate->native_context()), NULL, NULL,
+      v8::ScriptCompiler::kNoCompileOptions, NOT_NATIVES_CODE);
   return isolate->factory()->NewFunctionFromSharedFunctionInfo(
       shared_function, isolate->native_context());
 }
@@ -314,8 +309,9 @@ TEST(FeedbackVectorPreservedAcrossRecompiles) {
   Handle<FixedArray> feedback_vector(f->shared()->feedback_vector());
 
   // Verify that we gathered feedback.
-  CHECK_EQ(1, feedback_vector->length());
-  CHECK(feedback_vector->get(0)->IsJSFunction());
+  int expected_count = FLAG_vector_ics ? 2 : 1;
+  CHECK_EQ(expected_count, feedback_vector->length());
+  CHECK(feedback_vector->get(expected_count - 1)->IsJSFunction());
 
   CompileRun("%OptimizeFunctionOnNextCall(f); f(fun1);");
 
@@ -323,7 +319,8 @@ TEST(FeedbackVectorPreservedAcrossRecompiles) {
   // of the full code.
   CHECK(f->IsOptimized());
   CHECK(f->shared()->has_deoptimization_support());
-  CHECK(f->shared()->feedback_vector()->get(0)->IsJSFunction());
+  CHECK(f->shared()->feedback_vector()->
+        get(expected_count - 1)->IsJSFunction());
 }
 
 
@@ -349,16 +346,15 @@ TEST(FeedbackVectorUnaffectedByScopeChanges) {
           *v8::Handle<v8::Function>::Cast(
               CcTest::global()->Get(v8_str("morphing_call"))));
 
-  // morphing_call should have one feedback vector slot for the call to
-  // call_target().
-  CHECK_EQ(1, f->shared()->feedback_vector()->length());
+  int expected_count = FLAG_vector_ics ? 2 : 1;
+  CHECK_EQ(expected_count, f->shared()->feedback_vector()->length());
   // And yet it's not compiled.
   CHECK(!f->shared()->is_compiled());
 
   CompileRun("morphing_call();");
 
   // The vector should have the same size despite the new scoping.
-  CHECK_EQ(1, f->shared()->feedback_vector()->length());
+  CHECK_EQ(expected_count, f->shared()->feedback_vector()->length());
   CHECK(f->shared()->is_compiled());
 }
 
@@ -396,48 +392,6 @@ TEST(OptimizedCodeSharing) {
           || !CcTest::i_isolate()->use_crankshaft() || !fun2->IsOptimizable());
     CHECK_EQ(fun1->code(), fun2->code());
   }
-}
-
-
-TEST(SerializeToplevel) {
-  FLAG_serialize_toplevel = true;
-  v8::HandleScope scope(CcTest::isolate());
-  v8::Local<v8::Context> context = CcTest::NewContext(PRINT_EXTENSION);
-  v8::Context::Scope context_scope(context);
-
-  const char* source1 = "1 + 1";
-  const char* source2 = "1 + 2";  // Use alternate string to verify caching.
-
-  Isolate* isolate = CcTest::i_isolate();
-  Handle<String> source1_string = isolate->factory()
-                                      ->NewStringFromUtf8(CStrVector(source1))
-                                      .ToHandleChecked();
-  Handle<String> source2_string = isolate->factory()
-                                      ->NewStringFromUtf8(CStrVector(source2))
-                                      .ToHandleChecked();
-
-  ScriptData* cache = NULL;
-
-  Handle<SharedFunctionInfo> orig =
-      Compiler::CompileScript(source1_string, Handle<String>(), 0, 0, false,
-                              Handle<Context>(isolate->native_context()), NULL,
-                              &cache, PRODUCE_CACHED_DATA, NOT_NATIVES_CODE);
-
-  Handle<SharedFunctionInfo> info =
-      Compiler::CompileScript(source2_string, Handle<String>(), 0, 0, false,
-                              Handle<Context>(isolate->native_context()), NULL,
-                              &cache, CONSUME_CACHED_DATA, NOT_NATIVES_CODE);
-
-  CHECK_NE(*orig, *info);
-  Handle<JSFunction> fun =
-      isolate->factory()->NewFunctionFromSharedFunctionInfo(
-          info, isolate->native_context());
-  Handle<JSObject> global(isolate->context()->global_object());
-  Handle<Object> result =
-      Execution::Call(isolate, fun, global, 0, NULL).ToHandleChecked();
-  CHECK_EQ(2, Handle<Smi>::cast(result)->value());
-
-  delete cache;
 }
 
 

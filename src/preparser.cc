@@ -61,6 +61,8 @@ PreParserIdentifier PreParserTraits::GetSymbol(Scanner* scanner) {
   } else if (scanner->current_token() ==
              Token::FUTURE_STRICT_RESERVED_WORD) {
     return PreParserIdentifier::FutureStrictReserved();
+  } else if (scanner->current_token() == Token::LET) {
+    return PreParserIdentifier::Let();
   } else if (scanner->current_token() == Token::YIELD) {
     return PreParserIdentifier::Yield();
   }
@@ -108,10 +110,12 @@ PreParser::PreParseResult PreParser::PreParseLazyFunction(
   log_ = log;
   // Lazy functions always have trivial outer scopes (no with/catch scopes).
   PreParserScope top_scope(scope_, GLOBAL_SCOPE);
-  FunctionState top_state(&function_state_, &scope_, &top_scope);
+  FunctionState top_state(&function_state_, &scope_, &top_scope, NULL,
+                          this->ast_value_factory());
   scope_->SetStrictMode(strict_mode);
   PreParserScope function_scope(scope_, FUNCTION_SCOPE);
-  FunctionState function_state(&function_state_, &scope_, &function_scope);
+  FunctionState function_state(&function_state_, &scope_, &function_scope, NULL,
+                               this->ast_value_factory());
   function_state.set_is_generator(is_generator);
   ASSERT_EQ(Token::LBRACE, scanner()->current_token());
   bool ok = true;
@@ -167,9 +171,14 @@ PreParser::Statement PreParser::ParseSourceElement(bool* ok) {
   switch (peek()) {
     case Token::FUNCTION:
       return ParseFunctionDeclaration(ok);
-    case Token::LET:
     case Token::CONST:
       return ParseVariableStatement(kSourceElement, ok);
+    case Token::LET:
+      ASSERT(allow_harmony_scoping());
+      if (strict_mode() == STRICT) {
+        return ParseVariableStatement(kSourceElement, ok);
+      }
+      // Fall through.
     default:
       return ParseStatement(ok);
   }
@@ -237,11 +246,6 @@ PreParser::Statement PreParser::ParseStatement(bool* ok) {
     case Token::LBRACE:
       return ParseBlock(ok);
 
-    case Token::CONST:
-    case Token::LET:
-    case Token::VAR:
-      return ParseVariableStatement(kStatement, ok);
-
     case Token::SEMICOLON:
       Next();
       return Statement::Default();
@@ -297,6 +301,16 @@ PreParser::Statement PreParser::ParseStatement(bool* ok) {
     case Token::DEBUGGER:
       return ParseDebuggerStatement(ok);
 
+    case Token::VAR:
+    case Token::CONST:
+      return ParseVariableStatement(kStatement, ok);
+
+    case Token::LET:
+      ASSERT(allow_harmony_scoping());
+      if (strict_mode() == STRICT) {
+        return ParseVariableStatement(kStatement, ok);
+      }
+      // Fall through.
     default:
       return ParseExpressionOrLabelledStatement(ok);
   }
@@ -415,23 +429,9 @@ PreParser::Statement PreParser::ParseVariableDeclarations(
         return Statement::Default();
       }
     }
-  } else if (peek() == Token::LET) {
-    // ES6 Draft Rev4 section 12.2.1:
-    //
-    // LetDeclaration : let LetBindingList ;
-    //
-    // * It is a Syntax Error if the code that matches this production is not
-    //   contained in extended code.
-    //
-    // TODO(rossberg): make 'let' a legal identifier in sloppy mode.
-    if (!allow_harmony_scoping() || strict_mode() == SLOPPY) {
-      ReportMessageAt(scanner()->peek_location(), "illegal_let");
-      *ok = false;
-      return Statement::Default();
-    }
+  } else if (peek() == Token::LET && strict_mode() == STRICT) {
     Consume(Token::LET);
-    if (var_context != kSourceElement &&
-        var_context != kForStatement) {
+    if (var_context != kSourceElement && var_context != kForStatement) {
       ReportMessageAt(scanner()->peek_location(), "unprotected_let");
       *ok = false;
       return Statement::Default();
@@ -669,7 +669,7 @@ PreParser::Statement PreParser::ParseForStatement(bool* ok) {
   Expect(Token::LPAREN, CHECK_OK);
   if (peek() != Token::SEMICOLON) {
     if (peek() == Token::VAR || peek() == Token::CONST ||
-        peek() == Token::LET) {
+        (peek() == Token::LET && strict_mode() == STRICT)) {
       bool is_let = peek() == Token::LET;
       int decl_count;
       VariableDeclarationProperties decl_props = kHasNoInitializers;
@@ -809,7 +809,8 @@ PreParser::Expression PreParser::ParseFunctionLiteral(
   // Parse function body.
   ScopeType outer_scope_type = scope_->type();
   PreParserScope function_scope(scope_, FUNCTION_SCOPE);
-  FunctionState function_state(&function_state_, &scope_, &function_scope);
+  FunctionState function_state(&function_state_, &scope_, &function_scope, NULL,
+                               this->ast_value_factory());
   function_state.set_is_generator(is_generator);
   //  FormalParameterList ::
   //    '(' (Identifier)*[','] ')'

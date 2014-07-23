@@ -933,6 +933,7 @@ class Assembler : public AssemblerBase {
   void floor_l_d(FPURegister fd, FPURegister fs);
   void ceil_l_s(FPURegister fd, FPURegister fs);
   void ceil_l_d(FPURegister fd, FPURegister fs);
+
   void min(SecondaryField fmt,FPURegister fd, FPURegister ft, FPURegister fs);
   void mina(SecondaryField fmt,FPURegister fd, FPURegister ft, FPURegister fs);
   void max(SecondaryField fmt,FPURegister fd, FPURegister ft, FPURegister fs);

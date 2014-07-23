@@ -48,6 +48,11 @@ from chromium_roll import DEPS_FILE
 from chromium_roll import ChromiumRoll
 import releases
 from releases import Releases
+import bump_up_version
+from bump_up_version import BumpUpVersion
+from bump_up_version import LastChangeBailout
+from bump_up_version import LKGRVersionUpToDateBailout
+from auto_tag import AutoTag
 
 
 TEST_CONFIG = {
@@ -352,7 +357,7 @@ class ScriptTest(unittest.TestCase):
 
   def RunStep(self, script=PushToTrunk, step_class=Step, args=None):
     """Convenience wrapper."""
-    args = args or ["-m"]
+    args = args if args is not None else ["-m"]
     return script(TEST_CONFIG, self, self._state).RunSteps([step_class], args)
 
   def GitMock(self, cmd, args="", pipe=True):
@@ -396,6 +401,9 @@ class ScriptTest(unittest.TestCase):
 
   def GetDate(self):
     return "1999-07-31"
+
+  def GetUTCStamp(self):
+    return "100000"
 
   def ExpectGit(self, *args):
     """Convenience wrapper."""
@@ -597,13 +605,19 @@ class ScriptTest(unittest.TestCase):
     self.assertEquals("New\n        Lines",
                       FileToText(TEST_CONFIG[CHANGELOG_ENTRY_FILE]))
 
+  # Version on trunk: 3.22.4.0. Version on master (bleeding_edge): 3.22.6.
+  # Make sure that the increment is 3.22.7.0.
   def testIncrementVersion(self):
     TEST_CONFIG[VERSION_FILE] = self.MakeEmptyTempFile()
     self.WriteFakeVersionFile()
     self._state["last_push_trunk"] = "hash1"
+    self._state["latest_build"] = "6"
+    self._state["latest_version"] = "3.22.6.0"
 
     self.ExpectGit([
-      Git("checkout -f hash1 -- %s" % TEST_CONFIG[VERSION_FILE], "")
+      Git("checkout -f hash1 -- %s" % TEST_CONFIG[VERSION_FILE], ""),
+      Git("checkout -f svn/bleeding_edge -- %s" % TEST_CONFIG[VERSION_FILE],
+          "", cb=lambda: self.WriteFakeVersionFile(22, 6)),
     ])
 
     self.ExpectReadline([
@@ -614,7 +628,7 @@ class ScriptTest(unittest.TestCase):
 
     self.assertEquals("3", self._state["new_major"])
     self.assertEquals("22", self._state["new_minor"])
-    self.assertEquals("5", self._state["new_build"])
+    self.assertEquals("7", self._state["new_build"])
     self.assertEquals("0", self._state["new_patch"])
 
   def _TestSquashCommits(self, change_log, expected_msg):
@@ -741,6 +755,8 @@ Performance and stability improvements on all platforms.""", commit)
       Git("log -1 --format=%s hash2",
        "Version 3.4.5 (based on bleeding_edge revision r1234)\n"),
       Git("svn find-rev r1234", "hash3\n"),
+      Git("checkout -f svn/bleeding_edge -- %s" % TEST_CONFIG[VERSION_FILE],
+          "", cb=self.WriteFakeVersionFile),
       Git("checkout -f hash2 -- %s" % TEST_CONFIG[VERSION_FILE], "",
           cb=self.WriteFakeVersionFile),
       Git("log --format=%H hash3..push_hash", "rev1\n"),
@@ -1264,6 +1280,144 @@ LOG=N
        "revision_link": "https://code.google.com/p/v8/source/detail?r=234"},
     ]
     self.assertEquals(expected_json, json.loads(FileToText(json_output)))
+
+
+  def testBumpUpVersion(self):
+    TEST_CONFIG[VERSION_FILE] = self.MakeEmptyTempFile()
+    self.WriteFakeVersionFile()
+
+    def ResetVersion(minor, build, patch=0):
+      return lambda: self.WriteFakeVersionFile(minor=minor,
+                                               build=build,
+                                               patch=patch)
+
+    self.ExpectGit([
+      Git("status -s -uno", ""),
+      Git("checkout -f bleeding_edge", "", cb=ResetVersion(11, 4)),
+      Git("pull", ""),
+      Git("branch", ""),
+      Git("checkout -f bleeding_edge", ""),
+      Git("log -1 --format=%H", "latest_hash"),
+      Git("diff --name-only latest_hash latest_hash^", ""),
+      Git("checkout -f bleeding_edge", ""),
+      Git("log --format=%H --grep=\"^git-svn-id: [^@]*@12345 [A-Za-z0-9-]*$\"",
+          "lkgr_hash"),
+      Git("checkout -b auto-bump-up-version lkgr_hash", ""),
+      Git("checkout -f bleeding_edge", ""),
+      Git("branch", ""),
+      Git("diff --name-only lkgr_hash lkgr_hash^", ""),
+      Git("checkout -f master", "", cb=ResetVersion(11, 5)),
+      Git("pull", ""),
+      Git("checkout -b auto-bump-up-version bleeding_edge", "",
+          cb=ResetVersion(11, 4)),
+      Git("commit -am \"[Auto-roll] Bump up version to 3.11.6.0\n\n"
+          "TBR=author@chromium.org\"", ""),
+      Git("cl upload --send-mail --email \"author@chromium.org\" -f "
+          "--bypass-hooks", ""),
+      Git("cl dcommit -f --bypass-hooks", ""),
+      Git("checkout -f bleeding_edge", ""),
+      Git("branch", "auto-bump-up-version\n* bleeding_edge"),
+      Git("branch -D auto-bump-up-version", ""),
+    ])
+
+    self.ExpectReadURL([
+      URL("https://v8-status.appspot.com/lkgr", "12345"),
+      URL("https://v8-status.appspot.com/current?format=json",
+          "{\"message\": \"Tree is open\"}"),
+    ])
+
+    BumpUpVersion(TEST_CONFIG, self).Run(["-a", "author@chromium.org"])
+
+  def testAutoTag(self):
+    TEST_CONFIG[VERSION_FILE] = self.MakeEmptyTempFile()
+    self.WriteFakeVersionFile()
+
+    def ResetVersion(minor, build, patch=0):
+      return lambda: self.WriteFakeVersionFile(minor=minor,
+                                               build=build,
+                                               patch=patch)
+
+    self.ExpectGit([
+      Git("status -s -uno", ""),
+      Git("status -s -b -uno", "## some_branch\n"),
+      Git("svn fetch", ""),
+      Git("branch", "  branch1\n* branch2\n"),
+      Git("checkout -f master", ""),
+      Git("svn rebase", ""),
+      Git("checkout -b %s" % TEST_CONFIG[BRANCHNAME], "",
+          cb=ResetVersion(4, 5)),
+      Git("branch -r", "svn/tags/3.4.2\nsvn/tags/3.2.1.0\nsvn/branches/3.4"),
+      Git("log --format=%H --grep=\"\\[Auto\\-roll\\] Bump up version to\"",
+          "hash125\nhash118\nhash111\nhash101"),
+      Git("checkout -f hash125 -- %s" % TEST_CONFIG[VERSION_FILE], "",
+          cb=ResetVersion(4, 4)),
+      Git("checkout -f HEAD -- %s" % TEST_CONFIG[VERSION_FILE], "",
+          cb=ResetVersion(4, 5)),
+      Git("checkout -f hash118 -- %s" % TEST_CONFIG[VERSION_FILE], "",
+          cb=ResetVersion(4, 3)),
+      Git("checkout -f HEAD -- %s" % TEST_CONFIG[VERSION_FILE], "",
+          cb=ResetVersion(4, 5)),
+      Git("checkout -f hash111 -- %s" % TEST_CONFIG[VERSION_FILE], "",
+          cb=ResetVersion(4, 2)),
+      Git("checkout -f HEAD -- %s" % TEST_CONFIG[VERSION_FILE], "",
+          cb=ResetVersion(4, 5)),
+      Git("svn find-rev hash118", "118"),
+      Git("svn find-rev hash125", "125"),
+      Git("svn find-rev r123", "hash123"),
+      Git("log -1 --format=%at hash123", "1"),
+      Git("reset --hard hash123", ""),
+      Git("svn tag 3.4.3 -m \"Tagging version 3.4.3\"", ""),
+      Git("checkout -f some_branch", ""),
+      Git("branch -D %s" % TEST_CONFIG[BRANCHNAME], ""),
+    ])
+
+    self.ExpectReadURL([
+      URL("https://v8-status.appspot.com/revisions?format=json",
+          "[{\"revision\": \"123\", \"status\": true},"
+           "{\"revision\": \"112\", \"status\": true}]"),
+    ])
+
+    AutoTag(TEST_CONFIG, self).Run(["-a", "author@chromium.org"])
+
+  # Test that we bail out if the last change was a version change.
+  def testBumpUpVersionBailout1(self):
+    TEST_CONFIG[VERSION_FILE] = self.MakeEmptyTempFile()
+    self._state["latest"] = "latest_hash"
+
+    self.ExpectGit([
+      Git("diff --name-only latest_hash latest_hash^",
+          TEST_CONFIG[VERSION_FILE]),
+    ])
+
+    self.assertEquals(1,
+        self.RunStep(BumpUpVersion, LastChangeBailout, ["--dry_run"]))
+
+  # Test that we bail out if the lkgr was a version change.
+  def testBumpUpVersionBailout2(self):
+    TEST_CONFIG[VERSION_FILE] = self.MakeEmptyTempFile()
+    self._state["lkgr"] = "lkgr_hash"
+
+    self.ExpectGit([
+      Git("diff --name-only lkgr_hash lkgr_hash^", TEST_CONFIG[VERSION_FILE]),
+    ])
+
+    self.assertEquals(1,
+        self.RunStep(BumpUpVersion, LKGRVersionUpToDateBailout, ["--dry_run"]))
+
+  # Test that we bail out if the last version is already newer than the lkgr's
+  # version.
+  def testBumpUpVersionBailout3(self):
+    TEST_CONFIG[VERSION_FILE] = self.MakeEmptyTempFile()
+    self._state["lkgr"] = "lkgr_hash"
+    self._state["lkgr_version"] = "3.22.4.0"
+    self._state["latest_version"] = "3.22.5.0"
+
+    self.ExpectGit([
+      Git("diff --name-only lkgr_hash lkgr_hash^", ""),
+    ])
+
+    self.assertEquals(1,
+        self.RunStep(BumpUpVersion, LKGRVersionUpToDateBailout, ["--dry_run"]))
 
 
 class SystemTest(unittest.TestCase):

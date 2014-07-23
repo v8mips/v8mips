@@ -26,6 +26,7 @@
 #include "src/objects.h"
 #include "src/objects-visiting.h"
 #include "src/property.h"
+#include "src/prototype.h"
 #include "src/spaces.h"
 #include "src/store-buffer.h"
 #include "src/transitions-inl.h"
@@ -1161,8 +1162,7 @@ MaybeHandle<Object> JSProxy::SetElementWithHandler(Handle<JSProxy> proxy,
                                                    StrictMode strict_mode) {
   Isolate* isolate = proxy->GetIsolate();
   Handle<String> name = isolate->factory()->Uint32ToString(index);
-  return SetPropertyWithHandler(
-      proxy, receiver, name, value, NONE, strict_mode);
+  return SetPropertyWithHandler(proxy, receiver, name, value, strict_mode);
 }
 
 
@@ -1477,22 +1477,6 @@ Address HeapObject::address() {
 
 int HeapObject::Size() {
   return SizeFromMap(map());
-}
-
-
-bool HeapObject::ContainsPointers() {
-  InstanceType type = map()->instance_type();
-  if (type <= LAST_NAME_TYPE) {
-    if (type == SYMBOL_TYPE) {
-      return true;
-    }
-    ASSERT(type < FIRST_NONSTRING_TYPE);
-    // There are four string representations: sequential strings, external
-    // strings, cons strings, and sliced strings.
-    // Only the latter two contain non-map-word pointers to heap objects.
-    return ((type & kIsIndirectStringMask) == kIsIndirectStringTag);
-  }
-  return (type > LAST_DATA_TYPE);
 }
 
 
@@ -2095,23 +2079,12 @@ bool JSObject::HasFastProperties() {
 }
 
 
-bool JSObject::TooManyFastProperties(StoreFromKeyed store_mode) {
-  // Allow extra fast properties if the object has more than
-  // kFastPropertiesSoftLimit in-object properties. When this is the case, it is
-  // very unlikely that the object is being used as a dictionary and there is a
-  // good chance that allowing more map transitions will be worth it.
-  Map* map = this->map();
-  if (map->unused_property_fields() != 0) return false;
-
-  int inobject = map->inobject_properties();
-
-  int limit;
-  if (store_mode == CERTAINLY_NOT_STORE_FROM_KEYED) {
-    limit = Max(inobject, kMaxFastProperties);
-  } else {
-    limit = Max(inobject, kFastPropertiesSoftLimit);
-  }
-  return properties()->length() > limit;
+bool Map::TooManyFastProperties(StoreFromKeyed store_mode) {
+  if (unused_property_fields() != 0) return false;
+  int minimum = store_mode == CERTAINLY_NOT_STORE_FROM_KEYED ? 128 : 12;
+  int limit = Max(minimum, inobject_properties());
+  int external = NumberOfFields() - inobject_properties();
+  return external > limit;
 }
 
 
@@ -4648,6 +4621,15 @@ Code::Kind Code::kind() {
 }
 
 
+bool Code::IsCodeStubOrIC() {
+  return kind() == STUB || kind() == HANDLER || kind() == LOAD_IC ||
+         kind() == KEYED_LOAD_IC || kind() == CALL_IC || kind() == STORE_IC ||
+         kind() == KEYED_STORE_IC || kind() == BINARY_OP_IC ||
+         kind() == COMPARE_IC || kind() == COMPARE_NIL_IC ||
+         kind() == TO_BOOLEAN_IC;
+}
+
+
 InlineCacheState Code::ic_state() {
   InlineCacheState result = ExtractICStateFromFlags(flags());
   // Only allow uninitialized or debugger states for non-IC code
@@ -4697,37 +4679,6 @@ inline void Code::set_is_crankshafted(bool value) {
   int previous = READ_UINT32_FIELD(this, kKindSpecificFlags2Offset);
   int updated = IsCrankshaftedField::update(previous, value);
   WRITE_UINT32_FIELD(this, kKindSpecificFlags2Offset, updated);
-}
-
-
-int Code::major_key() {
-  ASSERT(has_major_key());
-  return StubMajorKeyField::decode(
-      READ_UINT32_FIELD(this, kKindSpecificFlags2Offset));
-}
-
-
-void Code::set_major_key(int major) {
-  ASSERT(has_major_key());
-  ASSERT(0 <= major && major < 256);
-  int previous = READ_UINT32_FIELD(this, kKindSpecificFlags2Offset);
-  int updated = StubMajorKeyField::update(previous, major);
-  WRITE_UINT32_FIELD(this, kKindSpecificFlags2Offset, updated);
-}
-
-
-bool Code::has_major_key() {
-  return kind() == STUB ||
-      kind() == HANDLER ||
-      kind() == BINARY_OP_IC ||
-      kind() == COMPARE_IC ||
-      kind() == COMPARE_NIL_IC ||
-      kind() == LOAD_IC ||
-      kind() == KEYED_LOAD_IC ||
-      kind() == STORE_IC ||
-      kind() == CALL_IC ||
-      kind() == KEYED_STORE_IC ||
-      kind() == TO_BOOLEAN_IC;
 }
 
 
@@ -4814,6 +4765,18 @@ void Code::set_profiler_ticks(int ticks) {
   ASSERT_EQ(FUNCTION, kind());
   ASSERT(ticks < 256);
   WRITE_BYTE_FIELD(this, kProfilerTicksOffset, ticks);
+}
+
+
+int Code::builtin_index() {
+  ASSERT_EQ(BUILTIN, kind());
+  return READ_INT32_FIELD(this, kKindSpecificFlags1Offset);
+}
+
+
+void Code::set_builtin_index(int index) {
+  ASSERT_EQ(BUILTIN, kind());
+  WRITE_INT32_FIELD(this, kKindSpecificFlags1Offset, index);
 }
 
 
@@ -4970,11 +4933,9 @@ void Code::set_constant_pool(Object* value) {
 }
 
 
-Code::Flags Code::ComputeFlags(Kind kind,
-                               InlineCacheState ic_state,
-                               ExtraICState extra_ic_state,
-                               StubType type,
-                               InlineCacheHolderFlag holder) {
+Code::Flags Code::ComputeFlags(Kind kind, InlineCacheState ic_state,
+                               ExtraICState extra_ic_state, StubType type,
+                               CacheHolderFlag holder) {
   // Compute the bit mask.
   unsigned int bits = KindField::encode(kind)
       | ICStateField::encode(ic_state)
@@ -4987,15 +4948,14 @@ Code::Flags Code::ComputeFlags(Kind kind,
 
 Code::Flags Code::ComputeMonomorphicFlags(Kind kind,
                                           ExtraICState extra_ic_state,
-                                          InlineCacheHolderFlag holder,
+                                          CacheHolderFlag holder,
                                           StubType type) {
   return ComputeFlags(kind, MONOMORPHIC, extra_ic_state, type, holder);
 }
 
 
-Code::Flags Code::ComputeHandlerFlags(Kind handler_kind,
-                                      StubType type,
-                                      InlineCacheHolderFlag holder) {
+Code::Flags Code::ComputeHandlerFlags(Kind handler_kind, StubType type,
+                                      CacheHolderFlag holder) {
   return ComputeFlags(Code::HANDLER, MONOMORPHIC, handler_kind, type, holder);
 }
 
@@ -5020,13 +4980,19 @@ Code::StubType Code::ExtractTypeFromFlags(Flags flags) {
 }
 
 
-InlineCacheHolderFlag Code::ExtractCacheHolderFromFlags(Flags flags) {
+CacheHolderFlag Code::ExtractCacheHolderFromFlags(Flags flags) {
   return CacheHolderField::decode(flags);
 }
 
 
 Code::Flags Code::RemoveTypeFromFlags(Flags flags) {
   int bits = flags & ~TypeField::kMask;
+  return static_cast<Flags>(bits);
+}
+
+
+Code::Flags Code::RemoveTypeAndHolderFromFlags(Flags flags) {
+  int bits = flags & ~TypeField::kMask & ~CacheHolderField::kMask;
   return static_cast<Flags>(bits);
 }
 
@@ -5591,6 +5557,7 @@ BOOL_ACCESSORS(SharedFunctionInfo, compiler_hints, is_function, kIsFunction)
 BOOL_ACCESSORS(SharedFunctionInfo, compiler_hints, dont_cache, kDontCache)
 BOOL_ACCESSORS(SharedFunctionInfo, compiler_hints, dont_flush, kDontFlush)
 BOOL_ACCESSORS(SharedFunctionInfo, compiler_hints, is_generator, kIsGenerator)
+BOOL_ACCESSORS(SharedFunctionInfo, compiler_hints, is_arrow, kIsArrow)
 
 ACCESSORS(CodeCache, default_cache, FixedArray, kDefaultCacheOffset)
 ACCESSORS(CodeCache, normal_type_cache, Object, kNormalTypeCacheOffset)
@@ -6032,8 +5999,7 @@ void JSProxy::InitializeBody(int object_size, Object* value) {
 }
 
 
-ACCESSORS(JSSet, table, Object, kTableOffset)
-ACCESSORS(JSMap, table, Object, kTableOffset)
+ACCESSORS(JSCollection, table, Object, kTableOffset)
 
 
 #define ORDERED_HASH_TABLE_ITERATOR_ACCESSORS(name, type, offset)    \
@@ -6142,7 +6108,7 @@ void Code::WipeOutHeader() {
   WRITE_FIELD(this, kHandlerTableOffset, NULL);
   WRITE_FIELD(this, kDeoptimizationDataOffset, NULL);
   WRITE_FIELD(this, kConstantPoolOffset, NULL);
-  // Do not wipe out e.g. a minor key.
+  // Do not wipe out major/minor keys on a code stub or IC
   if (!READ_FIELD(this, kTypeFeedbackInfoOffset)->IsSmi()) {
     WRITE_FIELD(this, kTypeFeedbackInfoOffset, NULL);
   }
@@ -6163,24 +6129,15 @@ void Code::set_type_feedback_info(Object* value, WriteBarrierMode mode) {
 }
 
 
-int Code::stub_info() {
-  ASSERT(kind() == COMPARE_IC || kind() == COMPARE_NIL_IC ||
-         kind() == BINARY_OP_IC || kind() == LOAD_IC || kind() == CALL_IC);
-  return Smi::cast(raw_type_feedback_info())->value();
+uint32_t Code::stub_key() {
+  ASSERT(IsCodeStubOrIC());
+  return Smi::cast(raw_type_feedback_info())->value() - Smi::kMinValue;
 }
 
 
-void Code::set_stub_info(int value) {
-  ASSERT(kind() == COMPARE_IC ||
-         kind() == COMPARE_NIL_IC ||
-         kind() == BINARY_OP_IC ||
-         kind() == STUB ||
-         kind() == LOAD_IC ||
-         kind() == CALL_IC ||
-         kind() == KEYED_LOAD_IC ||
-         kind() == STORE_IC ||
-         kind() == KEYED_STORE_IC);
-  set_raw_type_feedback_info(Smi::FromInt(value));
+void Code::set_stub_key(uint32_t key) {
+  ASSERT(IsCodeStubOrIC());
+  set_raw_type_feedback_info(Smi::FromInt(key + Smi::kMinValue));
 }
 
 
@@ -6580,6 +6537,35 @@ uint32_t StringHasher::HashSequentialString(const schar* chars,
 }
 
 
+uint32_t IteratingStringHasher::Hash(String* string, uint32_t seed) {
+  IteratingStringHasher hasher(string->length(), seed);
+  // Nothing to do.
+  if (hasher.has_trivial_hash()) return hasher.GetHashField();
+  ConsString* cons_string = String::VisitFlat(&hasher, string);
+  // The string was flat.
+  if (cons_string == NULL) return hasher.GetHashField();
+  // This is a ConsString, iterate across it.
+  ConsStringIteratorOp op(cons_string);
+  int offset;
+  while (NULL != (string = op.Next(&offset))) {
+    String::VisitFlat(&hasher, string, offset);
+  }
+  return hasher.GetHashField();
+}
+
+
+void IteratingStringHasher::VisitOneByteString(const uint8_t* chars,
+                                               int length) {
+  AddCharacters(chars, length);
+}
+
+
+void IteratingStringHasher::VisitTwoByteString(const uint16_t* chars,
+                                               int length) {
+  AddCharacters(chars, length);
+}
+
+
 bool Name::AsArrayIndex(uint32_t* index) {
   return IsString() && String::cast(this)->AsArrayIndex(index);
 }
@@ -6594,8 +6580,29 @@ bool String::AsArrayIndex(uint32_t* index) {
 }
 
 
-Object* JSReceiver::GetPrototype() const {
-  return map()->prototype();
+void String::SetForwardedInternalizedString(String* canonical) {
+  ASSERT(IsInternalizedString());
+  ASSERT(HasHashCode());
+  if (canonical == this) return;  // No need to forward.
+  ASSERT(SlowEquals(canonical));
+  ASSERT(canonical->IsInternalizedString());
+  ASSERT(canonical->HasHashCode());
+  WRITE_FIELD(this, kHashFieldOffset, canonical);
+  // Setting the hash field to a tagged value sets the LSB, causing the hash
+  // code to be interpreted as uninitialized.  We use this fact to recognize
+  // that we have a forwarded string.
+  ASSERT(!HasHashCode());
+}
+
+
+String* String::GetForwardedInternalizedString() {
+  ASSERT(IsInternalizedString());
+  if (HasHashCode()) return this;
+  String* canonical = String::cast(READ_FIELD(this, kHashFieldOffset));
+  ASSERT(canonical->IsInternalizedString());
+  ASSERT(SlowEquals(canonical));
+  ASSERT(canonical->HasHashCode());
+  return canonical;
 }
 
 
@@ -6651,7 +6658,9 @@ bool JSGlobalObject::IsDetached() {
 
 
 bool JSGlobalProxy::IsDetachedFrom(GlobalObject* global) const {
-  return GetPrototype() != global;
+  const PrototypeIterator iter(this->GetIsolate(),
+                               const_cast<JSGlobalProxy*>(this));
+  return iter.GetCurrent() != global;
 }
 
 

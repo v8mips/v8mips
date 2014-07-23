@@ -32,6 +32,7 @@
 #include "src/v8.h"
 
 #include "src/bootstrapper.h"
+#include "src/compilation-cache.h"
 #include "src/debug.h"
 #include "src/ic-inl.h"
 #include "src/natives.h"
@@ -177,9 +178,9 @@ class FileByteSink : public SnapshotByteSink {
       fclose(fp_);
     }
   }
-  virtual void Put(int byte, const char* description) {
+  virtual void Put(byte b, const char* description) {
     if (fp_ != NULL) {
-      fputc(byte, fp_);
+      fputc(b, fp_);
     }
   }
   virtual int Position() {
@@ -660,4 +661,186 @@ TEST(TestThatAlwaysFails) {
 DEPENDENT_TEST(DependentTestThatAlwaysFails, TestThatAlwaysSucceeds) {
   bool ArtificialFailure2 = false;
   CHECK(ArtificialFailure2);
+}
+
+
+int CountBuiltins() {
+  // Check that we have not deserialized any additional builtin.
+  HeapIterator iterator(CcTest::heap());
+  DisallowHeapAllocation no_allocation;
+  int counter = 0;
+  for (HeapObject* obj = iterator.next(); obj != NULL; obj = iterator.next()) {
+    if (obj->IsCode() && Code::cast(obj)->kind() == Code::BUILTIN) counter++;
+  }
+  return counter;
+}
+
+
+TEST(SerializeToplevelOnePlusOne) {
+  FLAG_serialize_toplevel = true;
+  LocalContext context;
+  Isolate* isolate = CcTest::i_isolate();
+  isolate->compilation_cache()->Disable();  // Disable same-isolate code cache.
+
+  v8::HandleScope scope(CcTest::isolate());
+
+  const char* source = "1 + 1";
+
+  Handle<String> orig_source = isolate->factory()
+                                   ->NewStringFromUtf8(CStrVector(source))
+                                   .ToHandleChecked();
+  Handle<String> copy_source = isolate->factory()
+                                   ->NewStringFromUtf8(CStrVector(source))
+                                   .ToHandleChecked();
+  CHECK(!orig_source.is_identical_to(copy_source));
+  CHECK(orig_source->Equals(*copy_source));
+
+  ScriptData* cache = NULL;
+
+  Handle<SharedFunctionInfo> orig = Compiler::CompileScript(
+      orig_source, Handle<String>(), 0, 0, false,
+      Handle<Context>(isolate->native_context()), NULL, &cache,
+      v8::ScriptCompiler::kProduceCodeCache, NOT_NATIVES_CODE);
+
+  int builtins_count = CountBuiltins();
+
+  Handle<SharedFunctionInfo> copy;
+  {
+    DisallowCompilation no_compile_expected(isolate);
+    copy = Compiler::CompileScript(
+        copy_source, Handle<String>(), 0, 0, false,
+        Handle<Context>(isolate->native_context()), NULL, &cache,
+        v8::ScriptCompiler::kConsumeCodeCache, NOT_NATIVES_CODE);
+  }
+
+  CHECK_NE(*orig, *copy);
+  CHECK(Script::cast(copy->script())->source() == *copy_source);
+
+  Handle<JSFunction> copy_fun =
+      isolate->factory()->NewFunctionFromSharedFunctionInfo(
+          copy, isolate->native_context());
+  Handle<JSObject> global(isolate->context()->global_object());
+  Handle<Object> copy_result =
+      Execution::Call(isolate, copy_fun, global, 0, NULL).ToHandleChecked();
+  CHECK_EQ(2, Handle<Smi>::cast(copy_result)->value());
+
+  CHECK_EQ(builtins_count, CountBuiltins());
+
+  delete cache;
+}
+
+
+TEST(SerializeToplevelInternalizedString) {
+  FLAG_serialize_toplevel = true;
+  LocalContext context;
+  Isolate* isolate = CcTest::i_isolate();
+  isolate->compilation_cache()->Disable();  // Disable same-isolate code cache.
+
+  v8::HandleScope scope(CcTest::isolate());
+
+  const char* source = "'string1'";
+
+  Handle<String> orig_source = isolate->factory()
+                                   ->NewStringFromUtf8(CStrVector(source))
+                                   .ToHandleChecked();
+  Handle<String> copy_source = isolate->factory()
+                                   ->NewStringFromUtf8(CStrVector(source))
+                                   .ToHandleChecked();
+  CHECK(!orig_source.is_identical_to(copy_source));
+  CHECK(orig_source->Equals(*copy_source));
+
+  Handle<JSObject> global(isolate->context()->global_object());
+  ScriptData* cache = NULL;
+
+  Handle<SharedFunctionInfo> orig = Compiler::CompileScript(
+      orig_source, Handle<String>(), 0, 0, false,
+      Handle<Context>(isolate->native_context()), NULL, &cache,
+      v8::ScriptCompiler::kProduceCodeCache, NOT_NATIVES_CODE);
+  Handle<JSFunction> orig_fun =
+      isolate->factory()->NewFunctionFromSharedFunctionInfo(
+          orig, isolate->native_context());
+  Handle<Object> orig_result =
+      Execution::Call(isolate, orig_fun, global, 0, NULL).ToHandleChecked();
+  CHECK(orig_result->IsInternalizedString());
+
+  int builtins_count = CountBuiltins();
+
+  Handle<SharedFunctionInfo> copy;
+  {
+    DisallowCompilation no_compile_expected(isolate);
+    copy = Compiler::CompileScript(
+        copy_source, Handle<String>(), 0, 0, false,
+        Handle<Context>(isolate->native_context()), NULL, &cache,
+        v8::ScriptCompiler::kConsumeCodeCache, NOT_NATIVES_CODE);
+  }
+  CHECK_NE(*orig, *copy);
+  CHECK(Script::cast(copy->script())->source() == *copy_source);
+
+  Handle<JSFunction> copy_fun =
+      isolate->factory()->NewFunctionFromSharedFunctionInfo(
+          copy, isolate->native_context());
+  CHECK_NE(*orig_fun, *copy_fun);
+  Handle<Object> copy_result =
+      Execution::Call(isolate, copy_fun, global, 0, NULL).ToHandleChecked();
+  CHECK(orig_result.is_identical_to(copy_result));
+  Handle<String> expected =
+      isolate->factory()->NewStringFromAsciiChecked("string1");
+
+  CHECK(Handle<String>::cast(copy_result)->Equals(*expected));
+  CHECK_EQ(builtins_count, CountBuiltins());
+
+  delete cache;
+}
+
+
+TEST(SerializeToplevelIsolates) {
+  FLAG_serialize_toplevel = true;
+
+  const char* source = "function f() { return 'abc'; }; f() + 'def'";
+  v8::ScriptCompiler::CachedData* cache;
+
+  v8::Isolate* isolate = v8::Isolate::New();
+  {
+    v8::Isolate::Scope iscope(isolate);
+    v8::HandleScope scope(isolate);
+    v8::Local<v8::Context> context = v8::Context::New(isolate);
+    v8::Context::Scope context_scope(context);
+
+    v8::Local<v8::String> source_str = v8_str(source);
+    v8::ScriptOrigin origin(v8_str("test"));
+    v8::ScriptCompiler::Source source(source_str, origin);
+    v8::Local<v8::UnboundScript> script = v8::ScriptCompiler::CompileUnbound(
+        isolate, &source, v8::ScriptCompiler::kProduceCodeCache);
+    const v8::ScriptCompiler::CachedData* data = source.GetCachedData();
+    // Persist cached data.
+    uint8_t* buffer = NewArray<uint8_t>(data->length);
+    MemCopy(buffer, data->data, data->length);
+    cache = new v8::ScriptCompiler::CachedData(
+        buffer, data->length, v8::ScriptCompiler::CachedData::BufferOwned);
+
+    v8::Local<v8::Value> result = script->BindToCurrentContext()->Run();
+    CHECK(result->ToString()->Equals(v8_str("abcdef")));
+  }
+  isolate->Dispose();
+
+  isolate = v8::Isolate::New();
+  {
+    v8::Isolate::Scope iscope(isolate);
+    v8::HandleScope scope(isolate);
+    v8::Local<v8::Context> context = v8::Context::New(isolate);
+    v8::Context::Scope context_scope(context);
+
+    v8::Local<v8::String> source_str = v8_str(source);
+    v8::ScriptOrigin origin(v8_str("test"));
+    v8::ScriptCompiler::Source source(source_str, origin, cache);
+    v8::Local<v8::UnboundScript> script;
+    {
+      DisallowCompilation no_compile(reinterpret_cast<Isolate*>(isolate));
+      script = v8::ScriptCompiler::CompileUnbound(
+          isolate, &source, v8::ScriptCompiler::kConsumeCodeCache);
+    }
+    v8::Local<v8::Value> result = script->BindToCurrentContext()->Run();
+    CHECK(result->ToString()->Equals(v8_str("abcdef")));
+  }
+  isolate->Dispose();
 }
