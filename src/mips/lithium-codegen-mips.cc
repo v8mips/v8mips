@@ -324,45 +324,74 @@ bool LCodeGen::GenerateDeferredCode() {
 
 bool LCodeGen::GenerateDeoptJumpTable() {
   if (deopt_jump_table_.length() > 0) {
+    Label needs_frame, call_deopt_entry;
+
     Comment(";;; -------------------- Jump table --------------------");
-  }
-  Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
-  Label table_start;
-  __ bind(&table_start);
-  Label needs_frame;
-  for (int i = 0; i < deopt_jump_table_.length(); i++) {
-    __ bind(&deopt_jump_table_[i].label);
-    Address entry = deopt_jump_table_[i].address;
-    Deoptimizer::BailoutType type = deopt_jump_table_[i].bailout_type;
-    int id = Deoptimizer::GetDeoptimizationId(isolate(), entry, type);
-    if (id == Deoptimizer::kNotDeoptimizationEntry) {
-      Comment(";;; jump table entry %d.", i);
-    } else {
+    Address base = deopt_jump_table_[0].address;
+
+    Register entry_offset = t9;
+
+    int length = deopt_jump_table_.length();
+    for (int i = 0; i < length; i++) {
+      __ bind(&deopt_jump_table_[i].label);
+
+      Deoptimizer::BailoutType type = deopt_jump_table_[i].bailout_type;
+      ASSERT(type == deopt_jump_table_[0].bailout_type);
+      Address entry = deopt_jump_table_[i].address;
+      int id = Deoptimizer::GetDeoptimizationId(isolate(), entry, type);
+      ASSERT(id != Deoptimizer::kNotDeoptimizationEntry);
       Comment(";;; jump table entry %d: deoptimization bailout %d.", i, id);
-    }
-    __ li(t9, Operand(ExternalReference::ForDeoptEntry(entry)));
-    if (deopt_jump_table_[i].needs_frame) {
-      ASSERT(!info()->saves_caller_doubles());
-      if (needs_frame.is_bound()) {
-        __ Branch(&needs_frame);
+
+      // Second-level deopt table entries are contiguous and small, so instead
+      // of loading the full, absolute address of each one, load an immediate
+      // offset which will be added to the base address later.
+      __ li(entry_offset, Operand(entry - base));
+
+      if (deopt_jump_table_[i].needs_frame) {
+        ASSERT(!info()->saves_caller_doubles());
+        if (needs_frame.is_bound()) {
+          __ Branch(&needs_frame);
+        } else {
+          __ bind(&needs_frame);
+          Comment(";;; call deopt with frame");
+          __ MultiPush(cp.bit() | fp.bit() | ra.bit());
+          // This variant of deopt can only be used with stubs. Since we don't
+          // have a function pointer to install in the stack frame that we're
+          // building, install a special marker there instead.
+          ASSERT(info()->IsStub());
+          __ li(at, Operand(Smi::FromInt(StackFrame::STUB)));
+          __ push(at);
+          __ Addu(fp, sp,
+                  Operand(StandardFrameConstants::kFixedFrameSizeFromFp));
+          __ bind(&call_deopt_entry);
+          // Add the base address to the offset previously loaded in
+          // entry_offset.
+          __ Addu(entry_offset, entry_offset,
+                  Operand(ExternalReference::ForDeoptEntry(base)));
+          __ Call(entry_offset);
+        }
       } else {
-        __ bind(&needs_frame);
-        __ MultiPush(cp.bit() | fp.bit() | ra.bit());
-        // This variant of deopt can only be used with stubs. Since we don't
-        // have a function pointer to install in the stack frame that we're
-        // building, install a special marker there instead.
-        ASSERT(info()->IsStub());
-        __ li(scratch0(), Operand(Smi::FromInt(StackFrame::STUB)));
-        __ push(scratch0());
-        __ Addu(fp, sp, Operand(StandardFrameConstants::kFixedFrameSizeFromFp));
-        __ Call(t9);
+        // The last entry can fall through into `call_deopt_entry`, avoiding a
+        // branch.
+        bool need_branch = ((i + 1) != length) || call_deopt_entry.is_bound();
+
+        if (need_branch) __ Branch(&call_deopt_entry);
       }
-    } else {
+    }
+
+    if (!call_deopt_entry.is_bound()) {
+      Comment(";;; call deopt");
+      __ bind(&call_deopt_entry);
+
       if (info()->saves_caller_doubles()) {
         ASSERT(info()->IsStub());
         RestoreCallerDoubles();
       }
-      __ Call(t9);
+
+      // Add the base address to the offset previously loaded in entry_offset.
+      __ Addu(entry_offset, entry_offset,
+              Operand(ExternalReference::ForDeoptEntry(base)));
+      __ Call(entry_offset);
     }
   }
   __ RecordComment("]");
@@ -984,15 +1013,6 @@ void LCodeGen::RecordSafepointWithRegisters(LPointerMap* pointers,
                                             Safepoint::DeoptMode deopt_mode) {
   RecordSafepoint(
       pointers, Safepoint::kWithRegisters, arguments, deopt_mode);
-}
-
-
-void LCodeGen::RecordSafepointWithRegistersAndDoubles(
-    LPointerMap* pointers,
-    int arguments,
-    Safepoint::DeoptMode deopt_mode) {
-  RecordSafepoint(
-      pointers, Safepoint::kWithRegistersAndDoubles, arguments, deopt_mode);
 }
 
 
@@ -2774,7 +2794,7 @@ void LCodeGen::DoDeferredInstanceOfKnownGlobal(LInstanceOfKnownGlobal* instr,
       flags | InstanceofStub::kReturnTrueFalseObject);
   InstanceofStub stub(isolate(), flags);
 
-  PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
+  PushSafepointRegistersScope scope(this);
   LoadContextFromDeferred(instr->context());
 
   // Get the temp register reserved by the instruction. This needs to be t0 as
@@ -2884,6 +2904,15 @@ void LCodeGen::DoLoadGlobalGeneric(LLoadGlobalGeneric* instr) {
   ASSERT(ToRegister(instr->result()).is(v0));
 
   __ li(LoadIC::NameRegister(), Operand(instr->name()));
+  if (FLAG_vector_ics) {
+    Register vector = ToRegister(instr->temp_vector());
+    ASSERT(vector.is(LoadIC::VectorRegister()));
+    __ li(vector, instr->hydrogen()->feedback_vector());
+    // No need to allocate this register.
+    ASSERT(LoadIC::SlotRegister().is(a0));
+    __ li(LoadIC::SlotRegister(),
+          Operand(Smi::FromInt(instr->hydrogen()->slot())));
+  }
   ContextualMode mode = instr->for_typeof() ? NOT_CONTEXTUAL : CONTEXTUAL;
   Handle<Code> ic = LoadIC::initialize_stub(isolate(), mode);
   CallCode(ic, RelocInfo::CODE_TARGET, instr);
@@ -3009,6 +3038,15 @@ void LCodeGen::DoLoadNamedGeneric(LLoadNamedGeneric* instr) {
 
   // Name is always in a2.
   __ li(LoadIC::NameRegister(), Operand(instr->name()));
+  if (FLAG_vector_ics) {
+    Register vector = ToRegister(instr->temp_vector());
+    ASSERT(vector.is(LoadIC::VectorRegister()));
+    __ li(vector, instr->hydrogen()->feedback_vector());
+    // No need to allocate this register.
+    ASSERT(LoadIC::SlotRegister().is(a0));
+    __ li(LoadIC::SlotRegister(),
+          Operand(Smi::FromInt(instr->hydrogen()->slot())));
+  }
   Handle<Code> ic = LoadIC::initialize_stub(isolate(), NOT_CONTEXTUAL);
   CallCode(ic, RelocInfo::CODE_TARGET, instr);
 }
@@ -3018,17 +3056,6 @@ void LCodeGen::DoLoadFunctionPrototype(LLoadFunctionPrototype* instr) {
   Register scratch = scratch0();
   Register function = ToRegister(instr->function());
   Register result = ToRegister(instr->result());
-
-  // Check that the function really is a function. Load map into the
-  // result register.
-  __ GetObjectType(function, result, scratch);
-  DeoptimizeIf(ne, instr->environment(), scratch, Operand(JS_FUNCTION_TYPE));
-
-  // Make sure that the function has an instance prototype.
-  Label non_instance;
-  __ lbu(scratch, FieldMemOperand(result, Map::kBitFieldOffset));
-  __ And(scratch, scratch, Operand(1 << Map::kHasNonInstancePrototype));
-  __ Branch(&non_instance, ne, scratch, Operand(zero_reg));
 
   // Get the prototype or initial map from the function.
   __ lw(result,
@@ -3045,12 +3072,6 @@ void LCodeGen::DoLoadFunctionPrototype(LLoadFunctionPrototype* instr) {
 
   // Get the prototype from the initial map.
   __ lw(result, FieldMemOperand(result, Map::kPrototypeOffset));
-  __ Branch(&done);
-
-  // Non-instance prototype: Fetch prototype from constructor field
-  // in initial map.
-  __ bind(&non_instance);
-  __ lw(result, FieldMemOperand(result, Map::kConstructorOffset));
 
   // All done.
   __ bind(&done);
@@ -3330,6 +3351,16 @@ void LCodeGen::DoLoadKeyedGeneric(LLoadKeyedGeneric* instr) {
   ASSERT(ToRegister(instr->object()).is(LoadIC::ReceiverRegister()));
   ASSERT(ToRegister(instr->key()).is(LoadIC::NameRegister()));
 
+  if (FLAG_vector_ics) {
+    Register vector = ToRegister(instr->temp_vector());
+    ASSERT(vector.is(LoadIC::VectorRegister()));
+    __ li(vector, instr->hydrogen()->feedback_vector());
+    // No need to allocate this register.
+    ASSERT(LoadIC::SlotRegister().is(a0));
+    __ li(LoadIC::SlotRegister(),
+          Operand(Smi::FromInt(instr->hydrogen()->slot())));
+  }
+
   Handle<Code> ic = isolate()->builtins()->KeyedLoadIC_Initialize();
   CallCode(ic, RelocInfo::CODE_TARGET, instr);
 }
@@ -3597,7 +3628,7 @@ void LCodeGen::DoDeferredMathAbsTaggedHeapNumber(LMathAbs* instr) {
   // Input is negative. Reverse its sign.
   // Preserve the value of all registers.
   {
-    PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
+    PushSafepointRegistersScope scope(this);
 
     // Registers were saved at the safepoint, so we can use
     // many scratch registers.
@@ -4131,11 +4162,10 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
 
 void LCodeGen::DoStoreNamedGeneric(LStoreNamedGeneric* instr) {
   ASSERT(ToRegister(instr->context()).is(cp));
-  ASSERT(ToRegister(instr->object()).is(a1));
-  ASSERT(ToRegister(instr->value()).is(a0));
+  ASSERT(ToRegister(instr->object()).is(StoreIC::ReceiverRegister()));
+  ASSERT(ToRegister(instr->value()).is(StoreIC::ValueRegister()));
 
-  // Name is always in a2.
-  __ li(a2, Operand(instr->name()));
+  __ li(StoreIC::NameRegister(), Operand(instr->name()));
   Handle<Code> ic = StoreIC::initialize_stub(isolate(), instr->strict_mode());
   CallCode(ic, RelocInfo::CODE_TARGET, instr);
 }
@@ -4363,9 +4393,9 @@ void LCodeGen::DoStoreKeyed(LStoreKeyed* instr) {
 
 void LCodeGen::DoStoreKeyedGeneric(LStoreKeyedGeneric* instr) {
   ASSERT(ToRegister(instr->context()).is(cp));
-  ASSERT(ToRegister(instr->object()).is(a2));
-  ASSERT(ToRegister(instr->key()).is(a1));
-  ASSERT(ToRegister(instr->value()).is(a0));
+  ASSERT(ToRegister(instr->object()).is(KeyedStoreIC::ReceiverRegister()));
+  ASSERT(ToRegister(instr->key()).is(KeyedStoreIC::NameRegister()));
+  ASSERT(ToRegister(instr->value()).is(KeyedStoreIC::ValueRegister()));
 
   Handle<Code> ic = (instr->strict_mode() == STRICT)
       ? isolate()->builtins()->KeyedStoreIC_Initialize_Strict()
@@ -4400,13 +4430,12 @@ void LCodeGen::DoTransitionElementsKind(LTransitionElementsKind* instr) {
   } else {
     ASSERT(object_reg.is(a0));
     ASSERT(ToRegister(instr->context()).is(cp));
-    PushSafepointRegistersScope scope(
-        this, Safepoint::kWithRegistersAndDoubles);
+    PushSafepointRegistersScope scope(this);
     __ li(a1, Operand(to_map));
     bool is_js_array = from_map->instance_type() == JS_ARRAY_TYPE;
     TransitionElementsKindStub stub(isolate(), from_kind, to_kind, is_js_array);
     __ CallStub(&stub);
-    RecordSafepointWithRegistersAndDoubles(
+    RecordSafepointWithRegisters(
         instr->pointer_map(), 0, Safepoint::kLazyDeopt);
   }
   __ bind(&not_applicable);
@@ -4469,7 +4498,7 @@ void LCodeGen::DoDeferredStringCharCodeAt(LStringCharCodeAt* instr) {
   // contained in the register pointer map.
   __ mov(result, zero_reg);
 
-  PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
+  PushSafepointRegistersScope scope(this);
   __ push(string);
   // Push the index as a smi. This is safe because of the checks in
   // DoStringCharCodeAt above.
@@ -4533,7 +4562,7 @@ void LCodeGen::DoDeferredStringCharFromCode(LStringCharFromCode* instr) {
   // contained in the register pointer map.
   __ mov(result, zero_reg);
 
-  PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
+  PushSafepointRegistersScope scope(this);
   __ SmiTag(char_code);
   __ push(char_code);
   CallRuntimeFromDeferred(Runtime::kCharFromCode, 1, instr, instr->context());
@@ -4666,7 +4695,7 @@ void LCodeGen::DoDeferredNumberTagIU(LInstruction* instr,
     __ mov(dst, zero_reg);
 
     // Preserve the value of all registers.
-    PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
+    PushSafepointRegistersScope scope(this);
 
     // NumberTagI and NumberTagD use the context from the frame, rather than
     // the environment's HContext or HInlinedContext value.
@@ -4732,7 +4761,7 @@ void LCodeGen::DoDeferredNumberTagD(LNumberTagD* instr) {
   Register reg = ToRegister(instr->result());
   __ mov(reg, zero_reg);
 
-  PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
+  PushSafepointRegistersScope scope(this);
   // NumberTagI and NumberTagD use the context from the frame, rather than
   // the environment's HContext or HInlinedContext value.
   // They only call Runtime::kAllocateHeapNumber.
@@ -5111,7 +5140,7 @@ void LCodeGen::DoCheckValue(LCheckValue* instr) {
 
 void LCodeGen::DoDeferredInstanceMigration(LCheckMaps* instr, Register object) {
   {
-    PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
+    PushSafepointRegistersScope scope(this);
     __ push(object);
     __ mov(cp, zero_reg);
     __ CallRuntimeSaveDoubles(Runtime::kTryMigrateInstance);
@@ -5323,7 +5352,7 @@ void LCodeGen::DoDeferredAllocate(LAllocate* instr) {
   // contained in the register pointer map.
   __ mov(result, zero_reg);
 
-  PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
+  PushSafepointRegistersScope scope(this);
   if (instr->size()->IsRegister()) {
     Register size = ToRegister(instr->size());
     ASSERT(!size.is(result));
@@ -5520,13 +5549,6 @@ Condition LCodeGen::EmitTypeofIs(Label* true_label,
     *cmp2 = Operand(input);
     final_branch_condition = eq;
 
-  } else if (FLAG_harmony_typeof &&
-             String::Equals(type_name, factory->null_string())) {
-    __ LoadRoot(at, Heap::kNullValueRootIndex);
-    *cmp1 = at;
-    *cmp2 = Operand(input);
-    final_branch_condition = eq;
-
   } else if (String::Equals(type_name, factory->undefined_string())) {
     __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
     __ Branch(USE_DELAY_SLOT, true_label, eq, at, Operand(input));
@@ -5552,10 +5574,8 @@ Condition LCodeGen::EmitTypeofIs(Label* true_label,
 
   } else if (String::Equals(type_name, factory->object_string())) {
     __ JumpIfSmi(input, false_label);
-    if (!FLAG_harmony_typeof) {
-      __ LoadRoot(at, Heap::kNullValueRootIndex);
-      __ Branch(USE_DELAY_SLOT, true_label, eq, at, Operand(input));
-    }
+    __ LoadRoot(at, Heap::kNullValueRootIndex);
+    __ Branch(USE_DELAY_SLOT, true_label, eq, at, Operand(input));
     Register map = input;
     __ GetObjectType(input, map, scratch);
     __ Branch(false_label,
@@ -5661,7 +5681,7 @@ void LCodeGen::DoDummyUse(LDummyUse* instr) {
 
 
 void LCodeGen::DoDeferredStackCheck(LStackCheck* instr) {
-  PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
+  PushSafepointRegistersScope scope(this);
   LoadContextFromDeferred(instr->context());
   __ CallRuntimeSaveDoubles(Runtime::kStackGuard);
   RecordSafepointWithLazyDeopt(
@@ -5803,7 +5823,7 @@ void LCodeGen::DoDeferredLoadMutableDouble(LLoadFieldByIndex* instr,
                                            Register result,
                                            Register object,
                                            Register index) {
-  PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
+  PushSafepointRegistersScope scope(this);
   __ Push(object, index);
   __ mov(cp, zero_reg);
   __ CallRuntimeSaveDoubles(Runtime::kLoadMutableDouble);

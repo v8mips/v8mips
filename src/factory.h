@@ -197,10 +197,6 @@ class Factory V8_FINAL {
   MUST_USE_RESULT MaybeHandle<String> NewConsString(Handle<String> left,
                                                     Handle<String> right);
 
-  // Create a new sequential string containing the concatenation of the inputs.
-  Handle<String> NewFlatConcatString(Handle<String> first,
-                                     Handle<String> second);
-
   // Create a new string object which holds a proper substring of a string.
   Handle<String> NewProperSubString(Handle<String> str,
                                     int begin,
@@ -611,11 +607,8 @@ class Factory V8_FINAL {
 
   // Allocates a new SharedFunctionInfo object.
   Handle<SharedFunctionInfo> NewSharedFunctionInfo(
-      Handle<String> name,
-      int number_of_literals,
-      bool is_generator,
-      Handle<Code> code,
-      Handle<ScopeInfo> scope_info,
+      Handle<String> name, int number_of_literals, bool is_generator,
+      bool is_arrow, Handle<Code> code, Handle<ScopeInfo> scope_info,
       Handle<FixedArray> feedback_vector);
   Handle<SharedFunctionInfo> NewSharedFunctionInfo(Handle<String> name,
                                                    MaybeHandle<Code> code);

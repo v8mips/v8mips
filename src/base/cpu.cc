@@ -456,6 +456,7 @@ CPU::CPU() : stepping_(0),
 #endif  // V8_OS_LINUX
 
 #elif V8_HOST_ARCH_MIPS || V8_HOST_ARCH_MIPS64
+
   // Simple detection of FPU at runtime for Linux.
   // It is based on /proc/cpuinfo, which reveals hardware configuration
   // to user-space applications.  According to MIPS (early 2010), no similar

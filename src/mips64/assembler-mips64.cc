@@ -2182,7 +2182,7 @@ void Assembler::clz(Register rd, Register rs) {
 void Assembler::ins_(Register rt, Register rs, uint16_t pos, uint16_t size) {
   // Should be called via MacroAssembler::Ins.
   // Ins instr has 'rt' field as dest, and two uint5: msb, lsb.
-  ASSERT((kArchVariant == kMips64r2) | (kArchVariant == kMips64r6));
+  ASSERT((kArchVariant == kMips64r2) || (kArchVariant == kMips64r6));
   GenInstrRegister(SPECIAL3, rs, rt, pos + size - 1, pos, INS);
 }
 

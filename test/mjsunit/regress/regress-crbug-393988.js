@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-__defineSetter__('x', function() { });
-Object.freeze(this);
-eval('const x = 1');
+var o = {};
+Error.captureStackTrace(o);
+Object.defineProperty(o, "stack", { value: 1 });
+assertEquals(1, o.stack);

@@ -122,32 +122,6 @@ void MacroAssembler::PopSafepointRegisters() {
 }
 
 
-void MacroAssembler::PushSafepointRegistersAndDoubles() {
-  PushSafepointRegisters();
-  Dsubu(sp, sp, Operand(FPURegister::NumAllocatableRegisters() * kDoubleSize));
-  for (int i = 0; i < FPURegister::NumAllocatableRegisters(); i++) {
-    FPURegister reg = FPURegister::FromAllocationIndex(i);
-    sdc1(reg, MemOperand(sp, i * kDoubleSize));
-  }
-}
-
-
-void MacroAssembler::PopSafepointRegistersAndDoubles() {
-  for (int i = 0; i < FPURegister::NumAllocatableRegisters(); i++) {
-    FPURegister reg = FPURegister::FromAllocationIndex(i);
-    ldc1(reg, MemOperand(sp, i * kDoubleSize));
-  }
-  Daddu(sp, sp, Operand(FPURegister::NumAllocatableRegisters() * kDoubleSize));
-  PopSafepointRegisters();
-}
-
-
-void MacroAssembler::StoreToSafepointRegistersAndDoublesSlot(Register src,
-                                                             Register dst) {
-  sd(src, SafepointRegistersAndDoublesSlot(dst));
-}
-
-
 void MacroAssembler::StoreToSafepointRegisterSlot(Register src, Register dst) {
   sd(src, SafepointRegisterSlot(dst));
 }
@@ -742,6 +716,7 @@ void MacroAssembler::Mulh(Register rd, Register rs, const Operand& rt) {
   }
 }
 
+
 void MacroAssembler::Dmul(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     if (kArchVariant == kLoongson) {
@@ -876,6 +851,7 @@ void MacroAssembler::Ddiv(Register rs, const Operand& rt) {
     ddiv(rs, at);
   }
 }
+
 
 void MacroAssembler::Ddiv(Register rd, Register rs, const Operand& rt) {
   if (kArchVariant != kMips64r6) {
@@ -2615,8 +2591,6 @@ void MacroAssembler::BranchAndLinkShort(int16_t offset, Condition cond,
         nop();
         bal(offset);
         break;
-
-
       default:
         UNREACHABLE();
     }
@@ -3587,7 +3561,7 @@ void MacroAssembler::AllocateHeapNumber(Register result,
   Allocate(HeapNumber::kSize, result, scratch1, scratch2, need_gc,
            tagging_mode == TAG_RESULT ? TAG_OBJECT : NO_ALLOCATION_FLAGS);
 
-   Heap::RootListIndex map_index = mode == MUTABLE
+  Heap::RootListIndex map_index = mode == MUTABLE
       ? Heap::kMutableHeapNumberMapRootIndex
       : Heap::kHeapNumberMapRootIndex;
   AssertIsRoot(heap_number_map, map_index);
@@ -6062,14 +6036,30 @@ void MacroAssembler::JumpIfDictionaryInPrototypeChain(
 }
 
 
-bool AreAliased(Register r1, Register r2, Register r3, Register r4) {
-  if (r1.is(r2)) return true;
-  if (r1.is(r3)) return true;
-  if (r1.is(r4)) return true;
-  if (r2.is(r3)) return true;
-  if (r2.is(r4)) return true;
-  if (r3.is(r4)) return true;
-  return false;
+bool AreAliased(Register reg1,
+                Register reg2,
+                Register reg3,
+                Register reg4,
+                Register reg5,
+                Register reg6,
+                Register reg7,
+                Register reg8) {
+  int n_of_valid_regs = reg1.is_valid() + reg2.is_valid() +
+      reg3.is_valid() + reg4.is_valid() + reg5.is_valid() + reg6.is_valid() +
+      reg7.is_valid() + reg8.is_valid();
+
+  RegList regs = 0;
+  if (reg1.is_valid()) regs |= reg1.bit();
+  if (reg2.is_valid()) regs |= reg2.bit();
+  if (reg3.is_valid()) regs |= reg3.bit();
+  if (reg4.is_valid()) regs |= reg4.bit();
+  if (reg5.is_valid()) regs |= reg5.bit();
+  if (reg6.is_valid()) regs |= reg6.bit();
+  if (reg7.is_valid()) regs |= reg7.bit();
+  if (reg8.is_valid()) regs |= reg8.bit();
+  int n_of_non_aliasing_regs = NumRegs(regs);
+
+  return n_of_valid_regs != n_of_non_aliasing_regs;
 }
 
 

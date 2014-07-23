@@ -290,8 +290,7 @@ void BreakableStatementChecker::VisitThisFunction(ThisFunction* expr) {
 bool FullCodeGenerator::MakeCode(CompilationInfo* info) {
   Isolate* isolate = info->isolate();
 
-  Logger::TimerEventScope timer(
-      isolate, Logger::TimerEventScope::v8_compile_full_code);
+  TimerEventScope<TimerEventCompileFullCode> timer(info->isolate());
 
   Handle<Script> script = info->script();
   if (!script->IsUndefined() && !script->source()->IsUndefined()) {
@@ -303,9 +302,6 @@ bool FullCodeGenerator::MakeCode(CompilationInfo* info) {
   MacroAssembler masm(info->isolate(), NULL, kInitialBufferSize);
   if (info->will_serialize()) masm.enable_serializer();
 
-#ifdef ENABLE_GDB_JIT_INTERFACE
-  masm.positions_recorder()->StartGDBJITLineInfoRecording();
-#endif
   LOG_CODE_EVENT(isolate,
                  CodeStartLinePosInfoRecordEvent(masm.positions_recorder()));
 
@@ -332,13 +328,6 @@ bool FullCodeGenerator::MakeCode(CompilationInfo* info) {
   code->set_back_edge_table_offset(table_offset);
   CodeGenerator::PrintCode(code, info);
   info->SetCode(code);
-#ifdef ENABLE_GDB_JIT_INTERFACE
-  if (FLAG_gdbjit) {
-    GDBJITLineInfo* lineinfo =
-        masm.positions_recorder()->DetachGDBJITLineInfo();
-    GDBJIT(RegisterDetailedLineInfo(*code, lineinfo));
-  }
-#endif
   void* line_info = masm.positions_recorder()->DetachJITHandlerData();
   LOG_CODE_EVENT(isolate, CodeEndLinePosInfoRecordEvent(*code, line_info));
   return true;
@@ -1523,7 +1512,7 @@ void FullCodeGenerator::VisitFunctionLiteral(FunctionLiteral* expr) {
 
   // Build the function boilerplate and instantiate it.
   Handle<SharedFunctionInfo> function_info =
-      Compiler::BuildFunctionInfo(expr, script());
+      Compiler::BuildFunctionInfo(expr, script(), info_);
   if (function_info.is_null()) {
     SetStackOverflow();
     return;
@@ -1549,10 +1538,11 @@ void FullCodeGenerator::VisitNativeFunctionLiteral(
   Handle<Code> code = Handle<Code>(fun->shared()->code());
   Handle<Code> construct_stub = Handle<Code>(fun->shared()->construct_stub());
   bool is_generator = false;
+  bool is_arrow = false;
   Handle<SharedFunctionInfo> shared =
       isolate()->factory()->NewSharedFunctionInfo(
-          name, literals, is_generator,
-          code, Handle<ScopeInfo>(fun->shared()->scope_info()),
+          name, literals, is_generator, is_arrow, code,
+          Handle<ScopeInfo>(fun->shared()->scope_info()),
           Handle<FixedArray>(fun->shared()->feedback_vector()));
   shared->set_construct_stub(*construct_stub);
 

@@ -543,19 +543,6 @@ MaybeHandle<String> Factory::NewConsString(Handle<String> left,
 }
 
 
-Handle<String> Factory::NewFlatConcatString(Handle<String> first,
-                                            Handle<String> second) {
-  int total_length = first->length() + second->length();
-  if (first->IsOneByteRepresentation() && second->IsOneByteRepresentation()) {
-    return ConcatStringContent<uint8_t>(
-        NewRawOneByteString(total_length).ToHandleChecked(), first, second);
-  } else {
-    return ConcatStringContent<uc16>(
-        NewRawTwoByteString(total_length).ToHandleChecked(), first, second);
-  }
-}
-
-
 Handle<String> Factory::NewProperSubString(Handle<String> str,
                                            int begin,
                                            int end) {
@@ -1230,6 +1217,7 @@ void Factory::InitializeFunction(Handle<JSFunction> function,
   function->set_prototype_or_initial_map(*the_hole_value());
   function->set_literals_or_bindings(*empty_fixed_array());
   function->set_next_function_link(*undefined_value());
+  if (info->is_arrow()) function->RemovePrototype();
 }
 
 
@@ -1449,7 +1437,7 @@ Handle<Code> Factory::NewCode(const CodeDesc& desc,
   code->set_raw_kind_specific_flags2(0);
   code->set_is_crankshafted(crankshafted);
   code->set_deoptimization_data(*empty_fixed_array(), SKIP_WRITE_BARRIER);
-  code->set_raw_type_feedback_info(*undefined_value());
+  code->set_raw_type_feedback_info(Smi::FromInt(0));
   code->set_next_code_link(*undefined_value());
   code->set_handler_table(*empty_fixed_array(), SKIP_WRITE_BARRIER);
   code->set_prologue_offset(prologue_offset);
@@ -1889,15 +1877,13 @@ Handle<FixedArray> Factory::NewTypeFeedbackVector(int slot_count) {
 
 
 Handle<SharedFunctionInfo> Factory::NewSharedFunctionInfo(
-    Handle<String> name,
-    int number_of_literals,
-    bool is_generator,
-    Handle<Code> code,
-    Handle<ScopeInfo> scope_info,
+    Handle<String> name, int number_of_literals, bool is_generator,
+    bool is_arrow, Handle<Code> code, Handle<ScopeInfo> scope_info,
     Handle<FixedArray> feedback_vector) {
   Handle<SharedFunctionInfo> shared = NewSharedFunctionInfo(name, code);
   shared->set_scope_info(*scope_info);
   shared->set_feedback_vector(*feedback_vector);
+  shared->set_is_arrow(is_arrow);
   int literals_array_size = number_of_literals;
   // If the function contains object, regexp or array literals,
   // allocate extra space for a literals array prefix containing the
@@ -2098,11 +2084,9 @@ Handle<JSObject> Factory::NewArgumentsObject(Handle<JSFunction> callee,
   ASSERT(!isolate()->has_pending_exception());
   Handle<JSObject> result = NewJSObjectFromMap(map);
   Handle<Smi> value(Smi::FromInt(length), isolate());
-  JSReceiver::SetProperty(result, length_string(), value, NONE, STRICT)
-      .Assert();
+  Object::SetProperty(result, length_string(), value, STRICT).Assert();
   if (!strict_mode_callee) {
-    JSReceiver::SetProperty(result, callee_string(), callee, NONE, STRICT)
-        .Assert();
+    Object::SetProperty(result, callee_string(), callee, STRICT).Assert();
   }
   return result;
 }

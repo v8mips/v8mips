@@ -4373,7 +4373,7 @@ THREADED_TEST(PropertyAttributes) {
   CHECK_EQ(v8::None, context->Global()->GetPropertyAttributes(prop));
   // read-only
   prop = v8_str("read_only");
-  context->Global()->Set(prop, v8_num(7), v8::ReadOnly);
+  context->Global()->ForceSet(prop, v8_num(7), v8::ReadOnly);
   CHECK_EQ(7, context->Global()->Get(prop)->Int32Value());
   CHECK_EQ(v8::ReadOnly, context->Global()->GetPropertyAttributes(prop));
   CompileRun("read_only = 9");
@@ -4382,14 +4382,14 @@ THREADED_TEST(PropertyAttributes) {
   CHECK_EQ(7, context->Global()->Get(prop)->Int32Value());
   // dont-delete
   prop = v8_str("dont_delete");
-  context->Global()->Set(prop, v8_num(13), v8::DontDelete);
+  context->Global()->ForceSet(prop, v8_num(13), v8::DontDelete);
   CHECK_EQ(13, context->Global()->Get(prop)->Int32Value());
   CompileRun("delete dont_delete");
   CHECK_EQ(13, context->Global()->Get(prop)->Int32Value());
   CHECK_EQ(v8::DontDelete, context->Global()->GetPropertyAttributes(prop));
   // dont-enum
   prop = v8_str("dont_enum");
-  context->Global()->Set(prop, v8_num(28), v8::DontEnum);
+  context->Global()->ForceSet(prop, v8_num(28), v8::DontEnum);
   CHECK_EQ(v8::DontEnum, context->Global()->GetPropertyAttributes(prop));
   // absent
   prop = v8_str("absent");
@@ -5312,15 +5312,28 @@ THREADED_TEST(TryCatchAndFinally) {
 }
 
 
-static void TryCatchNestedHelper(int depth) {
+static void TryCatchNested1Helper(int depth) {
   if (depth > 0) {
     v8::TryCatch try_catch;
     try_catch.SetVerbose(true);
-    TryCatchNestedHelper(depth - 1);
+    TryCatchNested1Helper(depth - 1);
     CHECK(try_catch.HasCaught());
     try_catch.ReThrow();
   } else {
-    CcTest::isolate()->ThrowException(v8_str("back"));
+    CcTest::isolate()->ThrowException(v8_str("E1"));
+  }
+}
+
+
+static void TryCatchNested2Helper(int depth) {
+  if (depth > 0) {
+    v8::TryCatch try_catch;
+    try_catch.SetVerbose(true);
+    TryCatchNested2Helper(depth - 1);
+    CHECK(try_catch.HasCaught());
+    try_catch.ReThrow();
+  } else {
+    CompileRun("throw 'E2';");
   }
 }
 
@@ -5329,10 +5342,22 @@ TEST(TryCatchNested) {
   v8::V8::Initialize();
   LocalContext context;
   v8::HandleScope scope(context->GetIsolate());
-  v8::TryCatch try_catch;
-  TryCatchNestedHelper(5);
-  CHECK(try_catch.HasCaught());
-  CHECK_EQ(0, strcmp(*v8::String::Utf8Value(try_catch.Exception()), "back"));
+
+  {
+    // Test nested try-catch with a native throw in the end.
+    v8::TryCatch try_catch;
+    TryCatchNested1Helper(5);
+    CHECK(try_catch.HasCaught());
+    CHECK_EQ(0, strcmp(*v8::String::Utf8Value(try_catch.Exception()), "E1"));
+  }
+
+  {
+    // Test nested try-catch with a JavaScript throw in the end.
+    v8::TryCatch try_catch;
+    TryCatchNested2Helper(5);
+    CHECK(try_catch.HasCaught());
+    CHECK_EQ(0, strcmp(*v8::String::Utf8Value(try_catch.Exception()), "E2"));
+  }
 }
 
 
@@ -5375,6 +5400,28 @@ TEST(TryCatchMixedNesting) {
   LocalContext context(0, templ);
   CompileRunWithOrigin("TryCatchMixedNestingHelper();\n", "outer", 1, 1);
   TryCatchMixedNestingCheck(&try_catch);
+}
+
+
+void TryCatchNativeHelper(const v8::FunctionCallbackInfo<v8::Value>& args) {
+  ApiTestFuzzer::Fuzz();
+  v8::TryCatch try_catch;
+  args.GetIsolate()->ThrowException(v8_str("boom"));
+  CHECK(try_catch.HasCaught());
+}
+
+
+TEST(TryCatchNative) {
+  v8::Isolate* isolate = CcTest::isolate();
+  v8::HandleScope scope(isolate);
+  v8::V8::Initialize();
+  v8::TryCatch try_catch;
+  Local<ObjectTemplate> templ = ObjectTemplate::New(isolate);
+  templ->Set(v8_str("TryCatchNativeHelper"),
+             v8::FunctionTemplate::New(isolate, TryCatchNativeHelper));
+  LocalContext context(0, templ);
+  CompileRun("TryCatchNativeHelper();");
+  CHECK(!try_catch.HasCaught());
 }
 
 
@@ -14811,134 +14858,21 @@ TEST(PreCompileSerialization) {
   const char* script = "function foo(a) { return a+1; }";
   v8::ScriptCompiler::Source source(v8_str(script));
   v8::ScriptCompiler::Compile(isolate, &source,
-                              v8::ScriptCompiler::kProduceDataToCache);
+                              v8::ScriptCompiler::kProduceParserCache);
   // Serialize.
   const v8::ScriptCompiler::CachedData* cd = source.GetCachedData();
-  char* serialized_data = i::NewArray<char>(cd->length);
+  i::byte* serialized_data = i::NewArray<i::byte>(cd->length);
   i::MemCopy(serialized_data, cd->data, cd->length);
 
   // Deserialize.
-  i::ScriptData* deserialized = i::ScriptData::New(serialized_data, cd->length);
+  i::ScriptData* deserialized = new i::ScriptData(serialized_data, cd->length);
 
   // Verify that the original is the same as the deserialized.
-  CHECK_EQ(cd->length, deserialized->Length());
-  CHECK_EQ(0, memcmp(cd->data, deserialized->Data(), cd->length));
+  CHECK_EQ(cd->length, deserialized->length());
+  CHECK_EQ(0, memcmp(cd->data, deserialized->data(), cd->length));
 
   delete deserialized;
   i::DeleteArray(serialized_data);
-}
-
-
-// Attempts to deserialize bad data.
-TEST(PreCompileDeserializationError) {
-  v8::V8::Initialize();
-  const char* data = "DONT CARE";
-  int invalid_size = 3;
-  i::ScriptData* sd = i::ScriptData::New(data, invalid_size);
-  CHECK_EQ(NULL, sd);
-}
-
-
-TEST(CompileWithInvalidCachedData) {
-  v8::V8::Initialize();
-  v8::Isolate* isolate = CcTest::isolate();
-  LocalContext context;
-  v8::HandleScope scope(context->GetIsolate());
-  i::FLAG_min_preparse_length = 0;
-
-  const char* script = "function foo(){ return 5;}\n"
-      "function bar(){ return 6 + 7;}  foo();";
-  v8::ScriptCompiler::Source source(v8_str(script));
-  v8::ScriptCompiler::Compile(isolate, &source,
-                              v8::ScriptCompiler::kProduceDataToCache);
-  // source owns its cached data. Create a ScriptData based on it. The user
-  // never needs to create ScriptDatas any more; we only need it here because we
-  // want to modify the data before passing it back.
-  const v8::ScriptCompiler::CachedData* cd = source.GetCachedData();
-  // ScriptData does not take ownership of the buffers passed to it.
-  i::ScriptData* sd =
-      i::ScriptData::New(reinterpret_cast<const char*>(cd->data), cd->length);
-  CHECK(!sd->HasError());
-  // ScriptData private implementation details
-  const int kHeaderSize = i::PreparseDataConstants::kHeaderSize;
-  const int kFunctionEntrySize = i::FunctionEntry::kSize;
-  const int kFunctionEntryStartOffset = 0;
-  const int kFunctionEntryEndOffset = 1;
-  unsigned* sd_data =
-      reinterpret_cast<unsigned*>(const_cast<char*>(sd->Data()));
-
-  // Overwrite function bar's end position with 0.
-  sd_data[kHeaderSize + 1 * kFunctionEntrySize + kFunctionEntryEndOffset] = 0;
-  v8::TryCatch try_catch;
-
-  // Make the script slightly different so that we don't hit the compilation
-  // cache. Don't change the lenghts of tokens.
-  const char* script2 = "function foo(){ return 6;}\n"
-      "function bar(){ return 6 + 7;}  foo();";
-  v8::ScriptCompiler::Source source2(
-      v8_str(script2),
-      // CachedData doesn't take ownership of the buffers, Source takes
-      // ownership of CachedData.
-      new v8::ScriptCompiler::CachedData(
-          reinterpret_cast<const uint8_t*>(sd->Data()), sd->Length()));
-  Local<v8::UnboundScript> compiled_script =
-      v8::ScriptCompiler::CompileUnbound(isolate, &source2);
-
-  CHECK(try_catch.HasCaught());
-  {
-    String::Utf8Value exception_value(try_catch.Message()->Get());
-    CHECK_EQ("Uncaught SyntaxError: Invalid cached data for function bar",
-             *exception_value);
-  }
-
-  try_catch.Reset();
-  delete sd;
-
-  // Overwrite function bar's start position with 200. The function entry will
-  // not be found when searching for it by position, and the compilation fails.
-
-  // ScriptData does not take ownership of the buffers passed to it.
-  sd = i::ScriptData::New(reinterpret_cast<const char*>(cd->data), cd->length);
-  sd_data = reinterpret_cast<unsigned*>(const_cast<char*>(sd->Data()));
-  sd_data[kHeaderSize + 1 * kFunctionEntrySize + kFunctionEntryStartOffset] =
-      200;
-  const char* script3 = "function foo(){ return 7;}\n"
-      "function bar(){ return 6 + 7;}  foo();";
-  v8::ScriptCompiler::Source source3(
-      v8_str(script3),
-      new v8::ScriptCompiler::CachedData(
-          reinterpret_cast<const uint8_t*>(sd->Data()), sd->Length()));
-  compiled_script =
-      v8::ScriptCompiler::CompileUnbound(isolate, &source3);
-  CHECK(try_catch.HasCaught());
-  {
-    String::Utf8Value exception_value(try_catch.Message()->Get());
-    CHECK_EQ("Uncaught SyntaxError: Invalid cached data for function bar",
-             *exception_value);
-  }
-  CHECK(compiled_script.IsEmpty());
-  try_catch.Reset();
-  delete sd;
-
-  // Try passing in cached data which is obviously invalid (wrong length).
-  sd = i::ScriptData::New(reinterpret_cast<const char*>(cd->data), cd->length);
-  const char* script4 =
-      "function foo(){ return 8;}\n"
-      "function bar(){ return 6 + 7;}  foo();";
-  v8::ScriptCompiler::Source source4(
-      v8_str(script4),
-      new v8::ScriptCompiler::CachedData(
-          reinterpret_cast<const uint8_t*>(sd->Data()), sd->Length() - 1));
-  compiled_script =
-      v8::ScriptCompiler::CompileUnbound(isolate, &source4);
-  CHECK(try_catch.HasCaught());
-  {
-    String::Utf8Value exception_value(try_catch.Message()->Get());
-    CHECK_EQ("Uncaught SyntaxError: Invalid cached data",
-             *exception_value);
-  }
-  CHECK(compiled_script.IsEmpty());
-  delete sd;
 }
 
 
@@ -15260,8 +15194,10 @@ TEST(ReadOnlyPropertyInGlobalProto) {
   v8::Handle<v8::Object> global = context->Global();
   v8::Handle<v8::Object> global_proto =
       v8::Handle<v8::Object>::Cast(global->Get(v8_str("__proto__")));
-  global_proto->Set(v8_str("x"), v8::Integer::New(isolate, 0), v8::ReadOnly);
-  global_proto->Set(v8_str("y"), v8::Integer::New(isolate, 0), v8::ReadOnly);
+  global_proto->ForceSet(v8_str("x"), v8::Integer::New(isolate, 0),
+                         v8::ReadOnly);
+  global_proto->ForceSet(v8_str("y"), v8::Integer::New(isolate, 0),
+                         v8::ReadOnly);
   // Check without 'eval' or 'with'.
   v8::Handle<v8::Value> res =
       CompileRun("function f() { x = 42; return x; }; f()");
@@ -15319,7 +15255,7 @@ TEST(ForceSet) {
   // Ordinary properties
   v8::Handle<v8::String> simple_property =
       v8::String::NewFromUtf8(isolate, "p");
-  global->Set(simple_property, v8::Int32::New(isolate, 4), v8::ReadOnly);
+  global->ForceSet(simple_property, v8::Int32::New(isolate, 4), v8::ReadOnly);
   CHECK_EQ(4, global->Get(simple_property)->Int32Value());
   // This should fail because the property is read-only
   global->Set(simple_property, v8::Int32::New(isolate, 5));
@@ -15407,7 +15343,7 @@ THREADED_TEST(ForceDelete) {
   // Ordinary properties
   v8::Handle<v8::String> simple_property =
       v8::String::NewFromUtf8(isolate, "p");
-  global->Set(simple_property, v8::Int32::New(isolate, 4), v8::DontDelete);
+  global->ForceSet(simple_property, v8::Int32::New(isolate, 4), v8::DontDelete);
   CHECK_EQ(4, global->Get(simple_property)->Int32Value());
   // This should fail because the property is dont-delete.
   CHECK(!global->Delete(simple_property));
@@ -15444,7 +15380,8 @@ THREADED_TEST(ForceDeleteWithInterceptor) {
 
   v8::Handle<v8::String> some_property =
       v8::String::NewFromUtf8(isolate, "a");
-  global->Set(some_property, v8::Integer::New(isolate, 42), v8::DontDelete);
+  global->ForceSet(some_property, v8::Integer::New(isolate, 42),
+                   v8::DontDelete);
 
   // Deleting a property should get intercepted and nothing should
   // happen.
@@ -19697,7 +19634,7 @@ TEST(DontDeleteCellLoadICAPI) {
   // cell created using the API.
   LocalContext context;
   v8::HandleScope scope(context->GetIsolate());
-  context->Global()->Set(v8_str("cell"), v8_str("value"), v8::DontDelete);
+  context->Global()->ForceSet(v8_str("cell"), v8_str("value"), v8::DontDelete);
   ExpectBoolean("delete cell", false);
   CompileRun(function_code);
   ExpectString("readCell()", "value");
@@ -20294,15 +20231,15 @@ THREADED_TEST(ReadOnlyIndexedProperties) {
   LocalContext context;
   Local<v8::Object> obj = templ->NewInstance();
   context->Global()->Set(v8_str("obj"), obj);
-  obj->Set(v8_str("1"), v8_str("DONT_CHANGE"), v8::ReadOnly);
+  obj->ForceSet(v8_str("1"), v8_str("DONT_CHANGE"), v8::ReadOnly);
   obj->Set(v8_str("1"), v8_str("foobar"));
   CHECK_EQ(v8_str("DONT_CHANGE"), obj->Get(v8_str("1")));
-  obj->Set(v8_num(2), v8_str("DONT_CHANGE"), v8::ReadOnly);
+  obj->ForceSet(v8_num(2), v8_str("DONT_CHANGE"), v8::ReadOnly);
   obj->Set(v8_num(2), v8_str("foobar"));
   CHECK_EQ(v8_str("DONT_CHANGE"), obj->Get(v8_num(2)));
 
   // Test non-smi case.
-  obj->Set(v8_str("2000000000"), v8_str("DONT_CHANGE"), v8::ReadOnly);
+  obj->ForceSet(v8_str("2000000000"), v8_str("DONT_CHANGE"), v8::ReadOnly);
   obj->Set(v8_str("2000000000"), v8_str("foobar"));
   CHECK_EQ(v8_str("DONT_CHANGE"), obj->Get(v8_str("2000000000")));
 }
@@ -21747,7 +21684,7 @@ TEST(AccessCheckThrows) {
   CheckCorrectThrow("has_own_property(other, 'x')");
   CheckCorrectThrow("%GetProperty(other, 'x')");
   CheckCorrectThrow("%SetProperty(other, 'x', 'foo', 0)");
-  CheckCorrectThrow("%AddProperty(other, 'x', 'foo', 1)");
+  CheckCorrectThrow("%AddNamedProperty(other, 'x', 'foo', 1)");
   CheckCorrectThrow("%DeleteProperty(other, 'x', 0)");
   CheckCorrectThrow("%DeleteProperty(other, '1', 0)");
   CheckCorrectThrow("%HasOwnProperty(other, 'x')");

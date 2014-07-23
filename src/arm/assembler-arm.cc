@@ -1495,11 +1495,13 @@ void Assembler::mov_label_offset(Register dst, Label* label) {
 
 
 void Assembler::movw(Register reg, uint32_t immediate, Condition cond) {
+  ASSERT(CpuFeatures::IsSupported(ARMv7));
   emit(cond | 0x30*B20 | reg.code()*B12 | EncodeMovwImmediate(immediate));
 }
 
 
 void Assembler::movt(Register reg, uint32_t immediate, Condition cond) {
+  ASSERT(CpuFeatures::IsSupported(ARMv7));
   emit(cond | 0x34*B20 | reg.code()*B12 | EncodeMovwImmediate(immediate));
 }
 
@@ -3685,7 +3687,8 @@ void ConstantPoolBuilder::Populate(Assembler* assm,
       if (type == ConstantPoolArray::INT64) {
         constant_pool->set_at_offset(offset, rinfo.data64());
       } else if (type == ConstantPoolArray::INT32) {
-        constant_pool->set_at_offset(offset, rinfo.data());
+        constant_pool->set_at_offset(offset,
+                                     static_cast<int32_t>(rinfo.data()));
       } else if (type == ConstantPoolArray::CODE_PTR) {
         constant_pool->set_at_offset(offset,
                                      reinterpret_cast<Address>(rinfo.data()));

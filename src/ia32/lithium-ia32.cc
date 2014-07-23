@@ -1125,8 +1125,7 @@ LInstruction* LChunkBuilder::DoCallJSFunction(
 
 LInstruction* LChunkBuilder::DoCallWithDescriptor(
     HCallWithDescriptor* instr) {
-  const CallInterfaceDescriptor* descriptor = instr->descriptor();
-
+  const InterfaceDescriptor* descriptor = instr->descriptor();
   LOperand* target = UseRegisterOrConstantAtStart(instr->target());
   ZoneList<LOperand*> ops(instr->OperandCount(), zone());
   ops.Add(target, zone());
@@ -2093,8 +2092,13 @@ LInstruction* LChunkBuilder::DoLoadGlobalGeneric(HLoadGlobalGeneric* instr) {
   LOperand* context = UseFixed(instr->context(), esi);
   LOperand* global_object = UseFixed(instr->global_object(),
                                      LoadIC::ReceiverRegister());
+  LOperand* vector = NULL;
+  if (FLAG_vector_ics) {
+    vector = FixedTemp(LoadIC::VectorRegister());
+  }
+
   LLoadGlobalGeneric* result =
-      new(zone()) LLoadGlobalGeneric(context, global_object);
+      new(zone()) LLoadGlobalGeneric(context, global_object, vector);
   return MarkAsCall(DefineFixed(result, eax), instr);
 }
 
@@ -2148,7 +2152,12 @@ LInstruction* LChunkBuilder::DoLoadNamedField(HLoadNamedField* instr) {
 LInstruction* LChunkBuilder::DoLoadNamedGeneric(HLoadNamedGeneric* instr) {
   LOperand* context = UseFixed(instr->context(), esi);
   LOperand* object = UseFixed(instr->object(), LoadIC::ReceiverRegister());
-  LLoadNamedGeneric* result = new(zone()) LLoadNamedGeneric(context, object);
+  LOperand* vector = NULL;
+  if (FLAG_vector_ics) {
+    vector = FixedTemp(LoadIC::VectorRegister());
+  }
+  LLoadNamedGeneric* result = new(zone()) LLoadNamedGeneric(
+      context, object, vector);
   return MarkAsCall(DefineFixed(result, eax), instr);
 }
 
@@ -2207,9 +2216,12 @@ LInstruction* LChunkBuilder::DoLoadKeyedGeneric(HLoadKeyedGeneric* instr) {
   LOperand* context = UseFixed(instr->context(), esi);
   LOperand* object = UseFixed(instr->object(), LoadIC::ReceiverRegister());
   LOperand* key = UseFixed(instr->key(), LoadIC::NameRegister());
-
+  LOperand* vector = NULL;
+  if (FLAG_vector_ics) {
+    vector = FixedTemp(LoadIC::VectorRegister());
+  }
   LLoadKeyedGeneric* result =
-      new(zone()) LLoadKeyedGeneric(context, object, key);
+      new(zone()) LLoadKeyedGeneric(context, object, key, vector);
   return MarkAsCall(DefineFixed(result, eax), instr);
 }
 
@@ -2287,9 +2299,10 @@ LInstruction* LChunkBuilder::DoStoreKeyed(HStoreKeyed* instr) {
 
 LInstruction* LChunkBuilder::DoStoreKeyedGeneric(HStoreKeyedGeneric* instr) {
   LOperand* context = UseFixed(instr->context(), esi);
-  LOperand* object = UseFixed(instr->object(), edx);
-  LOperand* key = UseFixed(instr->key(), ecx);
-  LOperand* value = UseFixed(instr->value(), eax);
+  LOperand* object = UseFixed(instr->object(),
+                              KeyedStoreIC::ReceiverRegister());
+  LOperand* key = UseFixed(instr->key(), KeyedStoreIC::NameRegister());
+  LOperand* value = UseFixed(instr->value(), KeyedStoreIC::ValueRegister());
 
   ASSERT(instr->object()->representation().IsTagged());
   ASSERT(instr->key()->representation().IsTagged());
@@ -2391,8 +2404,8 @@ LInstruction* LChunkBuilder::DoStoreNamedField(HStoreNamedField* instr) {
 
 LInstruction* LChunkBuilder::DoStoreNamedGeneric(HStoreNamedGeneric* instr) {
   LOperand* context = UseFixed(instr->context(), esi);
-  LOperand* object = UseFixed(instr->object(), edx);
-  LOperand* value = UseFixed(instr->value(), eax);
+  LOperand* object = UseFixed(instr->object(), StoreIC::ReceiverRegister());
+  LOperand* value = UseFixed(instr->value(), StoreIC::ValueRegister());
 
   LStoreNamedGeneric* result =
       new(zone()) LStoreNamedGeneric(context, object, value);
@@ -2472,7 +2485,7 @@ LInstruction* LChunkBuilder::DoParameter(HParameter* instr) {
     CodeStubInterfaceDescriptor* descriptor =
         info()->code_stub()->GetInterfaceDescriptor();
     int index = static_cast<int>(instr->index());
-    Register reg = descriptor->GetParameterRegister(index);
+    Register reg = descriptor->GetEnvironmentParameterRegister(index);
     return DefineFixed(result, reg);
   }
 }

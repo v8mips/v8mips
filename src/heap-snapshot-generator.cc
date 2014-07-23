@@ -1097,11 +1097,16 @@ bool V8HeapExplorer::ExtractReferencesPass1(int entry, HeapObject* obj) {
     ExtractJSGlobalProxyReferences(entry, JSGlobalProxy::cast(obj));
   } else if (obj->IsJSArrayBuffer()) {
     ExtractJSArrayBufferReferences(entry, JSArrayBuffer::cast(obj));
-  } else if (obj->IsJSWeakSet()) {
-    ExtractJSWeakCollectionReferences(entry, JSWeakSet::cast(obj));
-  } else if (obj->IsJSWeakMap()) {
-    ExtractJSWeakCollectionReferences(entry, JSWeakMap::cast(obj));
   } else if (obj->IsJSObject()) {
+    if (obj->IsJSWeakSet()) {
+      ExtractJSWeakCollectionReferences(entry, JSWeakSet::cast(obj));
+    } else if (obj->IsJSWeakMap()) {
+      ExtractJSWeakCollectionReferences(entry, JSWeakMap::cast(obj));
+    } else if (obj->IsJSSet()) {
+      ExtractJSCollectionReferences(entry, JSSet::cast(obj));
+    } else if (obj->IsJSMap()) {
+      ExtractJSCollectionReferences(entry, JSMap::cast(obj));
+    }
     ExtractJSObjectReferences(entry, JSObject::cast(obj));
   } else if (obj->IsString()) {
     ExtractStringReferences(entry, String::cast(obj));
@@ -1159,8 +1164,8 @@ void V8HeapExplorer::ExtractJSObjectReferences(
   ExtractPropertyReferences(js_obj, entry);
   ExtractElementReferences(js_obj, entry);
   ExtractInternalReferences(js_obj, entry);
-  SetPropertyReference(
-      obj, entry, heap_->proto_string(), js_obj->GetPrototype());
+  PrototypeIterator iter(heap_->isolate(), js_obj);
+  SetPropertyReference(obj, entry, heap_->proto_string(), iter.GetCurrent());
   if (obj->IsJSFunction()) {
     JSFunction* js_fun = JSFunction::cast(js_obj);
     Object* proto_or_map = js_fun->prototype_or_initial_map();
@@ -1257,6 +1262,13 @@ void V8HeapExplorer::ExtractSymbolReferences(int entry, Symbol* symbol) {
   SetInternalReference(symbol, entry,
                        "name", symbol->name(),
                        Symbol::kNameOffset);
+}
+
+
+void V8HeapExplorer::ExtractJSCollectionReferences(int entry,
+                                                   JSCollection* collection) {
+  SetInternalReference(collection, entry, "table", collection->table(),
+                       JSCollection::kTableOffset);
 }
 
 
@@ -1487,8 +1499,8 @@ void V8HeapExplorer::TagBuiltinCodeObject(Code* code, const char* name) {
 void V8HeapExplorer::TagCodeObject(Code* code) {
   if (code->kind() == Code::STUB) {
     TagObject(code, names_->GetFormatted(
-        "(%s code)", CodeStub::MajorName(
-            static_cast<CodeStub::Major>(code->major_key()), true)));
+                        "(%s code)", CodeStub::MajorName(
+                                         CodeStub::GetMajorKey(code), true)));
   }
 }
 
@@ -2588,12 +2600,12 @@ bool HeapSnapshotGenerator::GenerateSnapshot() {
 
 #ifdef VERIFY_HEAP
   Heap* debug_heap = heap_;
-  CHECK(debug_heap->old_data_space()->is_iterable());
-  CHECK(debug_heap->old_pointer_space()->is_iterable());
-  CHECK(debug_heap->code_space()->is_iterable());
-  CHECK(debug_heap->cell_space()->is_iterable());
-  CHECK(debug_heap->property_cell_space()->is_iterable());
-  CHECK(debug_heap->map_space()->is_iterable());
+  CHECK(debug_heap->old_data_space()->swept_precisely());
+  CHECK(debug_heap->old_pointer_space()->swept_precisely());
+  CHECK(debug_heap->code_space()->swept_precisely());
+  CHECK(debug_heap->cell_space()->swept_precisely());
+  CHECK(debug_heap->property_cell_space()->swept_precisely());
+  CHECK(debug_heap->map_space()->swept_precisely());
 #endif
 
 #ifdef VERIFY_HEAP
