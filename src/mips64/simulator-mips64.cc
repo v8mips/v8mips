@@ -2104,7 +2104,6 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           if (kArchVariant != kMips64r6) {
             *i128resultH = MultiplyHighSigned(rs, rt);
             *i128resultL = rs * rt;
-            break;
           } else {
             switch (instr->SaValue()) {
               case MUL_OP:
@@ -2118,6 +2117,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
                 break;
             }
           }
+          break;
         case DMULTU:
           UNIMPLEMENTED_MIPS();
           break;
