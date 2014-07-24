@@ -1082,7 +1082,7 @@ int32_t Assembler::branch_offset21(Label* L, bool jump_elimination_allowed) {
 
   int32_t offset = target_pos - (pc_offset() + kBranchPCOffset);
   ASSERT((offset & 3) == 0);
-  ASSERT(((offset >> 2) & 0xFFF00000) == 0); // Offset is 21bit width.
+  ASSERT(((offset >> 2) & 0xFFE00000) == 0); // Offset is 21bit width.
 
   return offset;
 }
@@ -1110,7 +1110,7 @@ int32_t Assembler::branch_offset21_compact(Label* L,
 
   int32_t offset = target_pos - pc_offset();
   ASSERT((offset & 3) == 0);
-  ASSERT(((offset >> 2) & 0xFFF00000) == 0); // Offset is 21bit width.
+  ASSERT(((offset >> 2) & 0xFFE00000) == 0); // Offset is 21bit width.
 
   return offset;
 }
