@@ -1452,15 +1452,21 @@ void Assembler::subu(Register rd, Register rs, Register rt) {
 
 
 void Assembler::mul(Register rd, Register rs, Register rt) {
-  GenInstrRegister(SPECIAL2, rs, rt, rd, 0, MUL);
+  if (kArchVariant != kMips32r6) {
+    GenInstrRegister(SPECIAL2, rs, rt, rd, 0, MUL);
+  } else {
+    GenInstrRegister(SPECIAL, rs, rt, rd, MUL_OP, MUL_MUH);
+  }
 }
 
 void Assembler::muh(Register rd, Register rs, Register rt) {
-  UNIMPLEMENTED_MIPS();
+  ASSERT(kArchVariant == kMips32r6);
+  GenInstrRegister(SPECIAL, rs, rt, rd, MUH_OP, MUL_MUH);
 }
 
 void Assembler::mod(Register rd, Register rs, Register rt) {
-  UNIMPLEMENTED_MIPS();
+  ASSERT(kArchVariant == kMips32r6);
+  GenInstrRegister(SPECIAL, rs, rt, rd, MOD_OP, DIV_MOD);
 }
 
 void Assembler::mult(Register rs, Register rt) {
@@ -1475,6 +1481,12 @@ void Assembler::multu(Register rs, Register rt) {
 
 void Assembler::div(Register rs, Register rt) {
   GenInstrRegister(SPECIAL, rs, rt, zero_reg, 0, DIV);
+}
+
+
+void Assembler::div(Register rd, Register rs, Register rt) {
+  ASSERT(kArchVariant == kMips32r6);
+  GenInstrRegister(SPECIAL, rs, rt, rd, DIV_OP, DIV_MOD);
 }
 
 
