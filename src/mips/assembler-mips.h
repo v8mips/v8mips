@@ -73,7 +73,12 @@ namespace internal {
 // Core register.
 struct Register {
   static const int kNumRegisters = v8::internal::kNumRegisters;
+#ifdef _MIPS_ARCH_MIPS32R6
+  // Match number of FPU regs.
+  static const int kMaxNumAllocatableRegisters = 13;  // v0 through t6 and cp.
+#else
   static const int kMaxNumAllocatableRegisters = 14;  // v0 through t6 and cp.
+#endif
   static const int kSizeInBytes = 4;
   static const int kCpRegister = 23;  // cp (s7) is the 23rd register.
 
