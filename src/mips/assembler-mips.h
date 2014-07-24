@@ -214,9 +214,14 @@ struct FPURegister {
 
   // A few double registers are reserved: one as a scratch register and one to
   // hold 0.0.
+  //  f26 on r6 for compare operations
   //  f28: 0.0
   //  f30: scratch register.
+#ifdef _MIPS_ARCH_MIPS32R6
+  static const int kNumReservedRegisters = 3;
+#else
   static const int kNumReservedRegisters = 2;
+#endif
   static const int kMaxNumAllocatableRegisters = kMaxNumRegisters / 2 -
       kNumReservedRegisters;
 
