@@ -2727,6 +2727,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           switch(kArchVariant) {
             case kMips64r1:
             case kMips64r2:
+            case kLoongson:
               // Divide by zero and overflow was not checked in the
               // configuration step - div and divu do not raise exceptions. On
               // division by 0 the result will be UNPREDICTABLE. On overflow
