@@ -278,6 +278,8 @@ Instruction::Type Instruction::InstructionType() const {
     case COP1:    // Coprocessor instructions.
       switch (RsFieldRawNoAssert()) {
         case BC1:   // Branch on coprocessor condition.
+        case BC1EQZ:
+        case BC1NEZ:
           return kImmediateType;
         default:
           return kRegisterType;
