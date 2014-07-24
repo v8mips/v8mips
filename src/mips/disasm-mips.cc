@@ -571,22 +571,42 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
           break;
         case L:
           switch (instr->FunctionFieldRaw()) {
-            case CVT_D_L: {
-              if (kArchVariant == kMips32r2) {
-                Format(instr, "cvt.d.l 'fd, 'fs");
-              } else {
-                Unknown(instr);
-              }
+            case CVT_D_L:
+              Format(instr, "cvt.d.l 'fd, 'fs");
               break;
-            }
-            case CVT_S_L: {
-              if (kArchVariant == kMips32r2) {
-                Format(instr, "cvt.s.l 'fd, 'fs");
-              } else {
-                Unknown(instr);
-              }
+            case CVT_S_L:
+              Format(instr, "cvt.s.l 'fd, 'fs");
               break;
-            }
+            case CMP_UN:
+              Format(instr, "cmp.un.d  'fd,  'fs, 'ft");
+              break;
+            case CMP_EQ:
+              Format(instr, "cmp.eq.d  'fd,  'fs, 'ft");
+              break;
+            case CMP_UEQ:
+              Format(instr, "cmp.ueq.d  'fd,  'fs, 'ft");
+              break;
+            case CMP_LT:
+              Format(instr, "cmp.lt.d  'fd,  'fs, 'ft");
+              break;
+            case CMP_ULT:
+              Format(instr, "cmp.ult.d  'fd,  'fs, 'ft");
+              break;
+            case CMP_LE:
+              Format(instr, "cmp.le.d  'fd,  'fs, 'ft");
+              break;
+            case CMP_ULE:
+              Format(instr, "cmp.ule.d  'fd,  'fs, 'ft");
+              break;
+            case CMP_OR:
+              Format(instr, "cmp.or.d  'fd,  'fs, 'ft");
+              break;
+            case CMP_UNE:
+              Format(instr, "cmp.une.d  'fd,  'fs, 'ft");
+              break;
+            case CMP_NE:
+              Format(instr, "cmp.ne.d  'fd,  'fs, 'ft");
+              break;
             default:
               UNREACHABLE();
           }
@@ -653,22 +673,64 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
           Format(instr, "srav    'rd, 'rt, 'rs");
           break;
         case MFHI:
-          Format(instr, "mfhi    'rd");
+          if (instr->Bits(25, 16) == 0) {
+            Format(instr, "mfhi    'rd");
+          } else {
+            if ((instr->FunctionFieldRaw() == CLZ_R6)
+                && (instr->FdValue() == 1)) {
+              Format(instr, "clz     'rd, 'rs");
+            } else if ((instr->FunctionFieldRaw() == CLO_R6)
+                && (instr->FdValue() == 1)) {
+              Format(instr, "clo     'rd, 'rs");
+            }
+          }
           break;
         case MFLO:
           Format(instr, "mflo    'rd");
           break;
-        case MULT:
-          Format(instr, "mult    'rs, 'rt");
+        case MULT: // @Mips32r6 == MUL_MUH.
+          if (kArchVariant != kMips32r6) {
+            Format(instr, "mult    'rs, 'rt");
+          } else {
+            if (instr->SaValue() == MUL_OP) {
+              Format(instr, "mul    'rd, 'rs, 'rt");
+            } else {
+              Format(instr, "muh    'rd, 'rs, 'rt");
+            }
+          }
           break;
-        case MULTU:
-          Format(instr, "multu   'rs, 'rt");
+        case MULTU:  // @Mips32r6 == MUL_MUH_U.
+          if (kArchVariant != kMips32r6) {
+            Format(instr, "multu   'rs, 'rt");
+          } else {
+            if (instr->SaValue() == MUL_OP) {
+              Format(instr, "mulu   'rd, 'rs, 'rt");
+            } else {
+              Format(instr, "muhu   'rd, 'rs, 'rt");
+            }
+          }
           break;
-        case DIV:
-          Format(instr, "div     'rs, 'rt");
+        case DIV: // @Mips32r6 == DIV_MOD.
+          if (kArchVariant != kMips32r6) {
+            Format(instr, "div     'rs, 'rt");
+          } else {
+            if (instr->SaValue() == DIV_OP) {
+              Format(instr, "div    'rd, 'rs, 'rt");
+            } else {
+              Format(instr, "mod    'rd, 'rs, 'rt");
+            }
+          }
           break;
-        case DIVU:
-          Format(instr, "divu    'rs, 'rt");
+        case DIVU: // @Mips32r6 == DIV_MOD_U.
+          if (kArchVariant != kMips32r6) {
+            Format(instr, "divu    'rs, 'rt");
+          } else {
+            if (instr->SaValue() == DIV_OP) {
+              Format(instr, "divu   'rd, 'rs, 'rt");
+            } else {
+              Format(instr, "modu   'rd, 'rs, 'rt");
+            }
+          }
           break;
         case ADD:
           Format(instr, "add     'rd, 'rs, 'rt");
@@ -740,6 +802,12 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
             Format(instr, "movf    'rd, 'rs, 'bc");
           }
           break;
+        case SELEQZ_S:
+          Format(instr, "seleqz    'rd, 'rs, 'rt");
+          break;
+        case SELNEZ_S:
+          Format(instr, "selnez    'rd, 'rs, 'rt");
+          break;
         default:
           UNREACHABLE();
       }
@@ -750,13 +818,9 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
           Format(instr, "mul     'rd, 'rs, 'rt");
           break;
         case CLZ:
-          Format(instr, "clz     'rd, 'rs");
-          break;
-        case SELEQZ_S:
-          Format(instr, "seleqz    'rd, 'rs, 'rt");
-          break;
-        case SELNEZ_S:
-          Format(instr, "selnez    'rd, 'rs, 'rt");
+          if (kArchVariant != kMips32r6) {
+            Format(instr, "clz     'rd, 'rs");
+          }
           break;
         default:
           UNREACHABLE();
@@ -943,7 +1007,9 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
         default:
           UNREACHABLE();
       }
+
       break;  // Case COP1.
+    // ------------- REGIMM class.
     case REGIMM:
       switch (instr->RtFieldRaw()) {
         case BLTZ:
@@ -973,14 +1039,103 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
       Format(instr, "bne     'rs, 'rt, 'imm16u");
       break;
     case BLEZ:
-      Format(instr, "blez    'rs, 'imm16u");
+      if ((instr->RtFieldRaw() == 0)
+          && (instr->RsFieldRaw() != 0)) {
+        Format(instr, "blez    'rs, 'imm16u");
+      } else if ((instr->RtFieldRaw() != instr->RsFieldRaw())
+          && (instr->RsFieldRaw() != 0) && (instr->RtFieldRaw() != 0)) {
+        Format(instr, "bgeuc    'rs, 'rt, 'imm16u");
+      } else if ((instr->RtFieldRaw() == instr->RsFieldRaw())
+          && (instr->RtFieldRaw() != 0)) {
+        Format(instr, "bgezalc  'rs, 'imm16u");
+      } else if ((instr->RsFieldRaw() == 0)
+          && (instr->RtFieldRaw() != 0)) {
+        Format(instr, "blezalc  'rs, 'imm16u");
+      } else {
+        UNREACHABLE();
+      }
       break;
     case BGTZ:
-      Format(instr, "bgtz    'rs, 'imm16u");
+      if ((instr->RtFieldRaw() == 0)
+          && (instr->RsFieldRaw() != 0)) {
+        Format(instr, "bgtz    'rs, 'imm16u");
+      } else if ((instr->RtFieldRaw() != instr->RsFieldRaw())
+          && (instr->RsFieldRaw() != 0) && (instr->RtFieldRaw() != 0)) {
+        Format(instr, "bltuc   'rs, 'rt, 'imm16u");
+      } else if ((instr->RtFieldRaw() == instr->RsFieldRaw())
+          && (instr->RtFieldRaw() != 0)) {
+        Format(instr, "bltzalc 'rt, 'imm16u");
+      } else if ((instr->RsFieldRaw() == 0)
+          && (instr->RtFieldRaw() != 0)) {
+        Format(instr, "bgtzalc 'rt, 'imm16u");
+      } else {
+        UNREACHABLE();
+      }
+      break;
+    case BLEZL:
+      if ((instr->RtFieldRaw() == instr->RsFieldRaw())
+          && (instr->RtFieldRaw() != 0)) {
+        Format(instr, "bgezc    'rt, 'imm16u");
+      } else if ((instr->RtFieldRaw() != instr->RsFieldRaw())
+          && (instr->RsFieldRaw() != 0) && (instr->RtFieldRaw() != 0)) {
+        Format(instr, "bgec     'rs, 'rt, 'imm16u");
+      } else if ((instr->RsFieldRaw() == 0)
+          && (instr->RtFieldRaw() != 0)) {
+        Format(instr, "blezc    'rt, 'imm16u");
+      } else {
+        UNREACHABLE();
+      }
+      break;
+    case BGTZL:
+      if ((instr->RtFieldRaw() == instr->RsFieldRaw())
+          && (instr->RtFieldRaw() != 0)) {
+        Format(instr, "bltzc    'rt, 'imm16u");
+      } else if ((instr->RtFieldRaw() != instr->RsFieldRaw())
+          && (instr->RsFieldRaw() != 0) && (instr->RtFieldRaw() != 0)) {
+        Format(instr, "bltc     'rs, 'rt, 'imm16u");
+      } else if ((instr->RsFieldRaw() == 0)
+          && (instr->RtFieldRaw() != 0)) {
+        Format(instr, "bgtzc    'rt, 'imm16u");
+      } else {
+        UNREACHABLE();
+      }
+      break;
+    case BEQZC:
+      if (instr->RsFieldRaw() != 0) {
+        Format(instr, "beqzc   'rs, 'imm21x");
+      }
+      break;
+    case BNEZC:
+      if (instr->RsFieldRaw() != 0) {
+        Format(instr, "bnezc   'rs, 'imm21x");
+      }
       break;
     // ------------- Arithmetic instructions.
     case ADDI:
-      Format(instr, "addi    'rt, 'rs, 'imm16s");
+      if (kArchVariant != kMips32r6) {
+        Format(instr, "addi    'rt, 'rs, 'imm16s");
+      } else {
+        // Check if BOVC or BEQC instruction.
+        if (instr->RsFieldRaw() >= instr->RtFieldRaw()) {
+          Format(instr, "bovc  'rs, 'rt, 'imm16s");
+        } else if (instr->RsFieldRaw() < instr->RtFieldRaw()) {
+          Format(instr, "beqc  'rs, 'rt, 'imm16s");
+        } else {
+          UNREACHABLE();
+        }
+      }
+      break;
+    case DADDI:
+      if (kArchVariant == kMips32r6) {
+        // Check if BNVC or BNEC instruction.
+        if (instr->RsFieldRaw() >= instr->RtFieldRaw()) {
+          Format(instr, "bnvc  'rs, 'rt, 'imm16s");
+        } else if (instr->RsFieldRaw() < instr->RtFieldRaw()) {
+          Format(instr, "bnec  'rs, 'rt, 'imm16s");
+        } else {
+          UNREACHABLE();
+        }
+      }
       break;
     case ADDIU:
       Format(instr, "addiu   'rt, 'rs, 'imm16s");
@@ -1001,7 +1156,15 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
       Format(instr, "xori    'rt, 'rs, 'imm16x");
       break;
     case LUI:
-      Format(instr, "lui     'rt, 'imm16x");
+      if (kArchVariant != kMips32r6) {
+        Format(instr, "lui     'rt, 'imm16x");
+      } else {
+        if (instr->RsValue() != 0) {
+          Format(instr, "aui     'rt, 'imm16x");
+        } else {
+          Format(instr, "lui     'rt, 'imm16x");
+        }
+      }
       break;
     // ------------- Memory instructions.
     case LB:
@@ -1056,6 +1219,7 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
       Format(instr, "sdc1    'ft, 'imm16s('rs)");
       break;
     default:
+      printf("a 0x%x \n", instr->OpcodeFieldRaw());
       UNREACHABLE();
       break;
   }
@@ -1071,7 +1235,6 @@ void Decoder::DecodeTypeJump(Instruction* instr) {
       Format(instr, "jal     'imm26x");
       break;
     default:
-      printf("a 0x%x \n", instr->OpcodeFieldRaw());
       UNREACHABLE();
   }
 }
