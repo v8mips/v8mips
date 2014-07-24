@@ -1844,8 +1844,22 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
             }
           }
           break;
-        case MULTU:
-          *u64hilo = static_cast<uint64_t>(rs_u) * static_cast<uint64_t>(rt_u);
+        case MULTU: // MULTU == MUL_MUH_U
+          if (kArchVariant != kMips32r6) {
+            *u64hilo = static_cast<uint64_t>(rs_u) *
+                static_cast<uint64_t>(rt_u);
+          } else {
+            switch (instr->SaValue()) {
+              case MUL_OP:
+              case MUH_OP:
+                *u64hilo = static_cast<uint64_t>(rs_u) *
+                    static_cast<uint64_t>(rt_u);
+                break;
+              default:
+                UNIMPLEMENTED_MIPS();
+                break;
+            }
+          }
           break;
         case ADD:
           if (HaveSameSign(rs, rt)) {
@@ -2386,8 +2400,23 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           }
           break;
         case MULTU:
-          set_register(LO, static_cast<int32_t>(u64hilo & 0xffffffff));
-          set_register(HI, static_cast<int32_t>(u64hilo >> 32));
+          if (kArchVariant != kMips32r6) {
+            set_register(LO, static_cast<int32_t>(u64hilo & 0xffffffff));
+            set_register(HI, static_cast<int32_t>(u64hilo >> 32));
+          } else {
+            switch (instr->SaValue()) {
+              case MUL_OP:
+                set_register(rd_reg,
+                    static_cast<int32_t>(u64hilo & 0xffffffff));
+                break;
+              case MUH_OP:
+                set_register(rd_reg, static_cast<int32_t>(u64hilo >> 32));
+                break;
+              default:
+                UNIMPLEMENTED_MIPS();
+                break;
+            }
+          }
           break;
         case DIV:
           switch(kArchVariant) {
@@ -2432,9 +2461,35 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           }
           break;
         case DIVU:
-          if (rt_u != 0) {
-            set_register(LO, rs_u / rt_u);
-            set_register(HI, rs_u % rt_u);
+          switch(kArchVariant) {
+            case kMips32r1:
+            case kMips32r2:
+            case kLoongson:
+              if (rt_u != 0) {
+                set_register(LO, rs_u / rt_u);
+                set_register(HI, rs_u % rt_u);
+              }
+              break;
+            case kMips32r6:
+              switch (instr->SaValue()) {
+                case DIV_OP:
+                  if (rt_u != 0) {
+                    set_register(rd_reg, rs_u / rt_u);
+                  }
+                  break;
+                case MOD_OP:
+                  if (rt_u != 0) {
+                    set_register(rd_reg, rs_u % rt_u);
+                  }
+                  break;
+                default:
+                  UNIMPLEMENTED_MIPS();
+                  break;
+              }
+              break;
+            default:
+              UNIMPLEMENTED_MIPS();
+              break;
           }
           break;
         // Break and trap instructions.
