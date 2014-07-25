@@ -234,11 +234,11 @@ class MacroAssembler: public Assembler {
 
   inline void Move(Register dst_low, Register dst_high, FPURegister src) {
     mfc1(dst_low, src);
-    mfc1(dst_high, FPURegister::from_code(src.code() + 1));
+    Mfhc1(dst_high, src);
   }
 
   inline void FmoveHigh(Register dst_high, FPURegister src) {
-    mfc1(dst_high, FPURegister::from_code(src.code() + 1));
+    Mfhc1(dst_high, src);
   }
 
   inline void FmoveLow(Register dst_low, FPURegister src) {
@@ -247,7 +247,7 @@ class MacroAssembler: public Assembler {
 
   inline void Move(FPURegister dst, Register src_low, Register src_high) {
     mtc1(src_low, dst);
-    mtc1(src_high, FPURegister::from_code(dst.code() + 1));
+    Mthc1(src_high, dst);
   }
 
   // Conditional move.
@@ -756,6 +756,20 @@ class MacroAssembler: public Assembler {
   void Round_w_d(FPURegister fd, FPURegister fs);
   void Floor_w_d(FPURegister fd, FPURegister fs);
   void Ceil_w_d(FPURegister fd, FPURegister fs);
+
+  // FP32 mode: Move the general purpose register into
+  // the high part of the double-register pair.
+  // FP64 mode: Move the general-purpose register into
+  // the higher 32 bits of the 64-bit coprocessor register,
+  // while leaving the low bits unchanged.
+  void Mthc1(Register rt, FPURegister fs);
+
+  // FP32 mode: move the high part of the double-register pair into
+  // general purpose register.
+  // FP64 mode: Move the higher 32 bits of the 64-bit coprocessor register into
+  // general-purpose register.
+  void Mfhc1(Register rt, FPURegister fs);
+
   // Wrapper function for the different cmp/branch types.
   void BranchF(Label* target,
                Label* nan,

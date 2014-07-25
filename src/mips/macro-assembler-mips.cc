@@ -1224,8 +1224,8 @@ void MacroAssembler::Cvt_d_uw(FPURegister fd,
 
   // Load 2^31 into f20 as its float representation.
   li(at, 0x41E00000);
-  mtc1(at, FPURegister::from_code(scratch.code() + 1));
   mtc1(zero_reg, scratch);
+  Mthc1(at, scratch);
   // Add it to fd.
   add_d(fd, fd, scratch);
 
@@ -1243,9 +1243,9 @@ void MacroAssembler::Trunc_uw_d(FPURegister fd,
 
 void MacroAssembler::Trunc_w_d(FPURegister fd, FPURegister fs) {
   if (kArchVariant == kLoongson && fd.is(fs)) {
-    mfc1(t8, FPURegister::from_code(fs.code() + 1));
+    Mfhc1(t8, fs);
     trunc_w_d(fd, fs);
-    mtc1(t8, FPURegister::from_code(fs.code() + 1));
+    Mthc1(t8, fs);
   } else {
     trunc_w_d(fd, fs);
   }
@@ -1254,9 +1254,9 @@ void MacroAssembler::Trunc_w_d(FPURegister fd, FPURegister fs) {
 
 void MacroAssembler::Round_w_d(FPURegister fd, FPURegister fs) {
   if (kArchVariant == kLoongson && fd.is(fs)) {
-    mfc1(t8, FPURegister::from_code(fs.code() + 1));
+    Mfhc1(t8, fs);
     round_w_d(fd, fs);
-    mtc1(t8, FPURegister::from_code(fs.code() + 1));
+    Mthc1(t8, fs);
   } else {
     round_w_d(fd, fs);
   }
@@ -1265,9 +1265,9 @@ void MacroAssembler::Round_w_d(FPURegister fd, FPURegister fs) {
 
 void MacroAssembler::Floor_w_d(FPURegister fd, FPURegister fs) {
   if (kArchVariant == kLoongson && fd.is(fs)) {
-    mfc1(t8, FPURegister::from_code(fs.code() + 1));
+    Mfhc1(t8, fs);
     floor_w_d(fd, fs);
-    mtc1(t8, FPURegister::from_code(fs.code() + 1));
+    Mthc1(t8, fs);
   } else {
     floor_w_d(fd, fs);
   }
@@ -1276,9 +1276,9 @@ void MacroAssembler::Floor_w_d(FPURegister fd, FPURegister fs) {
 
 void MacroAssembler::Ceil_w_d(FPURegister fd, FPURegister fs) {
   if (kArchVariant == kLoongson && fd.is(fs)) {
-    mfc1(t8, FPURegister::from_code(fs.code() + 1));
+    Mfhc1(t8, fs);
     ceil_w_d(fd, fs);
-    mtc1(t8, FPURegister::from_code(fs.code() + 1));
+    Mthc1(t8, fs);
   } else {
     ceil_w_d(fd, fs);
   }
@@ -1293,8 +1293,8 @@ void MacroAssembler::Trunc_uw_d(FPURegister fd,
 
   // Load 2^31 into scratch as its float representation.
   li(at, 0x41E00000);
-  mtc1(at, FPURegister::from_code(scratch.code() + 1));
   mtc1(zero_reg, scratch);
+  Mthc1(at, scratch);
   // Test if scratch > fd.
   // If fd < 2^31 we can convert it normally.
   Label simple_convert;
@@ -1315,6 +1315,24 @@ void MacroAssembler::Trunc_uw_d(FPURegister fd,
   mfc1(rs, scratch);
 
   bind(&done);
+}
+
+
+void MacroAssembler::Mthc1(Register rt, FPURegister fs) {
+  if (IsFp64Mode) {
+    mthc1(rt ,fs);
+  } else {
+    mtc1(rt, fs.high());
+  }
+}
+
+
+void MacroAssembler::Mfhc1(Register rt, FPURegister fs) {
+  if (IsFp64Mode) {
+    mfhc1(rt, fs);
+  } else {
+    mfc1(rt, fs.high());
+  }
 }
 
 
@@ -1463,9 +1481,9 @@ void MacroAssembler::Move(FPURegister dst, double imm) {
     // register of FPU register pair.
     if (hi != 0) {
       li(at, Operand(hi));
-      mtc1(at, dst.high());
+      Mthc1(at, dst);
     } else {
-      mtc1(zero_reg, dst.high());
+      Mthc1(zero_reg, dst);
     }
   }
 }
