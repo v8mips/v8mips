@@ -68,6 +68,13 @@ const uint32_t kHoleNanLower32Offset = 4;
 #error Unknown endianness
 #endif
 
+
+//TODO: Here use build switch to select FPU mode.
+const bool IsFp64Mode = true;
+
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
 // Defines constants and accessor classes to assemble, disassemble and
 // simulate MIPS32 instructions.
 //
