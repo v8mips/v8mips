@@ -2977,9 +2977,6 @@ void Simulator::Execute() {
     while (program_counter != end_sim_pc) {
       Instruction* instr = reinterpret_cast<Instruction*>(program_counter);
       icount_++;
-      if (icount_ == ::v8::internal::FLAG_trace_sim_at) {
-        ::v8::internal::FLAG_trace_sim = true;
-      }
       InstructionDecode(instr);
       program_counter = get_pc();
     }
@@ -2989,9 +2986,6 @@ void Simulator::Execute() {
     while (program_counter != end_sim_pc) {
       Instruction* instr = reinterpret_cast<Instruction*>(program_counter);
       icount_++;
-      if (icount_ == ::v8::internal::FLAG_trace_sim_at) {
-        ::v8::internal::FLAG_trace_sim = true;
-      }
       if (icount_ == ::v8::internal::FLAG_stop_sim_at) {
         MipsDebugger dbg(this);
         dbg.Debug();
