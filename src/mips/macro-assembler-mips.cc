@@ -665,8 +665,16 @@ void MacroAssembler::Mul(Register rd_hi, Register rd_lo,
       mflo(rd_lo);
       mfhi(rd_hi);
     } else {
-      mul(rd_lo, rs, rt.rm());
-      muh(rd_hi, rs, rt.rm());
+      if (rd_lo.is(rs)) {
+        ASSERT(!rd_hi.is(rs));
+        ASSERT(!rd_hi.is(rt.rm()) && !rd_lo.is(rt.rm()));
+        muh(rd_hi, rs, rt.rm());
+        mul(rd_lo, rs, rt.rm());
+      } else {
+        ASSERT(!rd_hi.is(rt.rm()) && !rd_lo.is(rt.rm()));
+        mul(rd_lo, rs, rt.rm());
+        muh(rd_hi, rs, rt.rm());
+      }
     }
   } else {
     // li handles the relocation.
@@ -677,8 +685,16 @@ void MacroAssembler::Mul(Register rd_hi, Register rd_lo,
       mflo(rd_lo);
       mfhi(rd_hi);
     } else {
-      mul(rd_lo, rs, at);
-      muh(rd_hi, rs, at);
+      if (rd_lo.is(rs)) {
+        ASSERT(!rd_hi.is(rs));
+        ASSERT(!rd_hi.is(at) && !rd_lo.is(at));
+        muh(rd_hi, rs, at);
+        mul(rd_lo, rs, at);
+      } else {
+        ASSERT(!rd_hi.is(at) && !rd_lo.is(at));
+        mul(rd_lo, rs, at);
+        muh(rd_hi, rs, at);
+      }
     }
   }
 }

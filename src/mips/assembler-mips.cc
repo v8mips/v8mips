@@ -1452,16 +1452,43 @@ void Assembler::subu(Register rd, Register rs, Register rt) {
 
 
 void Assembler::mul(Register rd, Register rs, Register rt) {
-  GenInstrRegister(SPECIAL2, rs, rt, rd, 0, MUL);
+  if (kArchVariant != kMips32r6) {
+    GenInstrRegister(SPECIAL2, rs, rt, rd, 0, MUL);
+  } else {
+    GenInstrRegister(SPECIAL, rs, rt, rd, MUL_OP, MUL_MUH);
+  }
 }
+
+
+void Assembler::mulu(Register rd, Register rs, Register rt) {
+  ASSERT(kArchVariant == kMips32r6);
+  GenInstrRegister(SPECIAL, rs, rt, rd, MUL_OP, MUL_MUH_U);
+}
+
 
 void Assembler::muh(Register rd, Register rs, Register rt) {
-  UNIMPLEMENTED_MIPS();
+  ASSERT(kArchVariant == kMips32r6);
+  GenInstrRegister(SPECIAL, rs, rt, rd, MUH_OP, MUL_MUH);
 }
 
-void Assembler::mod(Register rd, Register rs, Register rt) {
-  UNIMPLEMENTED_MIPS();
+
+void Assembler::muhu(Register rd, Register rs, Register rt) {
+  ASSERT(kArchVariant == kMips32r6);
+  GenInstrRegister(SPECIAL, rs, rt, rd, MUH_OP, MUL_MUH_U);
 }
+
+
+void Assembler::mod(Register rd, Register rs, Register rt) {
+  ASSERT(kArchVariant == kMips32r6);
+  GenInstrRegister(SPECIAL, rs, rt, rd, MOD_OP, DIV_MOD);
+}
+
+
+void Assembler::modu(Register rd, Register rs, Register rt) {
+  ASSERT(kArchVariant == kMips32r6);
+  GenInstrRegister(SPECIAL, rs, rt, rd, MOD_OP, DIV_MOD_U);
+}
+
 
 void Assembler::mult(Register rs, Register rt) {
   GenInstrRegister(SPECIAL, rs, rt, zero_reg, 0, MULT);
@@ -1478,8 +1505,20 @@ void Assembler::div(Register rs, Register rt) {
 }
 
 
+void Assembler::div(Register rd, Register rs, Register rt) {
+  ASSERT(kArchVariant == kMips32r6);
+  GenInstrRegister(SPECIAL, rs, rt, rd, DIV_OP, DIV_MOD);
+}
+
+
 void Assembler::divu(Register rs, Register rt) {
   GenInstrRegister(SPECIAL, rs, rt, zero_reg, 0, DIVU);
+}
+
+
+void Assembler::divu(Register rd, Register rs, Register rt) {
+  ASSERT(kArchVariant == kMips32r6);
+  GenInstrRegister(SPECIAL, rs, rt, rd, DIV_OP, DIV_MOD_U);
 }
 
 
@@ -1856,7 +1895,7 @@ void Assembler::clz(Register rd, Register rs) {
 void Assembler::ins_(Register rt, Register rs, uint16_t pos, uint16_t size) {
   // Should be called via MacroAssembler::Ins.
   // Ins instr has 'rt' field as dest, and two uint5: msb, lsb.
-  ASSERT(kArchVariant == kMips32r2);
+  ASSERT(kArchVariant == kMips32r2 || kArchVariant == kMips32r6);
   GenInstrRegister(SPECIAL3, rs, rt, pos + size - 1, pos, INS);
 }
 
@@ -1864,7 +1903,7 @@ void Assembler::ins_(Register rt, Register rs, uint16_t pos, uint16_t size) {
 void Assembler::ext_(Register rt, Register rs, uint16_t pos, uint16_t size) {
   // Should be called via MacroAssembler::Ext.
   // Ext instr has 'rt' field as dest, and two uint5: msb, lsb.
-  ASSERT(kArchVariant == kMips32r2);
+  ASSERT(kArchVariant == kMips32r2 || kArchVariant == kMips32r6);
   GenInstrRegister(SPECIAL3, rs, rt, size - 1, pos, EXT);
 }
 
@@ -2519,7 +2558,7 @@ void Assembler::set_target_address_at(Address pc,
   // This optimization can only be applied if the rt-code from instr2 is the
   // register used for the jalr/jr. Finally, we have to skip 'jr ra', which is
   // mips return. Occasionally this lands after an li().
-
+#if 0
   Instr instr3 = instr_at(pc + 2 * kInstrSize);
   uint32_t ipc = reinterpret_cast<uint32_t>(pc + 3 * kInstrSize);
   bool in_range = ((ipc ^ itarget) >> (kImm26Bits + kImmFieldShift)) == 0;
@@ -2575,13 +2614,17 @@ void Assembler::set_target_address_at(Address pc,
       // Trying patch J, but out of range, just go back to JR.
       // JR 'rs' reg is the 'rt' reg specified in the ORI instruction (instr2).
       uint32_t rs_field = GetRt(instr2) << kRsShift;
-      *(p+2) = SPECIAL | rs_field | JR;
+      if (kArchVariant == kMips32r6) {
+        *(p+2) = SPECIAL | rs_field | (at.code() << kRdShift) | JALR;
+      } else {
+        *(p+2) = SPECIAL | rs_field | JR;
+      }
     }
     patched_jump = true;
   }
-
+#endif
   if (icache_flush_mode != SKIP_ICACHE_FLUSH) {
-    CpuFeatures::FlushICache(pc, (patched_jump ? 3 : 2) * sizeof(int32_t));
+    CpuFeatures::FlushICache(pc, 2 * sizeof(int32_t));
   }
 }
 
