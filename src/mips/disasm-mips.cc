@@ -856,7 +856,6 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
 
 void Decoder::DecodeTypeImmediate(Instruction* instr) {
   switch (instr->OpcodeFieldRaw()) {
-    // ------------- REGIMM class.
     case COP1:
       switch (instr->RsFieldRaw()) {
         case BC1:
