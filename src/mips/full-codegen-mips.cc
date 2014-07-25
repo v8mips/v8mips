@@ -3950,11 +3950,11 @@ void FullCodeGenerator::EmitFastAsciiArrayJoin(CallRuntime* expr) {
   // smi but the other values are, so the result is a smi.
   __ lw(scratch1, FieldMemOperand(separator, SeqOneByteString::kLengthOffset));
   __ Subu(string_length, string_length, Operand(scratch1));
-  __ Mul(scratch2, scratch3, array_length, scratch1);
+  __ Mul(scratch3, scratch2, array_length, scratch1);
   // Check for smi overflow. No overflow if higher 33 bits of 64-bit result are
   // zero.
-  __ Branch(&bailout, ne, scratch2, Operand(zero_reg));
-  __ And(scratch3, scratch3, Operand(0x80000000));
+  __ Branch(&bailout, ne, scratch3, Operand(zero_reg));
+  __ And(scratch3, scratch2, Operand(0x80000000));
   __ Branch(&bailout, ne, scratch3, Operand(zero_reg));
   __ AdduAndCheckForOverflow(string_length, string_length, scratch2, scratch3);
   __ BranchOnOverflow(&bailout, scratch3);
