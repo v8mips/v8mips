@@ -572,8 +572,6 @@ DEFINE_BOOL(trace_parse, false, "trace parsing and preparsing")
 
 // simulator-arm.cc, simulator-arm64.cc and simulator-mips.cc
 DEFINE_BOOL(trace_sim, false, "Trace simulator execution")
-DEFINE_INT(trace_sim_at, 0,
-           "Simulator start tracing after x number of instructions")
 DEFINE_BOOL(debug_sim, false, "Enable debugging the simulator")
 DEFINE_BOOL(check_icache, false,
             "Check icache flushes in ARM and MIPS simulator")

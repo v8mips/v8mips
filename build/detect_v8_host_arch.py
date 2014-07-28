@@ -41,6 +41,7 @@ def DoMain(_):
   """Hook to be called from gyp without starting a separate python
   interpreter."""
   host_arch = platform.machine()
+
   # Convert machine type to format recognized by gyp.
   if re.match(r'i.86', host_arch) or host_arch == 'i86pc':
     host_arch = 'ia32'
