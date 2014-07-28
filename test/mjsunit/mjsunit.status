@@ -87,7 +87,8 @@
   ##############################################################################
   # Skip long running tests that time out in debug mode.
   'generated-transition-stub': [PASS, ['mode == debug', SKIP]],
-  'migrations': [PASS, ['mode == debug', TIMEOUT]],
+  'migrations': [SKIP],
+  'array-functions-prototype-misc.js': [PASS, ['mode == debug', SKIP]],
 
   ##############################################################################
   # This test sets the umask on a per-process basis and hence cannot be
@@ -221,6 +222,9 @@
 
   # BUG(v8:3147). It works on other architectures by accident.
   'regress/regress-conditional-position': [FAIL],
+
+  # BUG(v8:3457).
+  'deserialize-reference': [PASS, FAIL],
 
   # Slow tests.
   'array-concat': [PASS, SLOW],
@@ -356,6 +360,9 @@
 
   # Currently always deopt on minus zero
   'math-floor-of-div-minus-zero': [SKIP],
+
+  # BUG(v8:3457).
+  'deserialize-reference': [SKIP],
 }],  # 'arch == mipsel or arch == mips'
 
 ##############################################################################

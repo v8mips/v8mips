@@ -149,6 +149,9 @@ Handle<Code> PlatformCodeStub::GenerateCode() {
   // Generate the new code.
   MacroAssembler masm(isolate(), NULL, 256);
 
+  // TODO(yangguo) remove this once the code serializer handles code stubs.
+  if (FLAG_serialize_toplevel) masm.enable_serializer();
+
   {
     // Update the static counter each time a new code stub is generated.
     isolate()->counters()->code_stubs()->Increment();
@@ -233,6 +236,8 @@ const char* CodeStub::MajorName(CodeStub::Major major_key,
     CODE_STUB_LIST(DEF_CASE)
 #undef DEF_CASE
     case UninitializedMajorKey: return "<UninitializedMajorKey>Stub";
+    case NoCache:
+      return "<NoCache>Stub";
     default:
       if (!allow_unknown_keys) {
         UNREACHABLE();
@@ -622,24 +627,7 @@ void LoadFieldStub::InitializeInterfaceDescriptor(
 }
 
 
-void KeyedLoadFieldStub::InitializeInterfaceDescriptor(
-    CodeStubInterfaceDescriptor* descriptor) {
-  Register registers[] = { InterfaceDescriptor::ContextRegister(),
-                           LoadIC::ReceiverRegister() };
-  descriptor->Initialize(ARRAY_SIZE(registers), registers);
-}
-
-
 void StringLengthStub::InitializeInterfaceDescriptor(
-    CodeStubInterfaceDescriptor* descriptor) {
-  Register registers[] = { InterfaceDescriptor::ContextRegister(),
-                           LoadIC::ReceiverRegister(),
-                           LoadIC::NameRegister() };
-  descriptor->Initialize(ARRAY_SIZE(registers), registers);
-}
-
-
-void KeyedStringLengthStub::InitializeInterfaceDescriptor(
     CodeStubInterfaceDescriptor* descriptor) {
   Register registers[] = { InterfaceDescriptor::ContextRegister(),
                            LoadIC::ReceiverRegister(),
@@ -685,7 +673,7 @@ void StoreGlobalStub::InitializeInterfaceDescriptor(
 
 void KeyedLoadDictionaryElementPlatformStub::Generate(
     MacroAssembler* masm) {
-  KeyedLoadStubCompiler::GenerateLoadDictionaryElement(masm);
+  IndexedHandlerCompiler::GenerateLoadDictionaryElement(masm);
 }
 
 
@@ -712,7 +700,7 @@ void KeyedStoreElementStub::Generate(MacroAssembler* masm) {
       UNREACHABLE();
       break;
     case DICTIONARY_ELEMENTS:
-      KeyedStoreStubCompiler::GenerateStoreDictionaryElement(masm);
+      IndexedHandlerCompiler::GenerateStoreDictionaryElement(masm);
       break;
     case SLOPPY_ARGUMENTS_ELEMENTS:
       UNREACHABLE();
