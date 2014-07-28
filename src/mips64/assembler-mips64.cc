@@ -971,7 +971,6 @@ void Assembler::GenInstrJump(Opcode opcode,
 // Returns the next free trampoline entry.
 int32_t Assembler::get_trampoline_entry(int32_t pos) {
   int32_t trampoline_entry = kInvalidSlotPos;
-
   if (!internal_trampoline_exception_) {
     if (trampoline_.start() > pos) {
      trampoline_entry = trampoline_.take_slot();
@@ -987,7 +986,6 @@ int32_t Assembler::get_trampoline_entry(int32_t pos) {
 
 uint64_t Assembler::jump_address(Label* L) {
   int64_t target_pos;
-
   if (L->is_bound()) {
     target_pos = L->pos();
   } else {
@@ -1009,7 +1007,6 @@ uint64_t Assembler::jump_address(Label* L) {
 
 int32_t Assembler::branch_offset(Label* L, bool jump_elimination_allowed) {
   int32_t target_pos;
-
   if (L->is_bound()) {
     target_pos = L->pos();
   } else {
@@ -1034,9 +1031,9 @@ int32_t Assembler::branch_offset(Label* L, bool jump_elimination_allowed) {
 }
 
 
-int32_t Assembler::branch_offset_compact(Label* L, bool jump_elimination_allowed) {
+int32_t Assembler::branch_offset_compact(Label* L,
+    bool jump_elimination_allowed) {
   int32_t target_pos;
-
   if (L->is_bound()) {
     target_pos = L->pos();
   } else {
@@ -1063,7 +1060,6 @@ int32_t Assembler::branch_offset_compact(Label* L, bool jump_elimination_allowed
 
 int32_t Assembler::branch_offset21(Label* L, bool jump_elimination_allowed) {
   int32_t target_pos;
-
   if (L->is_bound()) {
     target_pos = L->pos();
   } else {
@@ -1082,7 +1078,7 @@ int32_t Assembler::branch_offset21(Label* L, bool jump_elimination_allowed) {
 
   int32_t offset = target_pos - (pc_offset() + kBranchPCOffset);
   ASSERT((offset & 3) == 0);
-  ASSERT(((offset >> 2) & 0xFFF00000) == 0); // Offset is 21bit width.
+  ASSERT(((offset >> 2) & 0xFFF00000) == 0);  // Offset is 21bit width.
 
   return offset;
 }
@@ -1091,7 +1087,6 @@ int32_t Assembler::branch_offset21(Label* L, bool jump_elimination_allowed) {
 int32_t Assembler::branch_offset21_compact(Label* L,
     bool jump_elimination_allowed) {
   int32_t target_pos;
-
   if (L->is_bound()) {
     target_pos = L->pos();
   } else {
@@ -1110,7 +1105,7 @@ int32_t Assembler::branch_offset21_compact(Label* L,
 
   int32_t offset = target_pos - pc_offset();
   ASSERT((offset & 3) == 0);
-  ASSERT(((offset >> 2) & 0xFFF00000) == 0); // Offset is 21bit width.
+  ASSERT(((offset >> 2) & 0xFFF00000) == 0);  // Offset is 21bit width.
 
   return offset;
 }
@@ -2431,7 +2426,7 @@ void Assembler::ceil_l_d(FPURegister fd, FPURegister fs) {
 }
 
 
-void Assembler::min(SecondaryField fmt,FPURegister fd, FPURegister ft,
+void Assembler::min(SecondaryField fmt, FPURegister fd, FPURegister ft,
     FPURegister fs) {
   ASSERT(kArchVariant == kMips64r6);
   ASSERT((fmt == D) || (fmt == S));
@@ -2439,7 +2434,7 @@ void Assembler::min(SecondaryField fmt,FPURegister fd, FPURegister ft,
 }
 
 
-void Assembler::mina(SecondaryField fmt,FPURegister fd, FPURegister ft,
+void Assembler::mina(SecondaryField fmt, FPURegister fd, FPURegister ft,
     FPURegister fs) {
   ASSERT(kArchVariant == kMips64r6);
   ASSERT((fmt == D) || (fmt == S));
@@ -2447,7 +2442,7 @@ void Assembler::mina(SecondaryField fmt,FPURegister fd, FPURegister ft,
 }
 
 
-void Assembler::max(SecondaryField fmt,FPURegister fd, FPURegister ft,
+void Assembler::max(SecondaryField fmt, FPURegister fd, FPURegister ft,
     FPURegister fs) {
   ASSERT(kArchVariant == kMips64r6);
   ASSERT((fmt == D) || (fmt == S));
@@ -2455,7 +2450,7 @@ void Assembler::max(SecondaryField fmt,FPURegister fd, FPURegister ft,
 }
 
 
-void Assembler::maxa(SecondaryField fmt,FPURegister fd, FPURegister ft,
+void Assembler::maxa(SecondaryField fmt, FPURegister fd, FPURegister ft,
     FPURegister fs) {
   ASSERT(kArchVariant == kMips64r6);
   ASSERT((fmt == D) || (fmt == S));
@@ -2514,7 +2509,6 @@ void Assembler::bc1eqz(int16_t offset, FPURegister ft) {
 
 
 void Assembler::bc1nez(int16_t offset, FPURegister ft) {
-
   ASSERT(kArchVariant == kMips64r6);
   Instr instr = COP1 | BC1NEZ | ft.code() << kFtShift | (offset & kImm16Mask);
   emit(instr);

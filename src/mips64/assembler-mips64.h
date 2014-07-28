@@ -628,7 +628,7 @@ class Assembler : public AssemblerBase {
   void bgez(Register rs, int16_t offset);
   void bgezc(Register rt, int16_t offset);
   void bgezc(Register rt, Label* L) {
-    bgezc( rt, branch_offset_compact(L, false)>>2);
+    bgezc(rt, branch_offset_compact(L, false)>>2);
   }
   void bgeuc(Register rs, Register rt, int16_t offset);
   void bgeuc(Register rs, Register rt, Label* L) {
@@ -641,26 +641,26 @@ class Assembler : public AssemblerBase {
   void bgezal(Register rs, int16_t offset);
   void bgezalc(Register rt, int16_t offset);
   void bgezalc(Register rt, Label* L) {
-    bgezalc( rt, branch_offset_compact(L, false)>>2);
+    bgezalc(rt, branch_offset_compact(L, false)>>2);
   }
   void bgezall(Register rs, int16_t offset);
   void bgezall(Register rs, Label* L) {
-    bgezall( rs, branch_offset(L, false)>>2);
+    bgezall(rs, branch_offset(L, false)>>2);
   }
   void bgtz(Register rs, int16_t offset);
   void bgtzc(Register rt, int16_t offset);
   void bgtzc(Register rt, Label* L) {
-    bgtzc( rt, branch_offset_compact(L, false)>>2);
+    bgtzc(rt, branch_offset_compact(L, false)>>2);
   }
   void blez(Register rs, int16_t offset);
   void blezc(Register rt, int16_t offset);
   void blezc(Register rt, Label* L) {
-    blezc( rt, branch_offset_compact(L, false)>>2);
+    blezc(rt, branch_offset_compact(L, false)>>2);
   }
   void bltz(Register rs, int16_t offset);
   void bltzc(Register rt, int16_t offset);
   void bltzc(Register rt, Label* L) {
-    bltzc( rt, branch_offset_compact(L, false)>>2);
+    bltzc(rt, branch_offset_compact(L, false)>>2);
   }
   void bltuc(Register rs, Register rt, int16_t offset);
   void bltuc(Register rs, Register rt, Label* L) {
@@ -668,25 +668,25 @@ class Assembler : public AssemblerBase {
   }
   void bltc(Register rs, Register rt, int16_t offset);
   void bltc(Register rs, Register rt, Label* L) {
-    bltc( rs, rt, branch_offset_compact(L, false)>>2);
+    bltc(rs, rt, branch_offset_compact(L, false)>>2);
   }
 
   void bltzal(Register rs, int16_t offset);
   void blezalc(Register rt, int16_t offset);
   void blezalc(Register rt, Label* L) {
-    blezalc( rt, branch_offset_compact(L, false)>>2);
+    blezalc(rt, branch_offset_compact(L, false)>>2);
   }
   void bltzalc(Register rt, int16_t offset);
   void bltzalc(Register rt, Label* L) {
-    bltzalc( rt, branch_offset_compact(L, false)>>2);
+    bltzalc(rt, branch_offset_compact(L, false)>>2);
   }
   void bgtzalc(Register rt, int16_t offset);
   void bgtzalc(Register rt, Label* L) {
-    bgtzalc( rt, branch_offset_compact(L, false)>>2);
+    bgtzalc(rt, branch_offset_compact(L, false)>>2);
   }
   void beqzalc(Register rt, int16_t offset);
   void beqzalc(Register rt, Label* L) {
-    beqzalc( rt, branch_offset_compact(L, false)>>2);
+    beqzalc(rt, branch_offset_compact(L, false)>>2);
   }
   void beqc(Register rs, Register rt, int16_t offset);
   void beqc(Register rs, Register rt, Label* L) {
@@ -694,11 +694,11 @@ class Assembler : public AssemblerBase {
   }
   void beqzc(Register rs, int32_t offset);
   void beqzc(Register rs, Label* L) {
-    beqzc( rs, branch_offset21_compact(L, false)>>2);
+    beqzc(rs, branch_offset21_compact(L, false)>>2);
   }
   void bnezalc(Register rt, int16_t offset);
   void bnezalc(Register rt, Label* L) {
-    bnezalc( rt, branch_offset_compact(L, false)>>2);
+    bnezalc(rt, branch_offset_compact(L, false)>>2);
   }
   void bnec(Register rs, Register rt, int16_t offset);
   void bnec(Register rs, Register rt, Label* L) {
@@ -706,7 +706,7 @@ class Assembler : public AssemblerBase {
   }
   void bnezc(Register rt, int32_t offset);
   void bnezc(Register rt, Label* L) {
-    bnezc( rt, branch_offset21_compact(L, false)>>2);
+    bnezc(rt, branch_offset21_compact(L, false)>>2);
   }
   void bne(Register rs, Register rt, int16_t offset);
   void bne(Register rs, Register rt, Label* L) {
@@ -934,10 +934,10 @@ class Assembler : public AssemblerBase {
   void ceil_l_s(FPURegister fd, FPURegister fs);
   void ceil_l_d(FPURegister fd, FPURegister fs);
 
-  void min(SecondaryField fmt,FPURegister fd, FPURegister ft, FPURegister fs);
-  void mina(SecondaryField fmt,FPURegister fd, FPURegister ft, FPURegister fs);
-  void max(SecondaryField fmt,FPURegister fd, FPURegister ft, FPURegister fs);
-  void maxa(SecondaryField fmt,FPURegister fd, FPURegister ft, FPURegister fs);
+  void min(SecondaryField fmt, FPURegister fd, FPURegister ft, FPURegister fs);
+  void mina(SecondaryField fmt, FPURegister fd, FPURegister ft, FPURegister fs);
+  void max(SecondaryField fmt, FPURegister fd, FPURegister ft, FPURegister fs);
+  void maxa(SecondaryField fmt, FPURegister fd, FPURegister ft, FPURegister fs);
 
   void cvt_s_w(FPURegister fd, FPURegister fs);
   void cvt_s_l(FPURegister fd, FPURegister fs);

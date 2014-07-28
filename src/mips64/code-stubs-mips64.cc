@@ -1037,7 +1037,6 @@ void ICCompareStub::GenerateGeneric(MacroAssembler* masm) {
 
     __ mov(v0, a5);  // Return GREATER as result.
     __ bind(&skip);
-
   }
   __ Ret();
 

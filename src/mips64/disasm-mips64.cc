@@ -793,7 +793,7 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
             }
           }
           break;
-        case MULT: // @Mips64r6 == MUL_MUH.
+        case MULT:  // @Mips64r6 == MUL_MUH.
           if (kArchVariant != kMips64r6) {
             Format(instr, "mult    'rs, 'rt");
           } else {
@@ -816,7 +816,7 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
           }
 
           break;
-        case DIV: // @Mips64r6 == DIV_MOD.
+        case DIV:  // @Mips64r6 == DIV_MOD.
           if (kArchVariant != kMips64r6) {
             Format(instr, "div     'rs, 'rt");
           } else {
@@ -827,7 +827,7 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
             }
           }
           break;
-        case DDIV: // @Mips64r6 == D_DIV_MOD.
+        case DDIV:  // @Mips64r6 == D_DIV_MOD.
           if (kArchVariant != kMips64r6) {
             Format(instr, "ddiv    'rs, 'rt");
           } else {
@@ -838,7 +838,7 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
             }
           }
           break;
-        case DIVU: // @Mips64r6 == DIV_MOD_U.
+        case DIVU:  // @Mips64r6 == DIV_MOD_U.
           if (kArchVariant != kMips64r6) {
             Format(instr, "divu    'rs, 'rt");
           } else {
@@ -849,7 +849,7 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
             }
           }
           break;
-        case DDIVU: // @Mips64r6 == D_DIV_MOD_U.
+        case DDIVU:  // @Mips64r6 == D_DIV_MOD_U.
           if (kArchVariant != kMips64r6) {
             Format(instr, "ddivu   'rs, 'rt");
           } else {
@@ -1011,7 +1011,7 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
         case BC1NEZ:
           Format(instr, "bc1nez    'ft, 'imm16u");
           break;
-        case W: // CMP.S instruction.
+        case W:  // CMP.S instruction.
           switch (instr->FunctionValue()) {
             case CMP_AF:
               Format(instr, "cmp.af.S    'ft, 'fs, 'fd");
@@ -1050,7 +1050,7 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
               UNREACHABLE();
           }
           break;
-        case L: // CMP.D instruction.
+        case L:  // CMP.D instruction.
           switch (instr->FunctionValue()) {
             case CMP_AF:
               Format(instr, "cmp.af.D    'ft, 'fs, 'fd");

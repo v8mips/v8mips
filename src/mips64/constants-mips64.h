@@ -299,7 +299,7 @@ enum Opcode {
   ANDI      =   ((1 << 3) + 4) << kOpcodeShift,
   ORI       =   ((1 << 3) + 5) << kOpcodeShift,
   XORI      =   ((1 << 3) + 6) << kOpcodeShift,
-  LUI       =   ((1 << 3) + 7) << kOpcodeShift, // LUI/AUI family.
+  LUI       =   ((1 << 3) + 7) << kOpcodeShift,  // LUI/AUI family.
   DAUI      =   ((3 << 3) + 5) << kOpcodeShift,
 
   BEQC      =   ((2 << 3) + 0) << kOpcodeShift,
@@ -416,10 +416,10 @@ enum SecondaryField {
   DSRA32    =   ((7 << 3) + 7),
 
   // Multiply integers in r6.
-  MUL_MUH   =   ((3 << 3) + 0), // MUL    / MUH.
-  MUL_MUH_U =   ((3 << 3) + 1), // MUL_U  / MUH_U.
-  D_MUL_MUH =   ((7 << 2) + 0), // DMUL   / DMUH.
-  D_MUL_MUH_U = ((7 << 2) + 1), // DMUL_U / DMUH_U.
+  MUL_MUH   =   ((3 << 3) + 0),  // MUL,  MUH.
+  MUL_MUH_U =   ((3 << 3) + 1),  // MUL_U, MUH_U.
+  D_MUL_MUH =   ((7 << 2) + 0),  // DMUL, DMUH.
+  D_MUL_MUH_U = ((7 << 2) + 1),  // DMUL_U, DMUH_U.
 
   MUL_OP    =   ((0 << 3) + 2),
   MUH_OP    =   ((0 << 3) + 3),
@@ -544,26 +544,26 @@ enum SecondaryField {
   CMP_SLE   =   ((1 << 3) + 6),
   CMP_SULE  =   ((1 << 3) + 7),
   // COP1 CMP negative predicates Bit 5..4 = 01.
-  CMP_AT    =   ((2 << 3) + 0), // Reserved, not implemented.
+  CMP_AT    =   ((2 << 3) + 0),  // Reserved, not implemented.
   CMP_OR    =   ((2 << 3) + 1),
   CMP_UNE   =   ((2 << 3) + 2),
   CMP_NE    =   ((2 << 3) + 3),
-  CMP_UGE   =   ((2 << 3) + 4), // Reserved, not implemented.
-  CMP_OGE   =   ((2 << 3) + 5), // Reserved, not implemented.
-  CMP_UGT   =   ((2 << 3) + 6), // Reserved, not implemented.
-  CMP_OGT   =   ((2 << 3) + 7), // Reserved, not implemented.
-  CMP_SAT   =   ((3 << 3) + 0), // Reserved, not implemented.
+  CMP_UGE   =   ((2 << 3) + 4),  // Reserved, not implemented.
+  CMP_OGE   =   ((2 << 3) + 5),  // Reserved, not implemented.
+  CMP_UGT   =   ((2 << 3) + 6),  // Reserved, not implemented.
+  CMP_OGT   =   ((2 << 3) + 7),  // Reserved, not implemented.
+  CMP_SAT   =   ((3 << 3) + 0),  // Reserved, not implemented.
   CMP_SOR   =   ((3 << 3) + 1),
   CMP_SUNE  =   ((3 << 3) + 2),
   CMP_SNE   =   ((3 << 3) + 3),
-  CMP_SUGE  =   ((3 << 3) + 4), // Reserved, not implemented.
-  CMP_SOGE  =   ((3 << 3) + 5), // Reserved, not implemented.
-  CMP_SUGT  =   ((3 << 3) + 6), // Reserved, not implemented.
-  CMP_SOGT  =   ((3 << 3) + 7), // Reserved, not implemented.
+  CMP_SUGE  =   ((3 << 3) + 4),  // Reserved, not implemented.
+  CMP_SOGE  =   ((3 << 3) + 5),  // Reserved, not implemented.
+  CMP_SUGT  =   ((3 << 3) + 6),  // Reserved, not implemented.
+  CMP_SOGT  =   ((3 << 3) + 7),  // Reserved, not implemented.
 
   SEL       =   ((2 << 3) + 0),
-  SELEQZ_C  =   ((2 << 3) + 4), // COP1 on FPR registers.
-  SELNEZ_C  =   ((2 << 3) + 7), // COP1 on FPR registers.
+  SELEQZ_C  =   ((2 << 3) + 4),  // COP1 on FPR registers.
+  SELNEZ_C  =   ((2 << 3) + 7),  // COP1 on FPR registers.
 
   // COP1 Encoding of Function Field When rs=PS.
   // COP1X Encoding of Function Field.
@@ -574,9 +574,9 @@ enum SecondaryField {
 
 
 // ----- Emulated conditions.
-// On MIPS we use this enum to abstract from conditionnal branch instructions.
+// On MIPS we use this enum to abstract from conditional branch instructions.
 // The 'U' prefix is used to specify unsigned comparisons.
-// Oppposite conditions must be paired as odd/even numbers
+// Opposite conditions must be paired as odd/even numbers
 // because 'NegateCondition' function flips LSB to negate condition.
 enum Condition {
   // Any value < 0 is considered no_condition.

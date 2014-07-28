@@ -2542,7 +2542,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               alu_out = get_fpu_register_signed_word(fs_reg);
               set_fpu_register_double(fd_reg, static_cast<double>(alu_out));
               break;
-            case CMP_AF: // Mips64r6 CMP.S instructions.
+            case CMP_AF:  // Mips64r6 CMP.S instructions.
             case CMP_UN:
             case CMP_EQ:
             case CMP_UEQ:
@@ -2570,7 +2570,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
             case CVT_S_L:
               UNIMPLEMENTED_MIPS();
               break;
-            case CMP_AF: // Mips64r6 CMP.D instructions.
+            case CMP_AF:  // Mips64r6 CMP.D instructions.
               UNIMPLEMENTED_MIPS();
               break;
             case CMP_UN:
@@ -2724,7 +2724,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           break;
         case DIV:
         case DDIV:
-          switch(kArchVariant) {
+          switch (kArchVariant) {
             case kMips64r1:
             case kMips64r2:
             case kLoongson:

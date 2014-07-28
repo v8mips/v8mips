@@ -903,7 +903,6 @@ void MacroAssembler::Ddivu(Register rs, const Operand& rt) {
 
 
 void MacroAssembler::Dmod(Register rd, Register rs, const Operand& rt) {
-
   if (kArchVariant != kMips64r6) {
     if (rt.is_reg()) {
       ddiv(rs, rt.rm());
@@ -2537,7 +2536,7 @@ void MacroAssembler::BranchAndLinkShort(int16_t offset, Condition cond,
         slt(scratch, r2, rs);
         beq(scratch, zero_reg, 2);
         nop();
-        bal( offset);
+        bal(offset);
         break;
       case greater_equal:
         // rs >= rt
@@ -2568,7 +2567,7 @@ void MacroAssembler::BranchAndLinkShort(int16_t offset, Condition cond,
         sltu(scratch, r2, rs);
         beq(scratch, zero_reg, 2);
         nop();
-        bal( offset);
+        bal(offset);
         break;
       case Ugreater_equal:
         // rs >= rt
@@ -2652,7 +2651,7 @@ void MacroAssembler::BranchAndLinkShort(Label* L, Condition cond, Register rs,
         beq(scratch, zero_reg, 2);
         nop();
         offset = shifted_branch_offset(L, false);
-        bal( offset);
+        bal(offset);
         break;
       case greater_equal:
         // rs >= rt
@@ -2687,7 +2686,7 @@ void MacroAssembler::BranchAndLinkShort(Label* L, Condition cond, Register rs,
         beq(scratch, zero_reg, 2);
         nop();
         offset = shifted_branch_offset(L, false);
-        bal( offset);
+        bal(offset);
         break;
       case Ugreater_equal:
         // rs >= rt

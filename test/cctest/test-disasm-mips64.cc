@@ -183,7 +183,7 @@ TEST(Type0) {
       COMPARE(mul(v0, v1, s0),
               "70701002       mul     v0, v1, s0");
     }
-  } else { // MIPS64r6.
+  } else {  // MIPS64r6.
     COMPARE(mul(a0, a1, a2),
             "00a62098       mul    a0, a1, a2");
     COMPARE(muh(a0, a1, a2),
