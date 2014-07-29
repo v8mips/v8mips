@@ -478,9 +478,6 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
   switch (instr->OpcodeFieldRaw()) {
     case COP1:    // Coprocessor instructions.
       switch (instr->RsFieldRaw()) {
-        case BC1:   // bc1 handled in DecodeTypeImmediate.
-          UNREACHABLE();
-          break;
         case MFC1:
           Format(instr, "mfc1    'rt, 'fs");
           break;
@@ -594,14 +591,8 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
               break;
           }
           break;
-        case S:
-          UNIMPLEMENTED_MIPS();
-          break;
         case W:
           switch (instr->FunctionFieldRaw()) {
-            case CVT_S_W:   // Convert word to float (single).
-              Format(instr, "cvt.s.w 'fd, 'fs");
-              break;
             case CVT_D_W:   // Convert word to double.
               Format(instr, "cvt.d.w 'fd, 'fs");
               break;
@@ -651,9 +642,6 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
               UNREACHABLE();
           }
           break;
-        case PS:
-          UNIMPLEMENTED_MIPS();
-          break;
         default:
           UNREACHABLE();
       }
@@ -676,7 +664,7 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
           Format(instr, "jalr    'rs");
           break;
         case SLL:
-          if ( 0x0 == static_cast<int>(instr->InstructionBits()))
+          if (0x0 == static_cast<int>(instr->InstructionBits()))
             Format(instr, "nop");
           else
             Format(instr, "sll     'rd, 'rt, 'sa");
@@ -968,19 +956,11 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
     case SPECIAL3:
       switch (instr->FunctionFieldRaw()) {
         case INS: {
-          if (kArchVariant == kMips64r2) {
-            Format(instr, "ins     'rt, 'rs, 'sa, 'ss2");
-          } else {
-            Unknown(instr);
-          }
+          Format(instr, "ins     'rt, 'rs, 'sa, 'ss2");
           break;
         }
         case EXT: {
-          if (kArchVariant == kMips64r2) {
-            Format(instr, "ext     'rt, 'rs, 'sa, 'ss1");
-          } else {
-            Unknown(instr);
-          }
+          Format(instr, "ext     'rt, 'rs, 'sa, 'ss1");
           break;
         }
         default:

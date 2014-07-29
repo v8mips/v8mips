@@ -1955,11 +1955,6 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
   switch (op) {
     case COP1:    // Coprocessor instructions.
       switch (instr->RsFieldRaw()) {
-        case BC1:   // Handled in DecodeTypeImmed, should never come here.
-        case BC1EQZ:
-        case BC1NEZ:
-          UNREACHABLE();
-          break;
         case CFC1:
           // At the moment only FCSR is supported.
           ASSERT(fs_reg == kFCSRRegister);
@@ -1978,8 +1973,6 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
         case MTC1:
         case DMTC1:
         case MTHC1:
-          // Do the store in the execution step.
-          break;
         case S:
         case D:
         case W:
@@ -1988,7 +1981,8 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           // Do everything in the execution step.
           break;
         default:
-          UNIMPLEMENTED_MIPS();
+        // BC1 BC1EQZ BC1NEZ handled in DecodeTypeImmed, should never come here.
+           UNREACHABLE();
       }
       break;
     case COP1X:
@@ -2356,20 +2350,9 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               f = get_fpu_register_float(fs_reg);
               set_fpu_register_double(fd_reg, static_cast<double>(f));
               break;
-            case CVT_W_S:
-            case CVT_L_S:
-            case TRUNC_W_S:
-            case TRUNC_L_S:
-            case ROUND_W_S:
-            case ROUND_L_S:
-            case FLOOR_W_S:
-            case FLOOR_L_S:
-            case CEIL_W_S:
-            case CEIL_L_S:
-            case CVT_PS_S:
-              UNIMPLEMENTED_MIPS();
-              break;
             default:
+            // CVT_W_S CVT_L_S TRUNC_W_S ROUND_W_S ROUND_L_S FLOOR_W_S FLOOR_L_S
+            // CEIL_W_S CEIL_L_S CVT_PS_S are unimplemented.
               UNREACHABLE();
           }
           break;
@@ -2542,20 +2525,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               alu_out = get_fpu_register_signed_word(fs_reg);
               set_fpu_register_double(fd_reg, static_cast<double>(alu_out));
               break;
-            case CMP_AF:  // Mips64r6 CMP.S instructions.
-            case CMP_UN:
-            case CMP_EQ:
-            case CMP_UEQ:
-            case CMP_LT:
-            case CMP_ULT:
-            case CMP_LE:
-            case CMP_ULE:
-            case CMP_OR:
-            case CMP_UNE:
-            case CMP_NE:
-              UNIMPLEMENTED_MIPS();
-              break;
-            default:
+            default:  // Mips64r6 CMP.S instructions unimplemented.
               UNREACHABLE();
           }
           break;
@@ -2622,20 +2592,9 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
                 set_fpu_register(fd_reg, 0);
               }
               break;
-            case CMP_OR:
-              UNIMPLEMENTED_MIPS();
-              break;
-            case CMP_UNE:
-              UNIMPLEMENTED_MIPS();
-              break;
-            case CMP_NE:
-              UNIMPLEMENTED_MIPS();
-              break;
-            default:
+            default:  // CMP_OR CMP_UNE CMP_NE UNIMPLEMENTED
               UNREACHABLE();
           }
-          break;
-        case PS:
           break;
         default:
           UNREACHABLE();

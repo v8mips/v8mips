@@ -2513,9 +2513,9 @@ void Assembler::bc1nez(int16_t offset, FPURegister ft) {
   Instr instr = COP1 | BC1NEZ | ft.code() << kFtShift | (offset & kImm16Mask);
   emit(instr);
 }
+
+
 // Conditions for < MIPSr6.
-
-
 void Assembler::c(FPUCondition cond, SecondaryField fmt,
     FPURegister fs, FPURegister ft, uint16_t cc) {
   ASSERT(is_uint3(cc));
