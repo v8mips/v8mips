@@ -5649,10 +5649,7 @@ void MacroAssembler::CheckPageFlag(
     int mask,
     Condition cc,
     Label* condition_met) {
-  // TODO(plind):  Fix li() so we can use constant embedded inside And().
-  // And(scratch, object, Operand(~Page::kPageAlignmentMask));
-  li(at, Operand(~Page::kPageAlignmentMask), CONSTANT_SIZE);  // plind HACK
-  And(scratch, object, at);
+  And(scratch, object, Operand(~Page::kPageAlignmentMask));
   ld(scratch, MemOperand(scratch, MemoryChunk::kFlagsOffset));
   And(scratch, scratch, Operand(mask));
   Branch(condition_met, cc, scratch, Operand(zero_reg));
