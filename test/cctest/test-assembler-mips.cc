@@ -347,23 +347,39 @@ TEST(MIPS4) {
   Assembler assm(isolate, NULL, 0);
   Label L, C;
 
-  __ ldc1(f4, MemOperand(a0, OFFSET_OF(T, a)) );
-  __ ldc1(f6, MemOperand(a0, OFFSET_OF(T, b)) );
+  FPURegister arg0, arg1;
+  arg0 = f4;
+  arg1 = IsFp64Mode ? f5 : f6;
 
-  // Swap f4 and f6, by using four integer registers, t0-t3.
-  __ mfc1(t0, f4);
-  __ mfc1(t1, f5);
-  __ mfc1(t2, f6);
-  __ mfc1(t3, f7);
+  __ ldc1(arg0, MemOperand(a0, OFFSET_OF(T, a)) );
+  __ ldc1(arg1, MemOperand(a0, OFFSET_OF(T, b)) );
 
-  __ mtc1(t0, f6);
-  __ mtc1(t1, f7);
-  __ mtc1(t2, f4);
-  __ mtc1(t3, f5);
+  // Swap arg0 and arg1, by using four integer registers, t0-t3.
+  if (IsFp64Mode) {
+    __ mfc1(t0, arg0);
+    __ mfhc1(t1, arg0);
+    __ mfc1(t2, arg1);
+    __ mfhc1(t3, arg1);
 
-  // Store the swapped f4 and f5 back to memory.
-  __ sdc1(f4, MemOperand(a0, OFFSET_OF(T, a)) );
-  __ sdc1(f6, MemOperand(a0, OFFSET_OF(T, c)) );
+    __ mtc1(t0, arg1);
+    __ mthc1(t1, arg1);
+    __ mtc1(t2, arg0);
+    __ mthc1(t3, arg0);
+  } else {
+    __ mfc1(t0, arg0);
+    __ mfc1(t1, arg0.high());
+    __ mfc1(t2, arg1);
+    __ mfc1(t3, arg1.high());
+
+    __ mtc1(t0, arg1);
+    __ mtc1(t1, arg1.high());
+    __ mtc1(t2, arg0);
+    __ mtc1(t3, arg0.high());
+  }
+
+  // Store the swapped arg0 and arg1 back to memory.
+  __ sdc1(arg0, MemOperand(a0, OFFSET_OF(T, a)) );
+  __ sdc1(arg1, MemOperand(a0, OFFSET_OF(T, c)) );
 
   __ jr(ra);
   __ nop();
@@ -759,7 +775,11 @@ TEST(MIPS10) {
 
     // Save the raw bits of the double.
     __ mfc1(t0, f0);
-    __ mfc1(t1, f1);
+    if (IsFp64Mode) {
+      __ mfhc1(t1, f0);
+    } else {
+      __ mfc1(t1, f1);
+    }
     __ sw(t0, MemOperand(a0, OFFSET_OF(T, dbl_mant)));
     __ sw(t1, MemOperand(a0, OFFSET_OF(T, dbl_exp)));
 
