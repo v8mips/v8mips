@@ -596,6 +596,7 @@ enum CpuFeature {
     NEON,
     // MIPS
     FPU,
+    FP64,
     // ARM64
     ALWAYS_ALIGN_CSP,
     NUMBER_OF_CPU_FEATURES

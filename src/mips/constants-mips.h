@@ -48,6 +48,22 @@ enum Endianness {
 #error Unknown endianness
 #endif
 
+enum FpuMode {
+  kFP32,
+  kFP64,
+  kFPXX
+};
+
+#if defined(FPU_MODE_FP32)
+  static const FpuMode kFpuMode = kFP32;
+#elif defined(FPU_MODE_FP64)
+  static const FpuMode kFpuMode = kFP64;
+#elif defined(FPU_MODE_FPXX)
+  static const FpuMode kFpuMode = kFPXX;
+#else
+  static const FpuMode kFpuMode = kFP32;
+#endif
+
 #if(defined(__mips_hard_float) && __mips_hard_float != 0)
 // Use floating-point coprocessor instructions. This flag is raised when
 // -mhard-float is passed to the compiler.
@@ -73,7 +89,13 @@ const uint32_t kHoleNanLower32Offset = 4;
 
 
 //TODO: Here use build switch to select FPU mode.
-const bool IsFp64Mode = true;
+#ifndef FPU_MODE_FPXX
+#define IsFp64Mode() \
+  (kFpuMode == kFP64)
+#else
+#define IsFp64Mode() \
+  (CpuFeatures::IsSupported(FP64))
+#endif
 
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>

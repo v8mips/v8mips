@@ -58,6 +58,14 @@
     # Default arch variant for MIPS.
     'mips_arch_variant%': 'r2',
 
+    # Possible values fp32, fp64, fpxx.
+    # fp32 - 32 32-bit FPU registers are available, doubles are placed in
+    #        register pairs.
+    # fp64 - 32 64-bit FPU registers are available.
+    # fpxx - compatibility mode, it chooses fp32 or fp64 depending on runtime
+    #        detection
+    'mips_fpu_mode%': 'fp32',
+
     'v8_enable_backtrace%': 0,
 
     # Enable profiling support. Only required on Windows.
@@ -300,6 +308,15 @@
               '__mips_soft_float=1'
             ],
           }],
+          ['mips_fpu_mode=="fp64"', {
+            'defines': ['FPU_MODE_FP64',],
+          }],
+          ['mips_fpu_mode=="fpxx"', {
+            'defines': ['FPU_MODE_FPXX',],
+          }],
+          ['mips_fpu_mode=="fp32"', {
+            'defines': ['FPU_MODE_FP32',],
+          }],
           ['mips_arch_variant=="r6"', {
             'defines': ['_MIPS_ARCH_MIPS32R6',],
           }],
@@ -357,6 +374,15 @@
             'defines': [
               '__mips_soft_float=1'
             ],
+          }],
+          ['mips_fpu_mode=="fp64"', {
+            'defines': ['FPU_MODE_FP64',],
+          }],
+          ['mips_fpu_mode=="fpxx"', {
+            'defines': ['FPU_MODE_FPXX',],
+          }],
+          ['mips_fpu_mode=="fp32"', {
+            'defines': ['FPU_MODE_FP32',],
           }],
           ['mips_arch_variant=="r6"', {
             'defines': ['_MIPS_ARCH_MIPS32R6',],

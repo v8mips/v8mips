@@ -115,6 +115,23 @@ static uint32_t ReadELFHWCaps() {
 
 #endif  // V8_HOST_ARCH_ARM
 
+#if V8_HOST_ARCH_MIPS
+int __detect_fp64_mode(void) {
+  double result = 0;
+  // Bit representation of (double)1 is 0x3FF0000000000000.
+  asm(
+    "lui $t0, 0x3FF0\n\t"
+    "ldc1 $f0, %0\n\t"
+    "mtc1 $t0, $f1\n\t"
+    "sdc1 $f0, %0\n\t"
+    : "+m" (result)
+    : : "t0", "$f0", "$f1", "memory");
+
+  return !(result == (double)1);
+}
+
+#endif
+
 // Extract the information exposed by the kernel via /proc/cpuinfo.
 class CPUInfo V8_FINAL {
  public:
@@ -466,6 +483,9 @@ CPU::CPU() : stepping_(0),
   char* cpu_model = cpu_info.ExtractField("cpu model");
   has_fpu_ = HasListItem(cpu_model, "FPU");
   delete[] cpu_model;
+#ifdef V8_HOST_ARCH_MIPS
+  is_fp64_mode_ = __detect_fp64_mode();
+#endif
 
 #elif V8_HOST_ARCH_ARM64
 

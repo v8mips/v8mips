@@ -98,10 +98,22 @@ void CpuFeatures::ProbeImpl(bool cross_compile) {
 #ifndef __mips__
   // For the simulator build, use FPU.
   supported_ |= 1u << FPU;
+#if defined(_MIPS_ARCH_MIPS32R6)
+  // FP64 mode is implied on r6.
+  supported_ |= 1u << FP64;
+#endif
+#if defined(FPU_MODE_FP64)
+  supported_ |= 1u << FP64;
+#endif
 #else
   // Probe for additional features at runtime.
   base::CPU cpu;
   if (cpu.has_fpu()) supported_ |= 1u << FPU;
+#if defined(FPU_MODE_FPXX)
+  if (cpu.is_fp64_mode()) supported_ |= 1u << FP64;
+#elif defined(FPU_MODE_FP64)
+  supported_ |= 1u << FP64;
+#endif
 #endif
 }
 
@@ -1932,7 +1944,7 @@ void Assembler::lwc1(FPURegister fd, const MemOperand& src) {
 void Assembler::ldc1(FPURegister fd, const MemOperand& src) {
   // Workaround for non-8-byte alignment of HeapNumber, convert 64-bit
   // load to two 32-bit loads.
-  if (IsFp64Mode) {
+  if (IsFp64Mode()) {
     GenInstrImmediate(LWC1, src.rm(), fd, src.offset_ + Register::kMantissaOffset);
     GenInstrImmediate(LW, src.rm(), at, src.offset_ + Register::kExponentOffset);
     mthc1(at, fd);
@@ -1955,7 +1967,7 @@ void Assembler::swc1(FPURegister fd, const MemOperand& src) {
 void Assembler::sdc1(FPURegister fd, const MemOperand& src) {
   // Workaround for non-8-byte alignment of HeapNumber, convert 64-bit
   // store to two 32-bit stores.
-  if (IsFp64Mode) {
+  if (IsFp64Mode()) {
     GenInstrImmediate(SWC1, src.rm(), fd, src.offset_ +
         Register::kMantissaOffset);
     mfhc1(at, fd);

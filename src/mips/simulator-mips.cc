@@ -328,7 +328,9 @@ void MipsDebugger::PrintAllRegsIncludingFPU() {
 
   PrintF("\n\n");
   // f0, f1, f2, ... f31.
-  if (IsFp64Mode) {
+  // This must be a compile-time switch,
+  // compiler will throw out warnings otherwise.
+  if (kFpuMode == kFP64) {
     PrintF("%3s: 0x%016llx %16.4e\n", FPU_REG_INFO64(0) );
     PrintF("%3s: 0x%016llx %16.4e\n", FPU_REG_INFO64(1) );
     PrintF("%3s: 0x%016llx %16.4e\n", FPU_REG_INFO64(2) );
@@ -470,7 +472,7 @@ void MipsDebugger::Debug() {
               value = GetRegisterValue(regnum);
               PrintF("%s: 0x%08x %d \n", arg1, value, value);
             } else if (fpuregnum != kInvalidFPURegister) {
-              if (IsFp64Mode) {
+              if (IsFp64Mode()) {
                 int64_t value;
                 double dvalue;
                 value = GetFPURegisterValue64(fpuregnum);
@@ -560,7 +562,7 @@ void MipsDebugger::Debug() {
         }
 
         // TODO(palfia): optimize this.
-        if (IsFp64Mode) {
+        if (IsFp64Mode()) {
           int64_t words;
           if (argc == next_arg) {
             words = 10;
@@ -1096,7 +1098,7 @@ void Simulator::set_dw_register(int reg, const int* dbl) {
 
 
 void Simulator::set_fpu_register(int fpureg, int64_t value) {
-  ASSERT(IsFp64Mode);
+  ASSERT(IsFp64Mode());
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
   FPUregisters_[fpureg] = value;
 }
@@ -1127,7 +1129,7 @@ void Simulator::set_fpu_register_float(int fpureg, float value) {
 
 
 void Simulator::set_fpu_register_double(int fpureg, double value) {
-  if (IsFp64Mode) {
+  if (IsFp64Mode()) {
     ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
     *BitCast<double*>(&FPUregisters_[fpureg]) = value;
   } else {
@@ -1165,7 +1167,7 @@ double Simulator::get_double_from_register_pair(int reg) {
 
 
 int64_t Simulator::get_fpu_register(int fpureg) const {
-  ASSERT(IsFp64Mode);
+  ASSERT(IsFp64Mode());
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
   return FPUregisters_[fpureg];
 }
@@ -1197,7 +1199,7 @@ float Simulator::get_fpu_register_float(int fpureg) const {
 
 
 double Simulator::get_fpu_register_double(int fpureg) const {
-  if (IsFp64Mode) {
+  if (IsFp64Mode()) {
     ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
     return *BitCast<double*>(&FPUregisters_[fpureg]);
   } else {
@@ -1553,7 +1555,7 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
       switch (redirection->type()) {
       case ExternalReference::BUILTIN_FP_FP_CALL:
       case ExternalReference::BUILTIN_COMPARE_CALL:
-        if (IsFp64Mode) {
+        if (IsFp64Mode()) {
           arg0 = get_fpu_register_word(f12);
           arg1 = get_fpu_register_hi_word(f12);
           arg2 = get_fpu_register_word(f14);
@@ -1566,7 +1568,7 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
         }
         break;
       case ExternalReference::BUILTIN_FP_CALL:
-        if (IsFp64Mode) {
+        if (IsFp64Mode()) {
           arg0 = get_fpu_register_word(f12);
           arg1 = get_fpu_register_hi_word(f12);
         } else {
@@ -1575,7 +1577,7 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
         }
         break;
       case ExternalReference::BUILTIN_FP_INT_CALL:
-        if (IsFp64Mode) {
+        if (IsFp64Mode()) {
           arg0 = get_fpu_register_word(f12);
           arg1 = get_fpu_register_hi_word(f12);
         } else {
@@ -2349,7 +2351,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
             case CVT_L_D: {  // Mips32r2: Truncate double to 64-bit long-word.
               double rounded = trunc(fs);
               i64 = static_cast<int64_t>(rounded);
-              if (IsFp64Mode) {
+              if (IsFp64Mode()) {
                 set_fpu_register(fd_reg, i64);
               } else {
                 set_fpu_register_word(fd_reg, i64 & 0xffffffff);
@@ -2360,7 +2362,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
             case TRUNC_L_D: {  // Mips32r2 instruction.
               double rounded = trunc(fs);
               i64 = static_cast<int64_t>(rounded);
-              if (IsFp64Mode) {
+              if (IsFp64Mode()) {
                 set_fpu_register(fd_reg, i64);
               } else {
                 set_fpu_register_word(fd_reg, i64 & 0xffffffff);
@@ -2372,7 +2374,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               double rounded =
                   fs > 0 ? std::floor(fs + 0.5) : std::ceil(fs - 0.5);
               i64 = static_cast<int64_t>(rounded);
-              if (IsFp64Mode) {
+              if (IsFp64Mode()) {
                 set_fpu_register(fd_reg, i64);
               } else {
                 set_fpu_register_word(fd_reg, i64 & 0xffffffff);
@@ -2382,7 +2384,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
             }
             case FLOOR_L_D:  // Mips32r2 instruction.
               i64 = static_cast<int64_t>(std::floor(fs));
-              if (IsFp64Mode) {
+              if (IsFp64Mode()) {
                 set_fpu_register(fd_reg, i64);
               } else {
                 set_fpu_register_word(fd_reg, i64 & 0xffffffff);
@@ -2391,7 +2393,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               break;
             case CEIL_L_D:  // Mips32r2 instruction.
               i64 = static_cast<int64_t>(std::ceil(fs));
-              if (IsFp64Mode) {
+              if (IsFp64Mode()) {
                 set_fpu_register(fd_reg, i64);
               } else {
                 set_fpu_register_word(fd_reg, i64 & 0xffffffff);
@@ -2439,7 +2441,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           case CVT_D_L:  // Mips32r2 instruction.
             // Watch the signs here, we want 2 32-bit vals
             // to make a sign-64.
-            if (IsFp64Mode) {
+            if (IsFp64Mode()) {
               i64 = get_fpu_register(fs_reg);
             } else {
               i64 = static_cast<uint32_t>(get_fpu_register_word(fs_reg));
