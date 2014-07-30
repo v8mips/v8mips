@@ -174,15 +174,12 @@ TEST(Type0) {
             "014b001f       ddivu   a6, a7");
     COMPARE(ddivu(v0, v1),
             "0043001f       ddivu   v0, v1");
-
-    if (kArchVariant != kLoongson) {
-      COMPARE(mul(a0, a1, a2),
-              "70a62002       mul     a0, a1, a2");
-      COMPARE(mul(a6, a7, t0),
-              "716c5002       mul     a6, a7, t0");
-      COMPARE(mul(v0, v1, s0),
-              "70701002       mul     v0, v1, s0");
-    }
+    COMPARE(mul(a0, a1, a2),
+            "70a62002       mul     a0, a1, a2");
+    COMPARE(mul(a6, a7, t0),
+            "716c5002       mul     a6, a7, t0");
+    COMPARE(mul(v0, v1, s0),
+            "70701002       mul     v0, v1, s0");
   } else {  // MIPS64r6.
     COMPARE(mul(a0, a1, a2),
             "00a62098       mul    a0, a1, a2");
@@ -610,73 +607,68 @@ TEST(Type0) {
           "2d6a8000       sltiu   a6, a7, -32768");
   COMPARE(sltiu(v0, v1, -1),
           "2c62ffff       sltiu   v0, v1, -1");
+  COMPARE(movz(a0, a1, a2),
+          "00a6200a       movz    a0, a1, a2");
+  COMPARE(movz(s0, s1, s2),
+          "0232800a       movz    s0, s1, s2");
+  COMPARE(movz(a6, a7, t0),
+          "016c500a       movz    a6, a7, t0");
+  COMPARE(movz(v0, v1, a2),
+          "0066100a       movz    v0, v1, a2");
+  COMPARE(movn(a0, a1, a2),
+          "00a6200b       movn    a0, a1, a2");
+  COMPARE(movn(s0, s1, s2),
+          "0232800b       movn    s0, s1, s2");
+  COMPARE(movn(a6, a7, t0),
+          "016c500b       movn    a6, a7, t0");
+  COMPARE(movn(v0, v1, a2),
+          "0066100b       movn    v0, v1, a2");
 
-  if (kArchVariant != kLoongson) {
-    COMPARE(movz(a0, a1, a2),
-            "00a6200a       movz    a0, a1, a2");
-    COMPARE(movz(s0, s1, s2),
-            "0232800a       movz    s0, s1, s2");
-    COMPARE(movz(a6, a7, t0),
-            "016c500a       movz    a6, a7, t0");
-    COMPARE(movz(v0, v1, a2),
-            "0066100a       movz    v0, v1, a2");
-    COMPARE(movn(a0, a1, a2),
-            "00a6200b       movn    a0, a1, a2");
-    COMPARE(movn(s0, s1, s2),
-            "0232800b       movn    s0, s1, s2");
-    COMPARE(movn(a6, a7, t0),
-            "016c500b       movn    a6, a7, t0");
-    COMPARE(movn(v0, v1, a2),
-            "0066100b       movn    v0, v1, a2");
+  COMPARE(movt(a0, a1, 1),
+          "00a52001       movt    a0, a1, 1");
+  COMPARE(movt(s0, s1, 2),
+          "02298001       movt    s0, s1, 2");
+  COMPARE(movt(a6, a7, 3),
+          "016d5001       movt    a6, a7, 3");
+  COMPARE(movt(v0, v1, 7),
+          "007d1001       movt    v0, v1, 7");
+  COMPARE(movf(a0, a1, 0),
+          "00a02001       movf    a0, a1, 0");
+  COMPARE(movf(s0, s1, 4),
+          "02308001       movf    s0, s1, 4");
+  COMPARE(movf(a6, a7, 5),
+          "01745001       movf    a6, a7, 5");
+  COMPARE(movf(v0, v1, 6),
+          "00781001       movf    v0, v1, 6");
 
-    COMPARE(movt(a0, a1, 1),
-            "00a52001       movt    a0, a1, 1");
-    COMPARE(movt(s0, s1, 2),
-            "02298001       movt    s0, s1, 2");
-    COMPARE(movt(a6, a7, 3),
-            "016d5001       movt    a6, a7, 3");
-    COMPARE(movt(v0, v1, 7),
-            "007d1001       movt    v0, v1, 7");
-    COMPARE(movf(a0, a1, 0),
-            "00a02001       movf    a0, a1, 0");
-    COMPARE(movf(s0, s1, 4),
-            "02308001       movf    s0, s1, 4");
-    COMPARE(movf(a6, a7, 5),
-            "01745001       movf    a6, a7, 5");
-    COMPARE(movf(v0, v1, 6),
-            "00781001       movf    v0, v1, 6");
-
-    if (kArchVariant == kMips64r6) {
-      COMPARE(clz(a0, a1),
-              "00a02050       clz     a0, a1");
-      COMPARE(clz(s6, s7),
-              "02e0b050       clz     s6, s7");
-      COMPARE(clz(v0, v1),
-              "00601050       clz     v0, v1");
-    } else {
-      COMPARE(clz(a0, a1),
-              "70a42020       clz     a0, a1");
-      COMPARE(clz(s6, s7),
-              "72f6b020       clz     s6, s7");
-      COMPARE(clz(v0, v1),
-              "70621020       clz     v0, v1");
-    }
+  if (kArchVariant == kMips64r6) {
+    COMPARE(clz(a0, a1),
+            "00a02050       clz     a0, a1");
+    COMPARE(clz(s6, s7),
+            "02e0b050       clz     s6, s7");
+    COMPARE(clz(v0, v1),
+            "00601050       clz     v0, v1");
+  } else {
+    COMPARE(clz(a0, a1),
+            "70a42020       clz     a0, a1");
+    COMPARE(clz(s6, s7),
+            "72f6b020       clz     s6, s7");
+    COMPARE(clz(v0, v1),
+            "70621020       clz     v0, v1");
   }
 
-  if (kArchVariant == kMips64r2) {
-    COMPARE(ins_(a0, a1, 31, 1),
-            "7ca4ffc4       ins     a0, a1, 31, 1");
-    COMPARE(ins_(s6, s7, 30, 2),
-            "7ef6ff84       ins     s6, s7, 30, 2");
-    COMPARE(ins_(v0, v1, 0, 32),
-            "7c62f804       ins     v0, v1, 0, 32");
-    COMPARE(ext_(a0, a1, 31, 1),
-            "7ca407c0       ext     a0, a1, 31, 1");
-    COMPARE(ext_(s6, s7, 30, 2),
-            "7ef60f80       ext     s6, s7, 30, 2");
-    COMPARE(ext_(v0, v1, 0, 32),
-            "7c62f800       ext     v0, v1, 0, 32");
-  }
+  COMPARE(ins_(a0, a1, 31, 1),
+          "7ca4ffc4       ins     a0, a1, 31, 1");
+  COMPARE(ins_(s6, s7, 30, 2),
+          "7ef6ff84       ins     s6, s7, 30, 2");
+  COMPARE(ins_(v0, v1, 0, 32),
+          "7c62f804       ins     v0, v1, 0, 32");
+  COMPARE(ext_(a0, a1, 31, 1),
+          "7ca407c0       ext     a0, a1, 31, 1");
+  COMPARE(ext_(s6, s7, 30, 2),
+          "7ef60f80       ext     s6, s7, 30, 2");
+  COMPARE(ext_(v0, v1, 0, 32),
+          "7c62f800       ext     v0, v1, 0, 32");
 
   VERIFY_RUN();
 }

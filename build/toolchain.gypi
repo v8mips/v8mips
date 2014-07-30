@@ -404,9 +404,6 @@
                       '-Wl,--rpath=$(LD_R_PATH)',
                     ],
                   }],
-                  ['mips_arch_variant=="loongson"', {
-                    'cflags': ['-mips3', '-Wa,-mips3'],
-                  }],
                 ],
               }],
             ],
@@ -431,9 +428,6 @@
           }],
           ['mips_arch_variant=="r2"', {
             'defines': ['_MIPS_ARCH_MIPS64R2',],
-          }],
-          ['mips_arch_variant=="loongson"', {
-            'defines': ['_MIPS_ARCH_LOONGSON',],
           }],
         ],
       }],  # v8_target_arch=="mips64el"
@@ -474,6 +468,12 @@
           'OutputDirectory': '<(DEPTH)\\build\\$(ConfigurationName)',
           'IntermediateDirectory': '$(OutDir)\\obj\\$(ProjectName)',
           'CharacterSet': '1',
+        },
+        'msvs_settings': {
+          'VCCLCompilerTool': {
+            # Ensure no surprising artifacts from 80bit double math with x86.
+            'AdditionalOptions': ['/arch:SSE2'],
+          },
         },
       }],
       ['OS=="win" and v8_enable_prof==1', {

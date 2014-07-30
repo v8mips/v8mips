@@ -638,7 +638,11 @@ static inline AccessCheckInfo* GetAccessCheckInfo(Isolate* isolate,
 
 void Isolate::ReportFailedAccessCheck(Handle<JSObject> receiver,
                                       v8::AccessType type) {
-  if (!thread_local_top()->failed_access_check_callback_) return;
+  if (!thread_local_top()->failed_access_check_callback_) {
+    Handle<String> message = factory()->InternalizeUtf8String("no access");
+    ScheduleThrow(*factory()->NewTypeError(message));
+    return;
+  }
 
   ASSERT(receiver->IsAccessCheckNeeded());
   ASSERT(context());
@@ -2000,7 +2004,7 @@ bool Isolate::Init(Deserializer* des) {
     NumberToStringStub::InstallDescriptors(this);
     StringAddStub::InstallDescriptors(this);
     RegExpConstructResultStub::InstallDescriptors(this);
-    KeyedLoadGenericElementStub::InstallDescriptors(this);
+    KeyedLoadGenericStub::InstallDescriptors(this);
   }
 
   CallDescriptors::InitializeForIsolate(this);

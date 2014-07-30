@@ -672,7 +672,7 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
         case DSLL:
             Format(instr, "dsll    'rd, 'rt, 'sa");
           break;
-        case D_MUL_MUH:  // Eqauls to DMUL.
+        case D_MUL_MUH:  // Equals to DMUL.
           if (kArchVariant != kMips64r6) {
             Format(instr, "dmult   'rs, 'rt");
           } else {

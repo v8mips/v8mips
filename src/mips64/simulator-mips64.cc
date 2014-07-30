@@ -2083,7 +2083,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
         case MFLO:
           *alu_out = get_register(LO);
           break;
-        case MULT:  // MULT == D_MUL_MUH
+        case MULT:  // MULT == D_MUL_MUH.
           // TODO(plind) - Unify MULT/DMULT with single set of 64-bit HI/Lo
           // regs.
           // TODO(plind) - make the 32-bit MULT ops conform to spec regarding
@@ -2094,7 +2094,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
         case MULTU:
           *u64hilo = static_cast<uint64_t>(rs_u) * static_cast<uint64_t>(rt_u);
           break;
-        case DMULT:  // DMULT == D_MUL_MUH
+        case DMULT:  // DMULT == D_MUL_MUH.
           if (kArchVariant != kMips64r6) {
             *i128resultH = MultiplyHighSigned(rs, rt);
             *i128resultL = rs * rt;
@@ -2657,7 +2657,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           set_register(LO, static_cast<int32_t>(u64hilo & 0xffffffff));
           set_register(HI, static_cast<int32_t>(u64hilo >> 32));
           break;
-        case DMULT:  // DMULT == D_MUL_MUH
+        case DMULT:  // DMULT == D_MUL_MUH.
           if (kArchVariant != kMips64r6) {
             set_register(LO, static_cast<int64_t>(i128resultL));
             set_register(HI, static_cast<int64_t>(i128resultH));
@@ -2684,9 +2684,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
         case DIV:
         case DDIV:
           switch (kArchVariant) {
-            case kMips64r1:
             case kMips64r2:
-            case kLoongson:
               // Divide by zero and overflow was not checked in the
               // configuration step - div and divu do not raise exceptions. On
               // division by 0 the result will be UNPREDICTABLE. On overflow

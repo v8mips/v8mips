@@ -1105,7 +1105,7 @@ int32_t Assembler::branch_offset21_compact(Label* L,
 
   int32_t offset = target_pos - pc_offset();
   ASSERT((offset & 3) == 0);
-  ASSERT(((offset >> 2) & 0xFFE00000) == 0); // Offset is 21bit width.
+  ASSERT(((offset >> 2) & 0xFFE00000) == 0);  // Offset is 21bit width.
 
   return offset;
 }
@@ -1382,16 +1382,16 @@ void Assembler::j(int64_t target) {
 
 
 void Assembler::jr(Register rs) {
-  BlockTrampolinePoolScope block_trampoline_pool(this);
-  if (rs.is(ra)) {
-    positions_recorder()->WriteRecordedPositions();
-  }
   if (kArchVariant != kMips64r6) {
+    BlockTrampolinePoolScope block_trampoline_pool(this);
+    if (rs.is(ra)) {
+      positions_recorder()->WriteRecordedPositions();
+    }
     GenInstrRegister(SPECIAL, rs, zero_reg, zero_reg, 0, JR);
+    BlockTrampolinePoolFor(1);  // For associated delay slot.
   } else {
-    jalr(rs, at);
+    jalr(rs, zero_reg);
   }
-  BlockTrampolinePoolFor(1);  // For associated delay slot.
 }
 
 
@@ -1907,6 +1907,8 @@ void Assembler::lui(Register rd, int32_t j) {
 
 
 void Assembler::aui(Register rs, Register rt, int32_t j) {
+  // This instruction uses same opcode as 'lui'. The difference in encoding is
+  // 'lui' has zero reg. for rs field.
   ASSERT(is_uint16(j));
   GenInstrImmediate(LUI, rs, rt, j);
 }
@@ -2191,7 +2193,6 @@ void Assembler::ext_(Register rt, Register rs, uint16_t pos, uint16_t size) {
 
 
 void Assembler::pref(int32_t hint, const MemOperand& rs) {
-  ASSERT(kArchVariant != kLoongson);
   ASSERT(is_uint5(hint) && is_uint16(rs.offset_));
   Instr instr = PREF | (rs.rm().code() << kRsShift) | (hint << kRtShift)
       | (rs.offset_);
@@ -2290,7 +2291,6 @@ void Assembler::mul_d(FPURegister fd, FPURegister fs, FPURegister ft) {
 
 void Assembler::madd_d(FPURegister fd, FPURegister fr, FPURegister fs,
     FPURegister ft) {
-  ASSERT(kArchVariant != kLoongson);
   GenInstrRegister(COP1X, fr, ft, fs, fd, MADD_D);
 }
 
@@ -2518,6 +2518,7 @@ void Assembler::bc1nez(int16_t offset, FPURegister ft) {
 // Conditions for < MIPSr6.
 void Assembler::c(FPUCondition cond, SecondaryField fmt,
     FPURegister fs, FPURegister ft, uint16_t cc) {
+  ASSERT(kArchVariant != kMips64r6);
   ASSERT(is_uint3(cc));
   ASSERT((fmt & ~(31 << kRsShift)) == 0);
   Instr instr = COP1 | fmt | ft.code() << kFtShift | fs.code() << kFsShift

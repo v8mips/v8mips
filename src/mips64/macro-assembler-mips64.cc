@@ -237,10 +237,6 @@ void MacroAssembler::RecordWriteForMap(Register object,
     return;
   }
 
-  // Count number of write barriers in generated code.
-  isolate()->counters()->write_barriers_static()->Increment();
-  // TODO(mstarzinger): Dynamic counter missing.
-
   if (emit_debug_code()) {
     ld(at, FieldMemOperand(object, HeapObject::kMapOffset));
     Check(eq,
@@ -283,6 +279,10 @@ void MacroAssembler::RecordWriteForMap(Register object,
 
   bind(&done);
 
+  // Count number of write barriers in generated code.
+  isolate()->counters()->write_barriers_static()->Increment();
+  IncrementCounter(isolate()->counters()->write_barriers_dynamic(), 1, at, dst);
+
   // Clobber clobbered registers when running with the debug-code flag
   // turned on to provoke errors.
   if (emit_debug_code()) {
@@ -318,10 +318,6 @@ void MacroAssembler::RecordWrite(
     return;
   }
 
-  // Count number of write barriers in generated code.
-  isolate()->counters()->write_barriers_static()->Increment();
-  // TODO(mstarzinger): Dynamic counter missing.
-
   // First, check if a write barrier is even needed. The tests below
   // catch stores of smis and stores into the young generation.
   Label done;
@@ -356,6 +352,11 @@ void MacroAssembler::RecordWrite(
   }
 
   bind(&done);
+
+  // Count number of write barriers in generated code.
+  isolate()->counters()->write_barriers_static()->Increment();
+  IncrementCounter(isolate()->counters()->write_barriers_dynamic(), 1, at,
+                   value);
 
   // Clobber clobbered registers when running with the debug-code flag
   // turned on to provoke errors.
@@ -484,6 +485,9 @@ void MacroAssembler::CheckAccessGlobalProxy(Register holder_reg,
 }
 
 
+// Compute the hash code from the untagged key.  This must be kept in sync with
+// ComputeIntegerHash in utils.h and KeyedLoadGenericStub in
+// code-stub-hydrogen.cc
 void MacroAssembler::GetNumberHash(Register reg0, Register scratch) {
   // First of all we assign the hash seed to scratch.
   LoadRoot(scratch, Heap::kHashSeedRootIndex);
@@ -675,22 +679,12 @@ void MacroAssembler::Dsubu(Register rd, Register rs, const Operand& rt) {
 
 void MacroAssembler::Mul(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
-    if (kArchVariant == kLoongson) {
-      mult(rs, rt.rm());
-      mflo(rd);
-    } else {
-      mul(rd, rs, rt.rm());
-    }
+    mul(rd, rs, rt.rm());
   } else {
     // li handles the relocation.
     ASSERT(!rs.is(at));
     li(at, rt);
-    if (kArchVariant == kLoongson) {
-      mult(rs, at);
-      mflo(rd);
-    } else {
-      mul(rd, rs, at);
-    }
+    mul(rd, rs, at);
   }
 }
 
@@ -719,14 +713,9 @@ void MacroAssembler::Mulh(Register rd, Register rs, const Operand& rt) {
 
 void MacroAssembler::Dmul(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
-    if (kArchVariant == kLoongson) {
-      dmult(rs, rt.rm());
-      mflo(rd);
-    } else if (kArchVariant == kMips64r6) {
+    if (kArchVariant == kMips64r6) {
       dmul(rd, rs, rt.rm());
     } else {
-      // TODO(yuyin):
-      // dmul(rd, rs, rt.rm());
       dmult(rs, rt.rm());
       mflo(rd);
     }
@@ -734,14 +723,9 @@ void MacroAssembler::Dmul(Register rd, Register rs, const Operand& rt) {
     // li handles the relocation.
     ASSERT(!rs.is(at));
     li(at, rt);
-    if (kArchVariant == kLoongson) {
-      dmult(rs, at);
-      mflo(rd);
-    } else if (kArchVariant == kMips64r6) {
+    if (kArchVariant == kMips64r6) {
       dmul(rd, rs, at);
     } else {
-      // TODO(yuyin):
-      // dmul(rd, rs, at);
       dmult(rs, at);
       mflo(rd);
     }
@@ -751,14 +735,9 @@ void MacroAssembler::Dmul(Register rd, Register rs, const Operand& rt) {
 
 void MacroAssembler::Dmulh(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
-    if (kArchVariant == kLoongson) {
-      dmult(rs, rt.rm());
-      mfhi(rd);
-    } else if (kArchVariant == kMips64r6) {
+    if (kArchVariant == kMips64r6) {
       dmuh(rd, rs, rt.rm());
     } else {
-      // TODO(yuyin):
-      // dmul(rd, rs, rt.rm());
       dmult(rs, rt.rm());
       mfhi(rd);
     }
@@ -766,14 +745,9 @@ void MacroAssembler::Dmulh(Register rd, Register rs, const Operand& rt) {
     // li handles the relocation.
     ASSERT(!rs.is(at));
     li(at, rt);
-    if (kArchVariant == kLoongson) {
-      dmult(rs, at);
-      mfhi(rd);
-    } else if (kArchVariant == kMips64r6) {
+    if (kArchVariant == kMips64r6) {
       dmuh(rd, rs, at);
     } else {
-      // TODO(yuyin):
-      // dmul(rd, rs, at);
       dmult(rs, at);
       mfhi(rd);
     }
@@ -1064,11 +1038,7 @@ void MacroAssembler::Dror(Register rd, Register rs, const Operand& rt) {
 
 
 void MacroAssembler::Pref(int32_t hint, const MemOperand& rs) {
-  if (kArchVariant == kLoongson) {
-    lw(zero_reg, rs);
-  } else {
     pref(hint, rs);
-  }
 }
 
 
@@ -1631,7 +1601,7 @@ void MacroAssembler::Move(FPURegister dst, double imm) {
 
 
 void MacroAssembler::Movz(Register rd, Register rs, Register rt) {
-  if (kArchVariant == kLoongson || kArchVariant == kMips64r6) {
+  if (kArchVariant == kMips64r6) {
     Label done;
     Branch(&done, ne, rt, Operand(zero_reg));
     mov(rd, rs);
@@ -1643,7 +1613,7 @@ void MacroAssembler::Movz(Register rd, Register rs, Register rt) {
 
 
 void MacroAssembler::Movn(Register rd, Register rs, Register rt) {
-  if (kArchVariant == kLoongson || kArchVariant == kMips64r6) {
+  if (kArchVariant == kMips64r6) {
     Label done;
     Branch(&done, eq, rt, Operand(zero_reg));
     mov(rd, rs);

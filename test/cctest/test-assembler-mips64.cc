@@ -570,19 +570,12 @@ TEST(MIPS7) {
 
   __ bind(&neither_is_nan);
 
-  switch (kArchVariant) {
-    case kLoongson:
-      __ c(OLT, D, f6, f4);
-      __ bc1t(&less_than);
-      break;
-    case kMips64r6:
-      __ cmp(OLT, L, f2, f6, f4);
-      __ bc1nez(&less_than, f2);
-      break;
-    default:
-      __ c(OLT, D, f6, f4, 2);
-      __ bc1t(&less_than, 2);
-      break;
+  if (kArchVariant == kMips64r6) {
+    __ cmp(OLT, L, f2, f6, f4);
+    __ bc1nez(&less_than, f2);
+  } else {
+    __ c(OLT, D, f6, f4, 2);
+    __ bc1t(&less_than, 2);
   }
 
   __ nop();

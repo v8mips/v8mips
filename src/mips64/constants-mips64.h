@@ -17,9 +17,7 @@
 #define UNSUPPORTED_MIPS() v8::internal::PrintF("Unsupported instruction.\n")
 
 enum ArchVariants {
-  kMips64r1,
   kMips64r2,
-  kLoongson,
   kMips64r6
 };
 
@@ -28,12 +26,8 @@ enum ArchVariants {
   static const ArchVariants kArchVariant = kMips64r2;
 #elif  _MIPS_ARCH_MIPS64R6
   static const ArchVariants kArchVariant = kMips64r6;
-#elif _MIPS_ARCH_LOONGSON
-// The loongson flag refers to the LOONGSON architectures based on MIPS-III,
-// which predates (and is a subset of) the mips32r2 and r1 architectures.
-  static const ArchVariants kArchVariant = kLoongson;
 #else
-  static const ArchVariants kArchVariant = kMips64r1;
+  static const ArchVariants kArchVariant = kMips64r2;
 #endif
 
 
@@ -416,7 +410,7 @@ enum SecondaryField {
   DSRA32    =   ((7 << 3) + 7),
 
   // Multiply integers in r6.
-  MUL_MUH   =   ((3 << 3) + 0),  // MUL,  MUH.
+  MUL_MUH   =   ((3 << 3) + 0),  // MUL, MUH.
   MUL_MUH_U =   ((3 << 3) + 1),  // MUL_U, MUH_U.
   D_MUL_MUH =   ((7 << 2) + 0),  // DMUL, DMUH.
   D_MUL_MUH_U = ((7 << 2) + 1),  // DMUL_U, DMUH_U.
