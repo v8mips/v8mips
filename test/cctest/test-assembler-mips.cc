@@ -356,16 +356,28 @@ TEST(MIPS4) {
   __ ldc1(f6, MemOperand(a0, OFFSET_OF(T, b)) );
 
   // Swap f4 and f6, by using four integer registers, t0-t3.
-  __ mfc1(t0, f4);
-  __ mfc1(t1, f5);
-  __ mfc1(t2, f6);
-  __ mfc1(t3, f7);
+  if (!IsFp64Mode()) {
+    __ mfc1(t0, f4);
+    __ mfc1(t1, f5);
+    __ mfc1(t2, f6);
+    __ mfc1(t3, f7);
 
-  __ mtc1(t0, f6);
-  __ mtc1(t1, f7);
-  __ mtc1(t2, f4);
-  __ mtc1(t3, f5);
+    __ mtc1(t0, f6);
+    __ mtc1(t1, f7);
+    __ mtc1(t2, f4);
+    __ mtc1(t3, f5);
+  } else {
+    ASSERT(kArchVariant != kMips32r1 && kArchVariant != kLoongson);
+    __ mfc1(t0, f4);
+    __ mfhc1(t1, f4);
+    __ mfc1(t2, f6);
+    __ mfhc1(t3, f6);
 
+    __ mtc1(t0, f6);
+    __ mthc1(t1, f6);
+    __ mtc1(t2, f4);
+    __ mthc1(t3, f4);
+  }
   // Store the swapped f4 and f5 back to memory.
   __ sdc1(f4, MemOperand(a0, OFFSET_OF(T, a)) );
   __ sdc1(f6, MemOperand(a0, OFFSET_OF(T, c)) );
