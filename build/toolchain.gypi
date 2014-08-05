@@ -280,8 +280,22 @@
                     'cflags': ['-msoft-float'],
                     'ldflags': ['-msoft-float'],
                   }],
+                  ['mips_fpu_mode=="fp64"', {
+                    'cflags': ['-mfp64',],
+                  }],
+                  ['mips_fpu_mode=="fpxx"', {
+                    'cflags': ['-mfpxx',],
+                  }],
+                  ['mips_fpu_mode=="fp32"', {
+                    'cflags': ['-mfp32',],
+                  }],
                   ['mips_arch_variant=="r6"', {
                     'cflags': ['-mips32r6', '-Wa,-mips32r6'],
+                    'ldflags': [
+                      '-mips32r6',
+                      '-Wl,--dynamic-linker=$(LDSO_PATH)',
+                      '-Wl,--rpath=$(LD_R_PATH)',
+                    ],
                   }],
                   ['mips_arch_variant=="r2"', {
                     'cflags': ['-mips32r2', '-Wa,-mips32r2'],
@@ -344,8 +358,22 @@
                     'cflags': ['-msoft-float'],
                     'ldflags': ['-msoft-float'],
                   }],
+                  ['mips_fpu_mode=="fp64"', {
+                    'cflags': ['-mfp64',],
+                  }],
+                  ['mips_fpu_mode=="fpxx"', {
+                    'cflags': ['-mfpxx',],
+                  }],
+                  ['mips_fpu_mode=="fp32"', {
+                    'cflags': ['-mfp32',],
+                  }],
                   ['mips_arch_variant=="r6"', {
                     'cflags': ['-mips32r6', '-Wa,-mips32r6'],
+                    'ldflags': [
+                      '-mips32r6',
+                      '-Wl,--dynamic-linker=$(LDSO_PATH)',
+                      '-Wl,--rpath=$(LD_R_PATH)',
+                    ],
                   }],
                   ['mips_arch_variant=="r2"', {
                     'cflags': ['-mips32r2', '-Wa,-mips32r2'],
