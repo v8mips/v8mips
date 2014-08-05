@@ -543,12 +543,18 @@ bool Assembler::IsJal(Instr instr) {
 
 
 bool Assembler::IsJr(Instr instr) {
-  return GetOpcodeField(instr) == SPECIAL && GetFunctionField(instr) == JR;
+  if (kArchVariant != kMips32r6)  {
+    return GetOpcodeField(instr) == SPECIAL && GetFunctionField(instr) == JR;
+  } else {
+    return GetOpcodeField(instr) == SPECIAL &&
+        GetRdField(instr) == 0  && GetFunctionField(instr) == JALR;
+  }
 }
 
 
 bool Assembler::IsJalr(Instr instr) {
-  return GetOpcodeField(instr) == SPECIAL && GetFunctionField(instr) == JALR;
+  return GetOpcodeField(instr) == SPECIAL &&
+         GetRdField(instr) != 0  && GetFunctionField(instr) == JALR;
 }
 
 
@@ -1384,16 +1390,16 @@ void Assembler::j(int32_t target) {
 
 
 void Assembler::jr(Register rs) {
-  BlockTrampolinePoolScope block_trampoline_pool(this);
-  if (rs.is(ra)) {
-    positions_recorder()->WriteRecordedPositions();
-  }
   if (kArchVariant != kMips32r6) {
+    BlockTrampolinePoolScope block_trampoline_pool(this);
+    if (rs.is(ra)) {
+      positions_recorder()->WriteRecordedPositions();
+    }
     GenInstrRegister(SPECIAL, rs, zero_reg, zero_reg, 0, JR);
+    BlockTrampolinePoolFor(1);  // For associated delay slot.
   } else {
-    jalr(rs, at);
+    jalr(rs, zero_reg);
   }
-  BlockTrampolinePoolFor(1);  // For associated delay slot.
 }
 
 
@@ -2581,7 +2587,7 @@ void Assembler::set_target_address_at(Address pc,
   // lui rt, upper-16.
   // ori rt rt, lower-16.
   *p = LUI | rt_code | ((itarget & kHiMask) >> kLuiShift);
-  *(p+1) = ORI | rt_code | (rt_code << 5) | (itarget & kImm16Mask);
+  *(p + 1) = ORI | rt_code | (rt_code << 5) | (itarget & kImm16Mask);
 
   // The following code is an optimization for the common case of Call()
   // or Jump() which is load to register, and jump through register:
@@ -2598,7 +2604,7 @@ void Assembler::set_target_address_at(Address pc,
   // This optimization can only be applied if the rt-code from instr2 is the
   // register used for the jalr/jr. Finally, we have to skip 'jr ra', which is
   // mips return. Occasionally this lands after an li().
-#if 0
+
   Instr instr3 = instr_at(pc + 2 * kInstrSize);
   uint32_t ipc = reinterpret_cast<uint32_t>(pc + 3 * kInstrSize);
   bool in_range = ((ipc ^ itarget) >> (kImm26Bits + kImmFieldShift)) == 0;
@@ -2624,20 +2630,20 @@ void Assembler::set_target_address_at(Address pc,
   if (IsJalr(instr3)) {
     // Try to convert JALR to JAL.
     if (in_range && GetRt(instr2) == GetRs(instr3)) {
-      *(p+2) = JAL | target_field;
+      *(p + 2) = JAL | target_field;
       patched_jump = true;
     }
   } else if (IsJr(instr3)) {
     // Try to convert JR to J, skip returns (jr ra).
     bool is_ret = static_cast<int>(GetRs(instr3)) == ra.code();
     if (in_range && !is_ret && GetRt(instr2) == GetRs(instr3)) {
-      *(p+2) = J | target_field;
+      *(p + 2) = J | target_field;
       patched_jump = true;
     }
   } else if (IsJal(instr3)) {
     if (in_range) {
       // We are patching an already converted JAL.
-      *(p+2) = JAL | target_field;
+      *(p + 2) = JAL | target_field;
     } else {
       // Patch JAL, but out of range, revert to JALR.
       // JALR rs reg is the rt reg specified in the ORI instruction.
@@ -2649,22 +2655,22 @@ void Assembler::set_target_address_at(Address pc,
   } else if (IsJ(instr3)) {
     if (in_range) {
       // We are patching an already converted J (jump).
-      *(p+2) = J | target_field;
+      *(p + 2) = J | target_field;
     } else {
       // Trying patch J, but out of range, just go back to JR.
       // JR 'rs' reg is the 'rt' reg specified in the ORI instruction (instr2).
       uint32_t rs_field = GetRt(instr2) << kRsShift;
       if (kArchVariant == kMips32r6) {
-        *(p+2) = SPECIAL | rs_field | (at.code() << kRdShift) | JALR;
+        *(p + 2) = SPECIAL | rs_field | (zero_reg.code() << kRdShift) | JALR;
       } else {
-        *(p+2) = SPECIAL | rs_field | JR;
+        *(p + 2) = SPECIAL | rs_field | JR;
       }
     }
     patched_jump = true;
   }
-#endif
+
   if (icache_flush_mode != SKIP_ICACHE_FLUSH) {
-    CpuFeatures::FlushICache(pc, 2 * sizeof(int32_t));
+    CpuFeatures::FlushICache(pc, (patched_jump ? 3 : 2) * sizeof(int32_t));
   }
 }
 
@@ -2686,19 +2692,23 @@ void Assembler::JumpLabelToJumpRegister(Address pc) {
 
     uint32_t rs_field = GetRt(instr2) << kRsShift;
     uint32_t rd_field = ra.code() << kRdShift;  // Return-address (ra) reg.
-    *(p+2) = SPECIAL | rs_field | rd_field | JALR;
+    *(p + 2) = SPECIAL | rs_field | rd_field | JALR;
     patched = true;
   } else if (IsJ(instr3)) {
     ASSERT(GetOpcodeField(instr1) == LUI);
     ASSERT(GetOpcodeField(instr2) == ORI);
 
     uint32_t rs_field = GetRt(instr2) << kRsShift;
-    *(p+2) = SPECIAL | rs_field | JR;
+    if (kArchVariant == kMips32r6) {
+      *(p + 2) = SPECIAL | rs_field | (zero_reg.code() << kRdShift) | JALR;
+    } else {
+      *(p + 2) = SPECIAL | rs_field | JR;
+    }
     patched = true;
   }
 
   if (patched) {
-    CpuFeatures::FlushICache(pc+2, sizeof(Address));
+    CpuFeatures::FlushICache(pc + 2, sizeof(Address));
   }
 }
 
