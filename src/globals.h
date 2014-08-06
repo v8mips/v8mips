@@ -597,6 +597,9 @@ enum CpuFeature {
     // MIPS
     FPU,
     FP64,
+    MIPSr1,
+    MIPSr2,
+    MIPSr6,
     // ARM64
     ALWAYS_ALIGN_CSP,
     NUMBER_OF_CPU_FEATURES

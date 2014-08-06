@@ -7,6 +7,7 @@
 #if V8_TARGET_ARCH_MIPS
 
 #include "src/mips/constants-mips.h"
+#include "src/assembler.h"
 
 namespace v8 {
 namespace internal {
@@ -333,6 +334,17 @@ Instruction::Type Instruction::InstructionType() const {
       return kUnsupported;
   }
   return kUnsupported;
+}
+
+ArchVariants GetArchVariant() {
+  if (CpuFeatures::IsSupported(MIPSr6)) {
+    return kMips32r6;
+  } else if (CpuFeatures::IsSupported(MIPSr2)) {
+    return kMips32r2;
+  } else {
+    ASSERT(CpuFeatures::IsSupported(MIPSr1));
+    return kMips32r1;
+  }
 }
 
 

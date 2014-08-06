@@ -1965,7 +1965,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           *alu_out = rt >> rs;
           break;
         case MFHI:  // MFHI == CLZ on R6.
-          if (kArchVariant != kMips32r6) {
+          if (kArchVariant() != kMips32r6) {
             ASSERT(instr->SaValue() == 0);
             *alu_out = get_register(HI);
           } else {
@@ -1981,7 +1981,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           *alu_out = get_register(LO);
           break;
         case MULT:  // MULT == MUL_MUH
-          if (kArchVariant != kMips32r6) {
+          if (kArchVariant() != kMips32r6) {
             *i64hilo = static_cast<int64_t>(rs) * static_cast<int64_t>(rt);
           } else {
             switch (instr->SaValue()) {
@@ -1996,7 +1996,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           }
           break;
         case MULTU: // MULTU == MUL_MUH_U
-          if (kArchVariant != kMips32r6) {
+          if (kArchVariant() != kMips32r6) {
             *u64hilo = static_cast<uint64_t>(rs_u) *
                 static_cast<uint64_t>(rt_u);
           } else {
@@ -2558,7 +2558,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
         }
         // Instructions using HI and LO registers.
         case MULT:
-          if (kArchVariant != kMips32r6) {
+          if (kArchVariant() != kMips32r6) {
             set_register(LO, static_cast<int32_t>(i64hilo & 0xffffffff));
             set_register(HI, static_cast<int32_t>(i64hilo >> 32));
           } else {
@@ -2577,7 +2577,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           }
           break;
         case MULTU:
-          if (kArchVariant != kMips32r6) {
+          if (kArchVariant() != kMips32r6) {
             set_register(LO, static_cast<int32_t>(u64hilo & 0xffffffff));
             set_register(HI, static_cast<int32_t>(u64hilo >> 32));
           } else {
@@ -2596,7 +2596,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           }
           break;
         case DIV:
-          switch(kArchVariant) {
+          switch(kArchVariant()) {
             case kMips32r1:
             case kMips32r2:
             case kLoongson:
@@ -2638,7 +2638,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           }
           break;
         case DIVU:
-          switch(kArchVariant) {
+          switch(kArchVariant()) {
             case kMips32r1:
             case kMips32r2:
             case kLoongson:

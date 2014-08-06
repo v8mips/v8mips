@@ -87,8 +87,6 @@ const uint32_t kHoleNanLower32Offset = 4;
 #error Unknown endianness
 #endif
 
-
-//TODO: Here use build switch to select FPU mode.
 #ifndef FPU_MODE_FPXX
 #define IsFp64Mode() \
   (kFpuMode == kFP64)
@@ -96,6 +94,15 @@ const uint32_t kHoleNanLower32Offset = 4;
 #define IsFp64Mode() \
   (CpuFeatures::IsSupported(FP64))
 #endif
+
+#ifndef _MIPS_ARCH_MIPS32RX
+#define kArchVariant() \
+  (kArchVariant)
+#else
+#define kArchVariant() \
+  (GetArchVariant())
+#endif
+
 
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
@@ -165,6 +172,7 @@ const int32_t kPrefHintLoadRetained = 6;
 const int32_t kPrefHintStoreRetained = 7;
 const int32_t kPrefHintWritebackInvalidate = 25;
 const int32_t kPrefHintPrepareForStore = 30;
+ArchVariants GetArchVariant();
 
 // Helper functions for converting between register numbers and names.
 class Registers {

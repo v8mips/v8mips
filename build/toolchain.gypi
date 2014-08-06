@@ -303,6 +303,10 @@
                   ['mips_arch_variant=="r1"', {
                     'cflags': ['-mips32', '-Wa,-mips32'],
                   }],
+                  ['mips_arch_variant=="rx"', {
+                    'cflags!': ['-mfp64'],
+                    'cflags': ['-mips32', '-Wa,-mips32'],
+                  }],
                 ],
               }],
             ],
@@ -336,6 +340,9 @@
           }],
           ['mips_arch_variant=="r2"', {
             'defines': ['_MIPS_ARCH_MIPS32R2',],
+          }],
+          ['mips_arch_variant=="rx"', {
+            'defines': ['_MIPS_ARCH_MIPS32RX',],
           }],
         ],
       }],  # v8_target_arch=="mips"
@@ -380,7 +387,11 @@
                   }],
                   ['mips_arch_variant=="r1"', {
                     'cflags': ['-mips32', '-Wa,-mips32'],
-                 }],
+                  }],
+                  ['mips_arch_variant=="rx"', {
+                    'cflags!': ['-mfp64'],
+                    'cflags': ['-mips32', '-Wa,-mips32'],
+                  }],
                   ['mips_arch_variant=="loongson"', {
                     'cflags': ['-mips3', '-Wa,-mips3'],
                   }],
@@ -411,6 +422,9 @@
           }],
           ['mips_fpu_mode=="fp32"', {
             'defines': ['FPU_MODE_FP32',],
+          }],
+          ['mips_arch_variant=="rx"', {
+            'defines': ['_MIPS_ARCH_MIPS32RX',],
           }],
           ['mips_arch_variant=="r6"', {
             'defines': ['_MIPS_ARCH_MIPS32R6',],
