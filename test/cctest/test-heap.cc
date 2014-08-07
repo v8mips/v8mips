@@ -40,25 +40,6 @@
 
 using namespace v8::internal;
 
-// Go through all incremental marking steps in one swoop.
-static void SimulateIncrementalMarking() {
-  MarkCompactCollector* collector = CcTest::heap()->mark_compact_collector();
-  IncrementalMarking* marking = CcTest::heap()->incremental_marking();
-  if (collector->sweeping_in_progress()) {
-    collector->EnsureSweepingCompleted();
-  }
-  CHECK(marking->IsMarking() || marking->IsStopped());
-  if (marking->IsStopped()) {
-    marking->Start();
-  }
-  CHECK(marking->IsMarking());
-  while (!marking->IsComplete()) {
-    marking->Step(MB, IncrementalMarking::NO_GC_VIA_STACK_GUARD);
-  }
-  CHECK(marking->IsComplete());
-}
-
-
 static void CheckMap(Map* map, int type, int instance_size) {
   CHECK(map->IsHeapObject());
 #ifdef DEBUG
@@ -1223,7 +1204,7 @@ TEST(TestCodeFlushingIncremental) {
   // Simulate several GCs that use incremental marking.
   const int kAgingThreshold = 6;
   for (int i = 0; i < kAgingThreshold; i++) {
-    SimulateIncrementalMarking();
+    SimulateIncrementalMarking(CcTest::heap());
     CcTest::heap()->CollectAllGarbage(Heap::kNoGCFlags);
   }
   CHECK(!function->shared()->is_compiled() || function->IsOptimized());
@@ -1237,7 +1218,7 @@ TEST(TestCodeFlushingIncremental) {
   // Simulate several GCs that use incremental marking but make sure
   // the loop breaks once the function is enqueued as a candidate.
   for (int i = 0; i < kAgingThreshold; i++) {
-    SimulateIncrementalMarking();
+    SimulateIncrementalMarking(CcTest::heap());
     if (!function->next_function_link()->IsUndefined()) break;
     CcTest::heap()->CollectAllGarbage(Heap::kNoGCFlags);
   }
@@ -1313,7 +1294,7 @@ TEST(TestCodeFlushingIncrementalScavenge) {
   // Simulate incremental marking so that the functions are enqueued as
   // code flushing candidates. Then kill one of the functions. Finally
   // perform a scavenge while incremental marking is still running.
-  SimulateIncrementalMarking();
+  SimulateIncrementalMarking(CcTest::heap());
   *function2.location() = NULL;
   CcTest::heap()->CollectGarbage(NEW_SPACE, "test scavenge while marking");
 
@@ -1367,7 +1348,7 @@ TEST(TestCodeFlushingIncrementalAbort) {
 
   // Simulate incremental marking so that the function is enqueued as
   // code flushing candidate.
-  SimulateIncrementalMarking();
+  SimulateIncrementalMarking(heap);
 
   // Enable the debugger and add a breakpoint while incremental marking
   // is running so that incremental marking aborts and code flushing is
@@ -2758,7 +2739,7 @@ TEST(Regress1465) {
   CompileRun("%DebugPrint(root);");
   CHECK_EQ(transitions_count, transitions_before);
 
-  SimulateIncrementalMarking();
+  SimulateIncrementalMarking(CcTest::heap());
   CcTest::heap()->CollectAllGarbage(Heap::kNoGCFlags);
 
   // Count number of live transitions after marking.  Note that one transition
@@ -2899,7 +2880,7 @@ TEST(TransitionArraySimpleToFull) {
   CompileRun("o = new F;"
              "root = new F");
   root = GetByName("root");
-  ASSERT(root->map()->transitions()->IsSimpleTransition());
+  DCHECK(root->map()->transitions()->IsSimpleTransition());
   AddPropertyTo(2, root, "happy");
 
   // Count number of live transitions after marking.  Note that one transition
@@ -2923,7 +2904,7 @@ TEST(Regress2143a) {
              "root.foo = 0;"
              "root = new Object;");
 
-  SimulateIncrementalMarking();
+  SimulateIncrementalMarking(CcTest::heap());
 
   // Compile a StoreIC that performs the prepared map transition. This
   // will restart incremental marking and should make sure the root is
@@ -2964,7 +2945,7 @@ TEST(Regress2143b) {
              "root.foo = 0;"
              "root = new Object;");
 
-  SimulateIncrementalMarking();
+  SimulateIncrementalMarking(CcTest::heap());
 
   // Compile an optimized LStoreNamedField that performs the prepared
   // map transition. This will restart incremental marking and should
@@ -3020,7 +3001,8 @@ TEST(ReleaseOverReservedPages) {
 
   // Triggering one GC will cause a lot of garbage to be discovered but
   // even spread across all allocated pages.
-  heap->CollectAllGarbage(Heap::kNoGCFlags, "triggered for preparation");
+  heap->CollectAllGarbage(Heap::kAbortIncrementalMarkingMask,
+                          "triggered for preparation");
   CHECK_GE(number_of_test_pages + 1, old_pointer_space->CountTotalPages());
 
   // Triggering subsequent GCs should cause at least half of the pages
@@ -3167,7 +3149,7 @@ TEST(IncrementalMarkingClearsTypeFeedbackInfo) {
     }
   }
 
-  SimulateIncrementalMarking();
+  SimulateIncrementalMarking(CcTest::heap());
   CcTest::heap()->CollectAllGarbage(Heap::kNoGCFlags);
 
   CHECK_EQ(expected_length, feedback_vector->length());
@@ -3210,7 +3192,7 @@ TEST(IncrementalMarkingPreservesMonomorphicIC) {
   Code* ic_before = FindFirstIC(f->shared()->code(), Code::LOAD_IC);
   CHECK(ic_before->ic_state() == MONOMORPHIC);
 
-  SimulateIncrementalMarking();
+  SimulateIncrementalMarking(CcTest::heap());
   CcTest::heap()->CollectAllGarbage(Heap::kNoGCFlags);
 
   Code* ic_after = FindFirstIC(f->shared()->code(), Code::LOAD_IC);
@@ -3244,7 +3226,7 @@ TEST(IncrementalMarkingClearsMonomorphicIC) {
 
   // Fire context dispose notification.
   CcTest::isolate()->ContextDisposedNotification();
-  SimulateIncrementalMarking();
+  SimulateIncrementalMarking(CcTest::heap());
   CcTest::heap()->CollectAllGarbage(Heap::kNoGCFlags);
 
   Code* ic_after = FindFirstIC(f->shared()->code(), Code::LOAD_IC);
@@ -3285,7 +3267,7 @@ TEST(IncrementalMarkingClearsPolymorphicIC) {
 
   // Fire context dispose notification.
   CcTest::isolate()->ContextDisposedNotification();
-  SimulateIncrementalMarking();
+  SimulateIncrementalMarking(CcTest::heap());
   CcTest::heap()->CollectAllGarbage(Heap::kNoGCFlags);
 
   Code* ic_after = FindFirstIC(f->shared()->code(), Code::LOAD_IC);
@@ -3446,7 +3428,7 @@ TEST(Regress159140) {
   // Simulate incremental marking so that the functions are enqueued as
   // code flushing candidates. Then optimize one function. Finally
   // finish the GC to complete code flushing.
-  SimulateIncrementalMarking();
+  SimulateIncrementalMarking(heap);
   CompileRun("%OptimizeFunctionOnNextCall(g); g(3);");
   heap->CollectAllGarbage(Heap::kNoGCFlags);
 
@@ -3493,7 +3475,7 @@ TEST(Regress165495) {
 
   // Simulate incremental marking so that unoptimized code is flushed
   // even though it still is cached in the optimized code map.
-  SimulateIncrementalMarking();
+  SimulateIncrementalMarking(heap);
   heap->CollectAllGarbage(Heap::kNoGCFlags);
 
   // Make a new closure that will get code installed from the code map.
@@ -3561,7 +3543,7 @@ TEST(Regress169209) {
   }
 
   // Simulate incremental marking and collect code flushing candidates.
-  SimulateIncrementalMarking();
+  SimulateIncrementalMarking(heap);
   CHECK(shared1->code()->gc_metadata() != NULL);
 
   // Optimize function and make sure the unoptimized code is replaced.
@@ -3707,7 +3689,7 @@ TEST(Regress168801) {
   // Simulate incremental marking so that unoptimized function is enqueued as a
   // candidate for code flushing. The shared function info however will not be
   // explicitly enqueued.
-  SimulateIncrementalMarking();
+  SimulateIncrementalMarking(heap);
 
   // Now optimize the function so that it is taken off the candidate list.
   {
@@ -3764,7 +3746,7 @@ TEST(Regress173458) {
   // Simulate incremental marking so that unoptimized function is enqueued as a
   // candidate for code flushing. The shared function info however will not be
   // explicitly enqueued.
-  SimulateIncrementalMarking();
+  SimulateIncrementalMarking(heap);
 
   // Now enable the debugger which in turn will disable code flushing.
   CHECK(isolate->debug()->Load());
@@ -3793,7 +3775,7 @@ TEST(DeferredHandles) {
   }
   // An entire block of handles has been filled.
   // Next handle would require a new block.
-  ASSERT(data->next == data->limit);
+  DCHECK(data->next == data->limit);
 
   DeferredHandleScope deferred(isolate);
   DummyVisitor visitor;
@@ -3814,7 +3796,7 @@ TEST(IncrementalMarkingStepMakesBigProgressWithLargeObjects) {
   if (marking->IsStopped()) marking->Start();
   // This big step should be sufficient to mark the whole array.
   marking->Step(100 * MB, IncrementalMarking::NO_GC_VIA_STACK_GUARD);
-  ASSERT(marking->IsComplete());
+  DCHECK(marking->IsComplete());
 }
 
 
@@ -3954,7 +3936,7 @@ TEST(CellsInOptimizedCodeAreWeak) {
     heap->CollectAllGarbage(Heap::kAbortIncrementalMarkingMask);
   }
 
-  ASSERT(code->marked_for_deoptimization());
+  DCHECK(code->marked_for_deoptimization());
 }
 
 
@@ -3995,7 +3977,7 @@ TEST(ObjectsInOptimizedCodeAreWeak) {
     heap->CollectAllGarbage(Heap::kAbortIncrementalMarkingMask);
   }
 
-  ASSERT(code->marked_for_deoptimization());
+  DCHECK(code->marked_for_deoptimization());
 }
 
 
@@ -4012,7 +3994,7 @@ TEST(NoWeakHashTableLeakWithIncrementalMarking) {
   if (!isolate->use_crankshaft()) return;
   HandleScope outer_scope(heap->isolate());
   for (int i = 0; i < 3; i++) {
-    SimulateIncrementalMarking();
+    SimulateIncrementalMarking(heap);
     {
       LocalContext context;
       HandleScope scope(heap->isolate());
@@ -4327,7 +4309,7 @@ TEST(Regress357137) {
   global->Set(v8::String::NewFromUtf8(isolate, "interrupt"),
               v8::FunctionTemplate::New(isolate, RequestInterrupt));
   v8::Local<v8::Context> context = v8::Context::New(isolate, NULL, global);
-  ASSERT(!context.IsEmpty());
+  DCHECK(!context.IsEmpty());
   v8::Context::Scope cscope(context);
 
   v8::Local<v8::Value> result = CompileRun(

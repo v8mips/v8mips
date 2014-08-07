@@ -171,7 +171,7 @@ class LCodeGen;
     return mnemonic;                                                        \
   }                                                                         \
   static L##type* cast(LInstruction* instr) {                               \
-    ASSERT(instr->Is##type());                                              \
+    DCHECK(instr->Is##type());                                              \
     return reinterpret_cast<L##type*>(instr);                               \
   }
 
@@ -220,6 +220,9 @@ class LInstruction : public ZoneObject {
 
   virtual bool IsControl() const { return false; }
 
+  // Try deleting this instruction if possible.
+  virtual bool TryDelete() { return false; }
+
   void set_environment(LEnvironment* env) { environment_ = env; }
   LEnvironment* environment() const { return environment_; }
   bool HasEnvironment() const { return environment_ != NULL; }
@@ -262,11 +265,12 @@ class LInstruction : public ZoneObject {
   void VerifyCall();
 #endif
 
+  virtual int InputCount() = 0;
+  virtual LOperand* InputAt(int i) = 0;
+
  private:
   // Iterator support.
   friend class InputIterator;
-  virtual int InputCount() = 0;
-  virtual LOperand* InputAt(int i) = 0;
 
   friend class TempIterator;
   virtual int TempCount() = 0;
@@ -334,7 +338,7 @@ class LGap : public LTemplateInstruction<0, 0, 0> {
   virtual bool IsGap() const V8_FINAL V8_OVERRIDE { return true; }
   virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
   static LGap* cast(LInstruction* instr) {
-    ASSERT(instr->IsGap());
+    DCHECK(instr->IsGap());
     return reinterpret_cast<LGap*>(instr);
   }
 
@@ -867,7 +871,7 @@ class LMathFround V8_FINAL : public LTemplateInstruction<1, 1, 0> {
 
   LOperand* value() { return inputs_[0]; }
 
-  DECLARE_CONCRETE_INSTRUCTION(MathRound, "math-fround")
+  DECLARE_CONCRETE_INSTRUCTION(MathFround, "math-fround")
 };
 
 
@@ -1558,7 +1562,7 @@ class LReturn V8_FINAL : public LTemplateInstruction<0, 3, 0> {
     return parameter_count()->IsConstantOperand();
   }
   LConstantOperand* constant_parameter_count() {
-    ASSERT(has_constant_parameter_count());
+    DCHECK(has_constant_parameter_count());
     return LConstantOperand::cast(parameter_count());
   }
   LOperand* parameter_count() { return inputs_[2]; }
@@ -1877,7 +1881,7 @@ class LCallWithDescriptor V8_FINAL : public LTemplateResultInstruction<1> {
                       const ZoneList<LOperand*>& operands,
                       Zone* zone)
     : inputs_(descriptor->GetRegisterParameterCount() + 1, zone) {
-    ASSERT(descriptor->GetRegisterParameterCount() + 1 == operands.length());
+    DCHECK(descriptor->GetRegisterParameterCount() + 1 == operands.length());
     inputs_.AddAll(operands, zone);
   }
 

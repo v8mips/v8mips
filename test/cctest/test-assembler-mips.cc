@@ -367,7 +367,7 @@ TEST(MIPS4) {
     __ mtc1(t2, f4);
     __ mtc1(t3, f5);
   } else {
-    ASSERT(kArchVariant() != kMips32r1 && kArchVariant() != kLoongson);
+    DCHECK(kArchVariant() != kMips32r1 && kArchVariant() != kLoongson);
     __ mfc1(t0, f4);
     __ mfhc1(t1, f4);
     __ mfc1(t2, f6);

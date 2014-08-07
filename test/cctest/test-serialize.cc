@@ -34,6 +34,7 @@
 #include "src/bootstrapper.h"
 #include "src/compilation-cache.h"
 #include "src/debug.h"
+#include "src/heap/spaces.h"
 #include "src/ic-inl.h"
 #include "src/natives.h"
 #include "src/objects.h"
@@ -41,7 +42,6 @@
 #include "src/scopeinfo.h"
 #include "src/serialize.h"
 #include "src/snapshot.h"
-#include "src/spaces.h"
 #include "test/cctest/cctest.h"
 
 using namespace v8::internal;
@@ -78,7 +78,7 @@ static int* counter_function(const char* name) {
       return &local_counters[hash];
     }
     hash = (hash + 1) % kCounters;
-    ASSERT(hash != original_hash);  // Hash table has been filled up.
+    DCHECK(hash != original_hash);  // Hash table has been filled up.
   }
 }
 
@@ -116,21 +116,21 @@ TEST(ExternalReferenceEncoder) {
            encoder.Encode(total_compile_size.address()));
   ExternalReference stack_limit_address =
       ExternalReference::address_of_stack_limit(isolate);
-  CHECK_EQ(make_code(UNCLASSIFIED, 4),
+  CHECK_EQ(make_code(UNCLASSIFIED, 2),
            encoder.Encode(stack_limit_address.address()));
   ExternalReference real_stack_limit_address =
       ExternalReference::address_of_real_stack_limit(isolate);
-  CHECK_EQ(make_code(UNCLASSIFIED, 5),
-           encoder.Encode(real_stack_limit_address.address()));
-  CHECK_EQ(make_code(UNCLASSIFIED, 16),
-           encoder.Encode(ExternalReference::debug_break(isolate).address()));
-  CHECK_EQ(make_code(UNCLASSIFIED, 10),
-           encoder.Encode(
-               ExternalReference::new_space_start(isolate).address()));
   CHECK_EQ(make_code(UNCLASSIFIED, 3),
-           encoder.Encode(
-               ExternalReference::roots_array_start(isolate).address()));
-  CHECK_EQ(make_code(UNCLASSIFIED, 52),
+           encoder.Encode(real_stack_limit_address.address()));
+  CHECK_EQ(make_code(UNCLASSIFIED, 8),
+           encoder.Encode(ExternalReference::debug_break(isolate).address()));
+  CHECK_EQ(
+      make_code(UNCLASSIFIED, 4),
+      encoder.Encode(ExternalReference::new_space_start(isolate).address()));
+  CHECK_EQ(
+      make_code(UNCLASSIFIED, 1),
+      encoder.Encode(ExternalReference::roots_array_start(isolate).address()));
+  CHECK_EQ(make_code(UNCLASSIFIED, 34),
            encoder.Encode(ExternalReference::cpu_features().address()));
 }
 
@@ -153,13 +153,13 @@ TEST(ExternalReferenceDecoder) {
                make_code(STATS_COUNTER,
                          Counters::k_total_compile_size)));
   CHECK_EQ(ExternalReference::address_of_stack_limit(isolate).address(),
-           decoder.Decode(make_code(UNCLASSIFIED, 4)));
+           decoder.Decode(make_code(UNCLASSIFIED, 2)));
   CHECK_EQ(ExternalReference::address_of_real_stack_limit(isolate).address(),
-           decoder.Decode(make_code(UNCLASSIFIED, 5)));
+           decoder.Decode(make_code(UNCLASSIFIED, 3)));
   CHECK_EQ(ExternalReference::debug_break(isolate).address(),
-           decoder.Decode(make_code(UNCLASSIFIED, 16)));
+           decoder.Decode(make_code(UNCLASSIFIED, 8)));
   CHECK_EQ(ExternalReference::new_space_start(isolate).address(),
-           decoder.Decode(make_code(UNCLASSIFIED, 10)));
+           decoder.Decode(make_code(UNCLASSIFIED, 4)));
 }
 
 
@@ -433,7 +433,7 @@ TEST(PartialSerialization) {
       HandleScope scope(isolate);
       env.Reset(v8_isolate, v8::Context::New(v8_isolate));
     }
-    ASSERT(!env.IsEmpty());
+    DCHECK(!env.IsEmpty());
     {
       v8::HandleScope handle_scope(v8_isolate);
       v8::Local<v8::Context>::New(v8_isolate, env)->Enter();
@@ -451,7 +451,7 @@ TEST(PartialSerialization) {
     {
       v8::HandleScope handle_scope(v8_isolate);
       v8::Local<v8::String> foo = v8::String::NewFromUtf8(v8_isolate, "foo");
-      ASSERT(!foo.IsEmpty());
+      DCHECK(!foo.IsEmpty());
       raw_foo = *(v8::Utils::OpenHandle(*foo));
     }
 
@@ -549,7 +549,7 @@ TEST(ContextSerialization) {
       HandleScope scope(isolate);
       env.Reset(v8_isolate, v8::Context::New(v8_isolate));
     }
-    ASSERT(!env.IsEmpty());
+    DCHECK(!env.IsEmpty());
     {
       v8::HandleScope handle_scope(v8_isolate);
       v8::Local<v8::Context>::New(v8_isolate, env)->Enter();

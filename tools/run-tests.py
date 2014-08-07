@@ -50,7 +50,8 @@ from testrunner.objects import context
 
 
 ARCH_GUESS = utils.DefaultArch()
-DEFAULT_TESTS = ["mjsunit", "fuzz-natives", "cctest", "message", "preparser"]
+DEFAULT_TESTS = ["mjsunit", "fuzz-natives", "base-unittests",
+                 "cctest", "message", "preparser"]
 TIMEOUT_DEFAULT = 60
 TIMEOUT_SCALEFACTOR = {"debug"   : 4,
                        "release" : 1 }
@@ -59,9 +60,10 @@ TIMEOUT_SCALEFACTOR = {"debug"   : 4,
 VARIANT_FLAGS = {
     "default": [],
     "stress": ["--stress-opt", "--always-opt"],
+    "turbofan": ["--turbo-filter=*", "--always-opt"],
     "nocrankshaft": ["--nocrankshaft"]}
 
-VARIANTS = ["default", "stress", "nocrankshaft"]
+VARIANTS = ["default", "stress", "turbofan", "nocrankshaft"]
 
 MODE_FLAGS = {
     "debug"   : ["--nohard-abort", "--nodead-code-elimination",

@@ -342,7 +342,7 @@ ArchVariants GetArchVariant() {
   } else if (CpuFeatures::IsSupported(MIPSr2)) {
     return kMips32r2;
   } else {
-    ASSERT(CpuFeatures::IsSupported(MIPSr1));
+    DCHECK(CpuFeatures::IsSupported(MIPSr1));
     return kMips32r1;
   }
 }

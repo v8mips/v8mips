@@ -114,6 +114,8 @@ class ParserBase : public Traits {
   }
 
  protected:
+  friend class Traits::Type::Checkpoint;
+
   enum AllowEvalOrArgumentsAsIdentifier {
     kAllowEvalOrArguments,
     kDontAllowEvalOrArguments
@@ -123,6 +125,8 @@ class ParserBase : public Traits {
     PARSE_LAZILY,
     PARSE_EAGERLY
   };
+
+  class ParserCheckpoint;
 
   // ---------------------------------------------------------------------------
   // FunctionState and BlockState together implement the parser's scope stack.
@@ -179,8 +183,8 @@ class ParserBase : public Traits {
 
     void set_generator_object_variable(
         typename Traits::Type::GeneratorVariable* variable) {
-      ASSERT(variable != NULL);
-      ASSERT(!is_generator());
+      DCHECK(variable != NULL);
+      DCHECK(!is_generator());
       generator_object_variable_ = variable;
       is_generator_ = true;
     }
@@ -219,6 +223,38 @@ class ParserBase : public Traits {
     typename Traits::Type::Factory factory_;
 
     friend class ParserTraits;
+    friend class ParserCheckpoint;
+  };
+
+  // Annoyingly, arrow functions first parse as comma expressions, then when we
+  // see the => we have to go back and reinterpret the arguments as being formal
+  // parameters.  To do so we need to reset some of the parser state back to
+  // what it was before the arguments were first seen.
+  class ParserCheckpoint : public Traits::Type::Checkpoint {
+   public:
+    template <typename Parser>
+    explicit ParserCheckpoint(Parser* parser)
+        : Traits::Type::Checkpoint(parser) {
+      function_state_ = parser->function_state_;
+      next_materialized_literal_index_ =
+          function_state_->next_materialized_literal_index_;
+      next_handler_index_ = function_state_->next_handler_index_;
+      expected_property_count_ = function_state_->expected_property_count_;
+    }
+
+    void Restore() {
+      Traits::Type::Checkpoint::Restore();
+      function_state_->next_materialized_literal_index_ =
+          next_materialized_literal_index_;
+      function_state_->next_handler_index_ = next_handler_index_;
+      function_state_->expected_property_count_ = expected_property_count_;
+    }
+
+   private:
+    FunctionState* function_state_;
+    int next_materialized_literal_index_;
+    int next_handler_index_;
+    int expected_property_count_;
   };
 
   class ParsingModeScope BASE_EMBEDDED {
@@ -267,7 +303,7 @@ class ParserBase : public Traits {
     Token::Value next = Next();
     USE(next);
     USE(token);
-    ASSERT(next == token);
+    DCHECK(next == token);
   }
 
   bool Check(Token::Value token) {
@@ -451,13 +487,6 @@ class ParserBase : public Traits {
                                                 bool* ok);
   ExpressionT ParseArrowFunctionLiteral(int start_pos, ExpressionT params_ast,
                                         bool* ok);
-  ExpressionT ParseArrowFunctionLiteralBody(
-      FunctionState* function_state, typename Traits::Type::ScopePtr scope,
-      int num_parameters, const Scanner::Location& eval_args_error_loc,
-      const Scanner::Location& dupe_error_loc,
-      const Scanner::Location& reserved_loc,
-      FunctionLiteral::IsParenthesizedFlag parenthesized, int start_pos,
-      bool* ok);
 
   // Checks if the expression is a valid reference expression (e.g., on the
   // left-hand side of assignments). Although ruled out by ECMA as early errors,
@@ -667,7 +696,7 @@ class PreParserExpression {
   bool IsIdentifier() const { return (code_ & kTypeMask) == kTypeIdentifier; }
 
   PreParserIdentifier AsIdentifier() const {
-    ASSERT(IsIdentifier());
+    DCHECK(IsIdentifier());
     return PreParserIdentifier(
         static_cast<PreParserIdentifier::Type>(code_ >> kIdentifierShift));
   }
@@ -1041,6 +1070,13 @@ class PreParserTraits {
     typedef PreParserScope Scope;
     typedef PreParserScope ScopePtr;
 
+    class Checkpoint BASE_EMBEDDED {
+     public:
+      template <typename Parser>
+      explicit Checkpoint(Parser* parser) {}
+      void Restore() {}
+    };
+
     // PreParser doesn't need to store generator variables.
     typedef void GeneratorVariable;
     // No interaction with Zones.
@@ -1231,6 +1267,11 @@ class PreParserTraits {
   PreParserExpression ExpressionFromString(int pos,
                                            Scanner* scanner,
                                            PreParserFactory* factory = NULL);
+
+  PreParserExpression GetIterator(PreParserExpression iterable,
+                                  PreParserFactory* factory) {
+    return PreParserExpression::Default();
+  }
 
   static PreParserExpressionList NewExpressionList(int size, void* zone) {
     return PreParserExpressionList();
@@ -1526,7 +1567,7 @@ void ParserBase<Traits>::ReportUnexpectedToken(Token::Value token) {
           ? "unexpected_token_identifier" : "unexpected_strict_reserved");
     default:
       const char* name = Token::String(token);
-      ASSERT(name != NULL);
+      DCHECK(name != NULL);
       Traits::ReportMessageAt(source_location, "unexpected_token", name);
   }
 }
@@ -2008,10 +2049,12 @@ ParserBase<Traits>::ParseAssignmentExpression(bool accept_IN, bool* ok) {
   }
 
   if (fni_ != NULL) fni_->Enter();
+  ParserCheckpoint checkpoint(this);
   ExpressionT expression =
       this->ParseConditionalExpression(accept_IN, CHECK_OK);
 
   if (allow_arrow_functions() && peek() == Token::ARROW) {
+    checkpoint.Restore();
     expression = this->ParseArrowFunctionLiteral(lhs_location.beg_pos,
                                                  expression, CHECK_OK);
     return expression;
@@ -2087,12 +2130,16 @@ ParserBase<Traits>::ParseYieldExpression(bool* ok) {
         // a Yield::SUSPEND operation, given only one look-ahead token.
         if (kind == Yield::SUSPEND)
           break;
-        ASSERT(kind == Yield::DELEGATING);
+        DCHECK(kind == Yield::DELEGATING);
         // Delegating yields require an RHS; fall through.
       default:
         expression = ParseAssignmentExpression(false, CHECK_OK);
         break;
     }
+  }
+  if (kind == Yield::DELEGATING) {
+    // var iterator = subject[Symbol.iterator]();
+    expression = this->GetIterator(expression, factory());
   }
   typename Traits::Type::YieldExpression yield =
       factory()->NewYield(generator_object, expression, kind, pos);
@@ -2130,7 +2177,7 @@ ParserBase<Traits>::ParseConditionalExpression(bool accept_IN, bool* ok) {
 template <class Traits>
 typename ParserBase<Traits>::ExpressionT
 ParserBase<Traits>::ParseBinaryExpression(int prec, bool accept_IN, bool* ok) {
-  ASSERT(prec >= 4);
+  DCHECK(prec >= 4);
   ExpressionT x = this->ParseUnaryExpression(CHECK_OK);
   for (int prec1 = Precedence(peek(), accept_IN); prec1 >= prec; prec1--) {
     // prec1 >= 4
@@ -2438,7 +2485,7 @@ ParserBase<Traits>::ParseMemberExpressionContinuation(ExpressionT expression,
         return expression;
     }
   }
-  ASSERT(false);
+  DCHECK(false);
   return this->EmptyExpression();
 }
 
@@ -2450,108 +2497,100 @@ typename ParserBase<Traits>::ExpressionT ParserBase<
   // TODO(aperez): Change this to use ARROW_SCOPE
   typename Traits::Type::ScopePtr scope =
       this->NewScope(scope_, FUNCTION_SCOPE);
-
-  FunctionState function_state(&function_state_, &scope_, &scope, zone(),
-                               this->ast_value_factory());
-  Scanner::Location dupe_error_loc = Scanner::Location::invalid();
-  int num_params = Traits::DeclareArrowParametersFromExpression(
-      params_ast, scope_, &dupe_error_loc, ok);
-  if (!*ok) {
-    ReportMessageAt(Scanner::Location(start_pos, scanner()->location().beg_pos),
-                    "malformed_arrow_function_parameter_list");
-    return this->EmptyExpression();
-  }
-
-  if (num_params > Code::kMaxArguments) {
-    ReportMessageAt(Scanner::Location(params_ast->position(), position()),
-                    "too_many_parameters");
-    *ok = false;
-    return this->EmptyExpression();
-  }
-
-  ExpressionT expression = ParseArrowFunctionLiteralBody(
-      &function_state, scope, num_params, Scanner::Location::invalid(),
-      dupe_error_loc, Scanner::Location::invalid(),
-      FunctionLiteral::kNotParenthesized, start_pos, CHECK_OK);
-  return expression;
-}
-
-
-template <class Traits>
-typename ParserBase<Traits>::ExpressionT
-ParserBase<Traits>::ParseArrowFunctionLiteralBody(
-    FunctionState* function_state, typename Traits::Type::ScopePtr scope,
-    int num_parameters, const Scanner::Location& eval_args_error_loc,
-    const Scanner::Location& dupe_error_loc,
-    const Scanner::Location& reserved_loc,
-    FunctionLiteral::IsParenthesizedFlag parenthesized, int start_pos,
-    bool* ok) {
   typename Traits::Type::StatementList body;
   typename Traits::Type::AstProperties ast_properties;
   BailoutReason dont_optimize_reason = kNoReason;
+  int num_parameters = -1;
   int materialized_literal_count = -1;
   int expected_property_count = -1;
   int handler_count = 0;
 
-  Expect(Token::ARROW, CHECK_OK);
-
-  if (peek() == Token::LBRACE) {
-    // Multiple statemente body
-    Consume(Token::LBRACE);
-    bool is_lazily_parsed =
-        (mode() == PARSE_LAZILY && scope_->AllowsLazyCompilation());
-    if (is_lazily_parsed) {
-      body = this->NewStatementList(0, zone());
-      this->SkipLazyFunctionBody(this->EmptyIdentifier(),
-                                 &materialized_literal_count,
-                                 &expected_property_count, CHECK_OK);
-    } else {
-      body = this->ParseEagerFunctionBody(
-          this->EmptyIdentifier(), RelocInfo::kNoPosition, NULL,
-          Token::INIT_VAR, false,  // Not a generator.
-          CHECK_OK);
-      materialized_literal_count = function_state->materialized_literal_count();
-      expected_property_count = function_state->expected_property_count();
-      handler_count = function_state->handler_count();
+  {
+    FunctionState function_state(&function_state_, &scope_, &scope, zone(),
+                                 this->ast_value_factory());
+    Scanner::Location dupe_error_loc = Scanner::Location::invalid();
+    num_parameters = Traits::DeclareArrowParametersFromExpression(
+        params_ast, scope_, &dupe_error_loc, ok);
+    if (!*ok) {
+      ReportMessageAt(
+          Scanner::Location(start_pos, scanner()->location().beg_pos),
+          "malformed_arrow_function_parameter_list");
+      return this->EmptyExpression();
     }
-  } else {
-    // Single-expression body
-    int pos = position();
-    parenthesized_function_ = false;
-    ExpressionT expression = ParseAssignmentExpression(true, CHECK_OK);
-    body = this->NewStatementList(1, zone());
-    body->Add(factory()->NewReturnStatement(expression, pos), zone());
-    materialized_literal_count = function_state->materialized_literal_count();
-    expected_property_count = function_state->expected_property_count();
-    handler_count = function_state->handler_count();
+
+    if (num_parameters > Code::kMaxArguments) {
+      ReportMessageAt(Scanner::Location(params_ast->position(), position()),
+                      "too_many_parameters");
+      *ok = false;
+      return this->EmptyExpression();
+    }
+
+    Expect(Token::ARROW, CHECK_OK);
+
+    if (peek() == Token::LBRACE) {
+      // Multiple statemente body
+      Consume(Token::LBRACE);
+      bool is_lazily_parsed =
+          (mode() == PARSE_LAZILY && scope_->AllowsLazyCompilation());
+      if (is_lazily_parsed) {
+        body = this->NewStatementList(0, zone());
+        this->SkipLazyFunctionBody(this->EmptyIdentifier(),
+                                   &materialized_literal_count,
+                                   &expected_property_count, CHECK_OK);
+      } else {
+        body = this->ParseEagerFunctionBody(
+            this->EmptyIdentifier(), RelocInfo::kNoPosition, NULL,
+            Token::INIT_VAR, false,  // Not a generator.
+            CHECK_OK);
+        materialized_literal_count =
+            function_state.materialized_literal_count();
+        expected_property_count = function_state.expected_property_count();
+        handler_count = function_state.handler_count();
+      }
+    } else {
+      // Single-expression body
+      int pos = position();
+      parenthesized_function_ = false;
+      ExpressionT expression = ParseAssignmentExpression(true, CHECK_OK);
+      body = this->NewStatementList(1, zone());
+      body->Add(factory()->NewReturnStatement(expression, pos), zone());
+      materialized_literal_count = function_state.materialized_literal_count();
+      expected_property_count = function_state.expected_property_count();
+      handler_count = function_state.handler_count();
+    }
+
+    scope->set_start_position(start_pos);
+    scope->set_end_position(scanner()->location().end_pos);
+
+    // Arrow function *parameter lists* are always checked as in strict mode.
+    bool function_name_is_strict_reserved = false;
+    Scanner::Location function_name_loc = Scanner::Location::invalid();
+    Scanner::Location eval_args_error_loc = Scanner::Location::invalid();
+    Scanner::Location reserved_loc = Scanner::Location::invalid();
+    this->CheckStrictFunctionNameAndParameters(
+        this->EmptyIdentifier(), function_name_is_strict_reserved,
+        function_name_loc, eval_args_error_loc, dupe_error_loc, reserved_loc,
+        CHECK_OK);
+
+    // Validate strict mode.
+    if (strict_mode() == STRICT) {
+      CheckOctalLiteral(start_pos, scanner()->location().end_pos, CHECK_OK);
+    }
+
+    if (allow_harmony_scoping() && strict_mode() == STRICT)
+      this->CheckConflictingVarDeclarations(scope, CHECK_OK);
+
+    ast_properties = *factory()->visitor()->ast_properties();
+    dont_optimize_reason = factory()->visitor()->dont_optimize_reason();
   }
-
-  scope->set_start_position(start_pos);
-  scope->set_end_position(scanner()->location().end_pos);
-
-  // Arrow function *parameter lists* are always checked as in strict mode.
-  this->CheckStrictFunctionNameAndParameters(
-      this->EmptyIdentifier(), false, Scanner::Location::invalid(),
-      Scanner::Location::invalid(), dupe_error_loc,
-      Scanner::Location::invalid(), CHECK_OK);
-
-  // Validate strict mode.
-  if (strict_mode() == STRICT) {
-    CheckOctalLiteral(start_pos, scanner()->location().end_pos, CHECK_OK);
-  }
-
-  if (allow_harmony_scoping() && strict_mode() == STRICT)
-    this->CheckConflictingVarDeclarations(scope, CHECK_OK);
-
-  ast_properties = *factory()->visitor()->ast_properties();
-  dont_optimize_reason = factory()->visitor()->dont_optimize_reason();
 
   FunctionLiteralT function_literal = factory()->NewFunctionLiteral(
       this->EmptyIdentifierString(), this->ast_value_factory(), scope, body,
       materialized_literal_count, expected_property_count, handler_count,
       num_parameters, FunctionLiteral::kNoDuplicateParameters,
       FunctionLiteral::ANONYMOUS_EXPRESSION, FunctionLiteral::kIsFunction,
-      parenthesized, FunctionLiteral::kArrowFunction, start_pos);
+      FunctionLiteral::kNotParenthesized, FunctionLiteral::kArrowFunction,
+      start_pos);
 
   function_literal->set_function_token_position(start_pos);
   function_literal->set_ast_properties(&ast_properties);
@@ -2614,7 +2653,7 @@ void ParserBase<Traits>::ObjectLiteralChecker::CheckProperty(
       // Both a data and an accessor property with the same name.
       parser()->ReportMessage("accessor_data_property");
     } else {
-      ASSERT(IsAccessorAccessorConflict(old_type, type));
+      DCHECK(IsAccessorAccessorConflict(old_type, type));
       // Both accessors of the same type.
       parser()->ReportMessage("accessor_get_set");
     }

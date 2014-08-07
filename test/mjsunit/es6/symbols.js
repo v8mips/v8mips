@@ -25,7 +25,6 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --harmony-symbols --harmony-collections
 // Flags: --expose-gc --allow-natives-syntax
 
 var symbols = []
@@ -446,8 +445,9 @@ TestGetOwnPropertySymbolsWithProto()
 
 function TestWellKnown() {
   var symbols = [
-    "create", "hasInstance", "isConcatSpreadable", "isRegExp",
-    "iterator", "toStringTag", "unscopables"
+    // TODO(rossberg): reactivate once implemented.
+    // "hasInstance", "isConcatSpreadable", "isRegExp",
+    "iterator" //, "toStringTag", "unscopables"
   ]
 
   for (var i in symbols) {

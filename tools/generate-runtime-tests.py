@@ -20,7 +20,7 @@ import time
 FILENAME = "src/runtime.cc"
 HEADERFILENAME = "src/runtime.h"
 FUNCTION = re.compile("^RUNTIME_FUNCTION\(Runtime_(\w+)")
-ARGSLENGTH = re.compile(".*ASSERT\(.*args\.length\(\) == (\d+)\);")
+ARGSLENGTH = re.compile(".*DCHECK\(.*args\.length\(\) == (\d+)\);")
 FUNCTIONEND = "}\n"
 MACRO = re.compile(r"^#define ([^ ]+)\(([^)]*)\) *([^\\]*)\\?\n$")
 FIRST_WORD = re.compile("^\s*(.*?)[\s({\[]")
@@ -47,18 +47,18 @@ EXPAND_MACROS = [
 # that the parser doesn't bit-rot. Change the values as needed when you add,
 # remove or change runtime functions, but make sure we don't lose our ability
 # to parse them!
-EXPECTED_FUNCTION_COUNT = 422
-EXPECTED_FUZZABLE_COUNT = 336
-EXPECTED_CCTEST_COUNT = 8
-EXPECTED_UNKNOWN_COUNT = 4
-EXPECTED_BUILTINS_COUNT = 816
+EXPECTED_FUNCTION_COUNT = 427
+EXPECTED_FUZZABLE_COUNT = 330
+EXPECTED_CCTEST_COUNT = 7
+EXPECTED_UNKNOWN_COUNT = 16
+EXPECTED_BUILTINS_COUNT = 811
 
 
 # Don't call these at all.
 BLACKLISTED = [
   "Abort",  # Kills the process.
   "AbortJS",  # Kills the process.
-  "CompileForOnStackReplacement",  # Riddled with ASSERTs.
+  "CompileForOnStackReplacement",  # Riddled with DCHECK.
   "IS_VAR",  # Not implemented in the runtime.
   "ListNatives",  # Not available in Release mode.
   "SetAllocationTimeout",  # Too slow for fuzzing.

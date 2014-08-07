@@ -155,7 +155,8 @@ namespace internal {
   V(UntaggedFloat64,  1 << 27 | kSemantic) \
   V(UntaggedPtr,      1 << 28 | kSemantic) \
   V(TaggedInt,        1 << 29 | kSemantic) \
-  V(TaggedPtr,        -1 << 30 | kSemantic)  /* MSB has to be sign-extended */ \
+  /* MSB has to be sign-extended */        \
+  V(TaggedPtr,        static_cast<int>(~0u << 30) | kSemantic) \
   \
   V(UntaggedInt,      kUntaggedInt1 | kUntaggedInt8 |      \
                       kUntaggedInt16 | kUntaggedInt32)     \
@@ -430,6 +431,10 @@ class TypeImpl : public Config::Base {
 
   void PrintTo(OStream& os, PrintDimension dim = BOTH_DIMS);  // NOLINT
 
+#ifdef DEBUG
+  void Print();
+#endif
+
  protected:
   // Friends.
 
@@ -452,7 +457,7 @@ class TypeImpl : public Config::Base {
   bool IsUnion() { return Config::is_struct(this, StructuralType::kUnionTag); }
 
   int AsBitset() {
-    ASSERT(this->IsBitset());
+    DCHECK(this->IsBitset());
     return static_cast<BitsetType*>(this)->Bitset();
   }
   UnionType* AsUnion() { return UnionType::cast(this); }
@@ -471,7 +476,6 @@ class TypeImpl : public Config::Base {
   static int ExtendUnion(
       UnionHandle unioned, int current_size, TypeHandle t,
       TypeHandle other, bool is_intersect, Region* region);
-  static int NormalizeUnion(UnionHandle unioned, int current_size, int bitset);
 };
 
 
@@ -547,28 +551,28 @@ class TypeImpl<Config>::StructuralType : public TypeImpl<Config> {
     return Config::struct_length(Config::as_struct(this));
   }
   TypeHandle Get(int i) {
-    ASSERT(0 <= i && i < this->Length());
+    DCHECK(0 <= i && i < this->Length());
     return Config::struct_get(Config::as_struct(this), i);
   }
   void Set(int i, TypeHandle type) {
-    ASSERT(0 <= i && i < this->Length());
+    DCHECK(0 <= i && i < this->Length());
     Config::struct_set(Config::as_struct(this), i, type);
   }
   void Shrink(int length) {
-    ASSERT(2 <= length && length <= this->Length());
+    DCHECK(2 <= length && length <= this->Length());
     Config::struct_shrink(Config::as_struct(this), length);
   }
   template<class V> i::Handle<V> GetValue(int i) {
-    ASSERT(0 <= i && i < this->Length());
+    DCHECK(0 <= i && i < this->Length());
     return Config::template struct_get_value<V>(Config::as_struct(this), i);
   }
   template<class V> void SetValue(int i, i::Handle<V> x) {
-    ASSERT(0 <= i && i < this->Length());
+    DCHECK(0 <= i && i < this->Length());
     Config::struct_set_value(Config::as_struct(this), i, x);
   }
 
   static TypeHandle New(Tag tag, int length, Region* region) {
-    ASSERT(1 <= length);
+    DCHECK(1 <= length);
     return Config::from_struct(Config::struct_create(tag, length, region));
   }
 };
@@ -590,7 +594,7 @@ class TypeImpl<Config>::UnionType : public StructuralType {
   }
 
   static UnionType* cast(TypeImpl* type) {
-    ASSERT(type->IsUnion());
+    DCHECK(type->IsUnion());
     return static_cast<UnionType*>(type);
   }
 
@@ -617,7 +621,7 @@ class TypeImpl<Config>::ClassType : public StructuralType {
 
   static ClassHandle New(
       i::Handle<i::Map> map, TypeHandle bound, Region* region) {
-    ASSERT(BitsetType::Is(bound->AsBitset(), BitsetType::Lub(*map)));
+    DCHECK(BitsetType::Is(bound->AsBitset(), BitsetType::Lub(*map)));
     ClassHandle type = Config::template cast<ClassType>(
         StructuralType::New(StructuralType::kClassTag, 2, region));
     type->Set(0, bound);
@@ -637,7 +641,7 @@ class TypeImpl<Config>::ClassType : public StructuralType {
   }
 
   static ClassType* cast(TypeImpl* type) {
-    ASSERT(type->IsClass());
+    DCHECK(type->IsClass());
     return static_cast<ClassType*>(type);
   }
 };
@@ -654,7 +658,7 @@ class TypeImpl<Config>::ConstantType : public StructuralType {
 
   static ConstantHandle New(
       i::Handle<i::Object> value, TypeHandle bound, Region* region) {
-    ASSERT(BitsetType::Is(bound->AsBitset(), BitsetType::Lub(*value)));
+    DCHECK(BitsetType::Is(bound->AsBitset(), BitsetType::Lub(*value)));
     ConstantHandle type = Config::template cast<ConstantType>(
         StructuralType::New(StructuralType::kConstantTag, 2, region));
     type->Set(0, bound);
@@ -668,7 +672,7 @@ class TypeImpl<Config>::ConstantType : public StructuralType {
   }
 
   static ConstantType* cast(TypeImpl* type) {
-    ASSERT(type->IsConstant());
+    DCHECK(type->IsConstant());
     return static_cast<ConstantType*>(type);
   }
 };
@@ -686,8 +690,8 @@ class TypeImpl<Config>::RangeType : public StructuralType {
 
   static RangeHandle New(
       double min, double max, TypeHandle bound, Region* region) {
-    ASSERT(BitsetType::Is(bound->AsBitset(), BitsetType::kNumber));
-    ASSERT(!std::isnan(min) && !std::isnan(max) && min <= max);
+    DCHECK(BitsetType::Is(bound->AsBitset(), BitsetType::kNumber));
+    DCHECK(!std::isnan(min) && !std::isnan(max) && min <= max);
     RangeHandle type = Config::template cast<RangeType>(
         StructuralType::New(StructuralType::kRangeTag, 3, region));
     type->Set(0, bound);
@@ -705,7 +709,7 @@ class TypeImpl<Config>::RangeType : public StructuralType {
   }
 
   static RangeType* cast(TypeImpl* type) {
-    ASSERT(type->IsRange());
+    DCHECK(type->IsRange());
     return static_cast<RangeType*>(type);
   }
 };
@@ -721,7 +725,7 @@ class TypeImpl<Config>::ContextType : public StructuralType {
   TypeHandle Outer() { return this->Get(1); }
 
   static ContextHandle New(TypeHandle outer, TypeHandle bound, Region* region) {
-    ASSERT(BitsetType::Is(
+    DCHECK(BitsetType::Is(
         bound->AsBitset(), BitsetType::kInternal & BitsetType::kTaggedPtr));
     ContextHandle type = Config::template cast<ContextType>(
         StructuralType::New(StructuralType::kContextTag, 2, region));
@@ -737,7 +741,7 @@ class TypeImpl<Config>::ContextType : public StructuralType {
   }
 
   static ContextType* cast(TypeImpl* type) {
-    ASSERT(type->IsContext());
+    DCHECK(type->IsContext());
     return static_cast<ContextType*>(type);
   }
 };
@@ -753,7 +757,7 @@ class TypeImpl<Config>::ArrayType : public StructuralType {
   TypeHandle Element() { return this->Get(1); }
 
   static ArrayHandle New(TypeHandle element, TypeHandle bound, Region* region) {
-    ASSERT(BitsetType::Is(bound->AsBitset(), BitsetType::kArray));
+    DCHECK(BitsetType::Is(bound->AsBitset(), BitsetType::kArray));
     ArrayHandle type = Config::template cast<ArrayType>(
         StructuralType::New(StructuralType::kArrayTag, 2, region));
     type->Set(0, bound);
@@ -767,7 +771,7 @@ class TypeImpl<Config>::ArrayType : public StructuralType {
   }
 
   static ArrayType* cast(TypeImpl* type) {
-    ASSERT(type->IsArray());
+    DCHECK(type->IsArray());
     return static_cast<ArrayType*>(type);
   }
 };
@@ -790,7 +794,7 @@ class TypeImpl<Config>::FunctionType : public StructuralType {
   static FunctionHandle New(
       TypeHandle result, TypeHandle receiver, TypeHandle bound,
       int arity, Region* region) {
-    ASSERT(BitsetType::Is(bound->AsBitset(), BitsetType::kFunction));
+    DCHECK(BitsetType::Is(bound->AsBitset(), BitsetType::kFunction));
     FunctionHandle type = Config::template cast<FunctionType>(
         StructuralType::New(StructuralType::kFunctionTag, 3 + arity, region));
     type->Set(0, bound);
@@ -806,7 +810,7 @@ class TypeImpl<Config>::FunctionType : public StructuralType {
   }
 
   static FunctionType* cast(TypeImpl* type) {
-    ASSERT(type->IsFunction());
+    DCHECK(type->IsFunction());
     return static_cast<FunctionType*>(type);
   }
 };
@@ -952,7 +956,7 @@ struct BoundsImpl {
   BoundsImpl() {}
   explicit BoundsImpl(TypeHandle t) : lower(t), upper(t) {}
   BoundsImpl(TypeHandle l, TypeHandle u) : lower(l), upper(u) {
-    ASSERT(lower->Is(upper));
+    DCHECK(lower->Is(upper));
   }
 
   // Unrestricted bounds.
