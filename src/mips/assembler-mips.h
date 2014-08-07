@@ -73,12 +73,7 @@ namespace internal {
 // Core register.
 struct Register {
   static const int kNumRegisters = v8::internal::kNumRegisters;
-#ifdef _MIPS_ARCH_MIPS32R6
-  // Match number of FPU regs.
-  static const int kMaxNumAllocatableRegisters = 13;  // v0 through t6 and cp.
-#else
   static const int kMaxNumAllocatableRegisters = 14;  // v0 through t6 and cp.
-#endif
   static const int kSizeInBytes = 4;
   static const int kCpRegister = 23;  // cp (s7) is the 23rd register.
 
@@ -219,14 +214,9 @@ struct FPURegister {
 
   // A few double registers are reserved: one as a scratch register and one to
   // hold 0.0.
-  //  f26 on r6 for compare operations
   //  f28: 0.0
   //  f30: scratch register.
-#ifdef _MIPS_ARCH_MIPS32R6
-  static const int kNumReservedRegisters = 3;
-#else
   static const int kNumReservedRegisters = 2;
-#endif
   static const int kMaxNumAllocatableRegisters = kMaxNumRegisters / 2 -
       kNumReservedRegisters;
 
@@ -338,6 +328,8 @@ const FPURegister f31 = { 31 };
 #define kLithiumScratchReg2 s4
 #define kLithiumScratchDouble f30
 #define kDoubleRegZero f28
+// Used on mips32r6 for compare operations.
+#define kDoubleCompareReg f31
 
 // FPU (coprocessor 1) control registers.
 // Currently only FCSR (#31) is implemented.

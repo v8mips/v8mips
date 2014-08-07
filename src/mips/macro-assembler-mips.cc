@@ -1357,9 +1357,9 @@ void MacroAssembler::BranchF(Label* target,
     } else {
       // Use f31 for comparison result. It has to be unavailable to lithium
       // register allocator.
-      DCHECK(!cmp1.is(f26) && !cmp2.is(f26));
-      cmp(UN, L, f26, cmp1, cmp2);
-      bc1nez(nan, f26);
+      DCHECK(!cmp1.is(kDoubleCompareReg) && !cmp2.is(kDoubleCompareReg));
+      cmp(UN, L, kDoubleCompareReg, cmp1, cmp2);
+      bc1nez(nan, kDoubleCompareReg);
     }
   }
 
@@ -1409,40 +1409,41 @@ void MacroAssembler::BranchF(Label* target,
       // Here NaN cases were either handled by this function or are assumed to
       // have been handled by the caller.
       // Unsigned conditions are treated as their signed counterpart.
-      // Use f31 for comparison result, it is valid in fp64 (FR = 1) mode.
-      DCHECK(!cmp1.is(f26) && !cmp2.is(f26));
+      // Use f31 for comparison result, it is valid in fp64 (FR = 1) mode which
+      // is implied for mips32r6.
+      DCHECK(!cmp1.is(kDoubleCompareReg) && !cmp2.is(kDoubleCompareReg));
       switch (cc) {
         case lt:
-          cmp(OLT, L, f26, cmp1, cmp2);
-          bc1nez(target, f26);
+          cmp(OLT, L, kDoubleCompareReg, cmp1, cmp2);
+          bc1nez(target, f31);
           break;
         case gt:
-          cmp(ULE, L, f26, cmp1, cmp2);
-          bc1eqz(target, f26);
+          cmp(ULE, L, kDoubleCompareReg, cmp1, cmp2);
+          bc1eqz(target, kDoubleCompareReg);
           break;
         case ge:
-          cmp(ULT, L, f26, cmp1, cmp2);
-          bc1eqz(target, f26);
+          cmp(ULT, L, kDoubleCompareReg, cmp1, cmp2);
+          bc1eqz(target, kDoubleCompareReg);
           break;
         case le:
-          cmp(OLE, L, f26, cmp1, cmp2);
-          bc1nez(target, f26);
+          cmp(OLE, L, kDoubleCompareReg, cmp1, cmp2);
+          bc1nez(target, kDoubleCompareReg);
           break;
         case eq:
-          cmp(EQ, L, f26, cmp1, cmp2);
-          bc1nez(target, f26);
+          cmp(EQ, L, kDoubleCompareReg, cmp1, cmp2);
+          bc1nez(target, kDoubleCompareReg);
           break;
         case ueq:
-          cmp(UEQ, L, f26, cmp1, cmp2);
-          bc1nez(target, f26);
+          cmp(UEQ, L, kDoubleCompareReg, cmp1, cmp2);
+          bc1nez(target, kDoubleCompareReg);
           break;
         case ne:
-          cmp(EQ, L, f26, cmp1, cmp2);
-          bc1eqz(target, f26);
+          cmp(EQ, L, kDoubleCompareReg, cmp1, cmp2);
+          bc1eqz(target, kDoubleCompareReg);
           break;
         case nue:
-          cmp(UEQ, L, f26, cmp1, cmp2);
-          bc1eqz(target, f26);
+          cmp(UEQ, L, kDoubleCompareReg, cmp1, cmp2);
+          bc1eqz(target, kDoubleCompareReg);
           break;
         default:
           CHECK(0);
