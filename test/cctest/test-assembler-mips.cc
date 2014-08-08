@@ -298,7 +298,7 @@ TEST(MIPS3) {
   __ sdc1(f14, MemOperand(a0, OFFSET_OF(T, g)) );
   // g = sqrt(f) = 10.97451593465515908537
 
-  if (kArchVariant() == kMips32r2) {
+  if (IsMipsArchVariant(kMips32r2)) {
     __ ldc1(f4, MemOperand(a0, OFFSET_OF(T, h)) );
     __ ldc1(f6, MemOperand(a0, OFFSET_OF(T, i)) );
     __ madd_d(f14, f6, f4, f6);
@@ -330,7 +330,7 @@ TEST(MIPS3) {
   CHECK_EQ(1.8066e16, t.e);
   CHECK_EQ(120.44, t.f);
   CHECK_EQ(10.97451593465515908537, t.g);
-  if (kArchVariant() == kMips32r2) {
+  if (IsMipsArchVariant(kMips32r2)) {
     CHECK_EQ(6.875, t.h);
   }
 }
@@ -367,7 +367,7 @@ TEST(MIPS4) {
     __ mtc1(t2, f4);
     __ mtc1(t3, f5);
   } else {
-    DCHECK(kArchVariant() != kMips32r1 && kArchVariant() != kLoongson);
+    DCHECK(!IsMipsArchVariant(kMips32r1) && !IsMipsArchVariant(kLoongson));
     __ mfc1(t0, f4);
     __ mfhc1(t1, f4);
     __ mfc1(t2, f6);
@@ -571,7 +571,7 @@ TEST(MIPS7) {
 
   __ ldc1(f4, MemOperand(a0, OFFSET_OF(T, a)) );
   __ ldc1(f6, MemOperand(a0, OFFSET_OF(T, b)) );
-  if (kArchVariant() != kMips32r6) {
+  if (!IsMipsArchVariant(kMips32r6)) {
   __ c(UN, D, f4, f6);
   __ bc1f(&neither_is_nan);
   } else {
@@ -584,19 +584,15 @@ TEST(MIPS7) {
 
   __ bind(&neither_is_nan);
 
-  switch (kArchVariant()) {
-    case kLoongson:
-      __ c(OLT, D, f6, f4);
-      __ bc1t(&less_than);
-      break;
-    case kMips32r6:
-      __ cmp(OLT, L, f2, f6, f4);
-      __ bc1nez(&less_than, f2);
-      break;
-    default:
-      __ c(OLT, D, f6, f4, 2);
-      __ bc1t(&less_than, 2);
-      break;
+  if (IsMipsArchVariant(kLoongson)) {
+    __ c(OLT, D, f6, f4);
+    __ bc1t(&less_than);
+  } else if (IsMipsArchVariant(kMips32r6)) {
+    __ cmp(OLT, L, f2, f6, f4);
+    __ bc1nez(&less_than, f2);
+  } else {
+    __ c(OLT, D, f6, f4, 2);
+    __ bc1t(&less_than, 2);
   }
 
   __ nop();
@@ -783,7 +779,7 @@ TEST(MIPS10) {
   Assembler assm(isolate, NULL, 0);
   Label L, C;
 
-  if (kArchVariant() == kMips32r2) {
+  if (IsMipsArchVariant(kMips32r2)) {
     // Load all structure elements to registers.
     __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, a)));
 
@@ -828,7 +824,7 @@ TEST(MIPS10) {
 
 TEST(MIPS11) {
   // Do not run test on MIPS32r6, as these instructions are removed.
-  if (kArchVariant() != kMips32r6) {
+  if (!IsMipsArchVariant(kMips32r6)) {
     // Test LWL, LWR, SWL and SWR instructions.
     CcTest::InitializeVM();
     Isolate* isolate = CcTest::i_isolate();

@@ -645,7 +645,7 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
           if (instr->RsValue() == 0) {
             Format(instr, "srl     'rd, 'rt, 'sa");
           } else {
-            if (kArchVariant() == kMips32r2) {
+            if (IsMipsArchVariant(kMips32r2)) {
               Format(instr, "rotr    'rd, 'rt, 'sa");
             } else {
               Unknown(instr);
@@ -662,7 +662,7 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
           if (instr->SaValue() == 0) {
             Format(instr, "srlv    'rd, 'rt, 'rs");
           } else {
-            if (kArchVariant() == kMips32r2) {
+            if (IsMipsArchVariant(kMips32r2)) {
               Format(instr, "rotrv   'rd, 'rt, 'rs");
             } else {
               Unknown(instr);
@@ -689,7 +689,7 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
           Format(instr, "mflo    'rd");
           break;
         case MULT: // @Mips32r6 == MUL_MUH.
-          if (kArchVariant() != kMips32r6) {
+          if (!IsMipsArchVariant( kMips32r6)) {
             Format(instr, "mult    'rs, 'rt");
           } else {
             if (instr->SaValue() == MUL_OP) {
@@ -700,7 +700,7 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
           }
           break;
         case MULTU:  // @Mips32r6 == MUL_MUH_U.
-          if (kArchVariant() != kMips32r6) {
+          if (!IsMipsArchVariant(kMips32r6)) {
             Format(instr, "multu   'rs, 'rt");
           } else {
             if (instr->SaValue() == MUL_OP) {
@@ -711,7 +711,7 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
           }
           break;
         case DIV: // @Mips32r6 == DIV_MOD.
-          if (kArchVariant() != kMips32r6) {
+          if (!IsMipsArchVariant(kMips32r6)) {
             Format(instr, "div     'rs, 'rt");
           } else {
             if (instr->SaValue() == DIV_OP) {
@@ -722,7 +722,7 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
           }
           break;
         case DIVU: // @Mips32r6 == DIV_MOD_U.
-          if (kArchVariant() != kMips32r6) {
+          if (!IsMipsArchVariant(kMips32r6)) {
             Format(instr, "divu    'rs, 'rt");
           } else {
             if (instr->SaValue() == DIV_OP) {
@@ -818,7 +818,7 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
           Format(instr, "mul     'rd, 'rs, 'rt");
           break;
         case CLZ:
-          if (kArchVariant() != kMips32r6) {
+          if (!IsMipsArchVariant(kMips32r6)) {
             Format(instr, "clz     'rd, 'rs");
           }
           break;
@@ -829,7 +829,7 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
     case SPECIAL3:
       switch (instr->FunctionFieldRaw()) {
         case INS: {
-          if (kArchVariant() == kMips32r2) {
+          if (IsMipsArchVariant(kMips32r2)) {
             Format(instr, "ins     'rt, 'rs, 'sa, 'ss2");
           } else {
             Unknown(instr);
@@ -837,7 +837,7 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
           break;
         }
         case EXT: {
-          if (kArchVariant() == kMips32r2) {
+          if (IsMipsArchVariant(kMips32r2)) {
             Format(instr, "ext     'rt, 'rs, 'sa, 'ss1");
           } else {
             Unknown(instr);
@@ -1111,7 +1111,7 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
       break;
     // ------------- Arithmetic instructions.
     case ADDI:
-      if (kArchVariant() != kMips32r6) {
+      if (!IsMipsArchVariant(kMips32r6)) {
         Format(instr, "addi    'rt, 'rs, 'imm16s");
       } else {
         // Check if BOVC or BEQC instruction.
@@ -1125,7 +1125,7 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
       }
       break;
     case DADDI:
-      if (kArchVariant() == kMips32r6) {
+      if (IsMipsArchVariant(kMips32r6)) {
         // Check if BNVC or BNEC instruction.
         if (instr->RsFieldRaw() >= instr->RtFieldRaw()) {
           Format(instr, "bnvc  'rs, 'rt, 'imm16s");
@@ -1155,7 +1155,7 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
       Format(instr, "xori    'rt, 'rs, 'imm16x");
       break;
     case LUI:
-      if (kArchVariant() != kMips32r6) {
+      if (!IsMipsArchVariant(kMips32r6)) {
         Format(instr, "lui     'rt, 'imm16x");
       } else {
         if (instr->RsValue() != 0) {

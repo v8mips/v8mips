@@ -641,7 +641,7 @@ void MacroAssembler::Subu(Register rd, Register rs, const Operand& rt) {
 
 void MacroAssembler::Mul(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
-    if (kArchVariant() == kLoongson) {
+    if (IsMipsArchVariant(kLoongson)) {
       mult(rs, rt.rm());
       mflo(rd);
     } else {
@@ -651,7 +651,7 @@ void MacroAssembler::Mul(Register rd, Register rs, const Operand& rt) {
     // li handles the relocation.
     DCHECK(!rs.is(at));
     li(at, rt);
-    if (kArchVariant() == kLoongson) {
+    if (IsMipsArchVariant(kLoongson)) {
       mult(rs, at);
       mflo(rd);
     } else {
@@ -664,7 +664,7 @@ void MacroAssembler::Mul(Register rd, Register rs, const Operand& rt) {
 void MacroAssembler::Mul(Register rd_hi, Register rd_lo,
     Register rs, const Operand& rt) {
   if (rt.is_reg()) {
-    if (kArchVariant() != kMips32r6) {
+    if (!IsMipsArchVariant(kMips32r6)) {
       mult(rs, rt.rm());
       mflo(rd_lo);
       mfhi(rd_hi);
@@ -684,7 +684,7 @@ void MacroAssembler::Mul(Register rd_hi, Register rd_lo,
     // li handles the relocation.
     DCHECK(!rs.is(at));
     li(at, rt);
-    if (kArchVariant() != kMips32r6) {
+    if (!IsMipsArchVariant(kMips32r6)) {
       mult(rs, at);
       mflo(rd_lo);
       mfhi(rd_hi);
@@ -705,7 +705,7 @@ void MacroAssembler::Mul(Register rd_hi, Register rd_lo,
 
 void MacroAssembler::Mulh(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
-    if (kArchVariant() != kMips32r6) {
+    if (!IsMipsArchVariant(kMips32r6)) {
       mult(rs, rt.rm());
       mfhi(rd);
     } else {
@@ -715,7 +715,7 @@ void MacroAssembler::Mulh(Register rd, Register rs, const Operand& rt) {
     // li handles the relocation.
     DCHECK(!rs.is(at));
     li(at, rt);
-    if (kArchVariant() != kMips32r6) {
+    if (!IsMipsArchVariant(kMips32r6)) {
       mult(rs, at);
       mfhi(rd);
     } else {
@@ -764,7 +764,7 @@ void MacroAssembler::Div(Register rs, const Operand& rt) {
 void MacroAssembler::Div(Register rem, Register res,
     Register rs, const Operand& rt) {
   if (rt.is_reg()) {
-    if (kArchVariant() != kMips32r6) {
+    if (!IsMipsArchVariant(kMips32r6)) {
       div(rs, rt.rm());
       mflo(res);
       mfhi(rem);
@@ -776,7 +776,7 @@ void MacroAssembler::Div(Register rem, Register res,
     // li handles the relocation.
     DCHECK(!rs.is(at));
     li(at, rt);
-    if (kArchVariant() != kMips32r6) {
+    if (!IsMipsArchVariant(kMips32r6)) {
       div(rs, at);
       mflo(res);
       mfhi(rem);
@@ -790,7 +790,7 @@ void MacroAssembler::Div(Register rem, Register res,
 
 void MacroAssembler::Mod(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
-    if (kArchVariant() != kMips32r6) {
+    if (!IsMipsArchVariant(kMips32r6)) {
       div(rs, rt.rm());
       mfhi(rd);
    } else {
@@ -800,7 +800,7 @@ void MacroAssembler::Mod(Register rd, Register rs, const Operand& rt) {
     // li handles the relocation.
     DCHECK(!rs.is(at));
     li(at, rt);
-    if (kArchVariant() != kMips32r6) {
+    if (!IsMipsArchVariant(kMips32r6)) {
       div(rs, at);
       mfhi(rd);
     } else {
@@ -924,7 +924,7 @@ void MacroAssembler::Sltu(Register rd, Register rs, const Operand& rt) {
 
 
 void MacroAssembler::Ror(Register rd, Register rs, const Operand& rt) {
-  if (kArchVariant() == kMips32r2) {
+  if (IsMipsArchVariant(kMips32r2)) {
     if (rt.is_reg()) {
       rotrv(rd, rs, rt.rm());
     } else {
@@ -950,7 +950,7 @@ void MacroAssembler::Ror(Register rd, Register rs, const Operand& rt) {
 
 
 void MacroAssembler::Pref(int32_t hint, const MemOperand& rs) {
-  if (kArchVariant() == kLoongson) {
+  if (IsMipsArchVariant(kLoongson)) {
     lw(zero_reg, rs);
   } else {
     pref(hint, rs);
@@ -1146,7 +1146,7 @@ void MacroAssembler::Ext(Register rt,
   DCHECK(pos < 32);
   DCHECK(pos + size < 33);
 
-  if (kArchVariant() == kMips32r2) {
+  if (IsMipsArchVariant(kMips32r2)) {
     ext_(rt, rs, pos, size);
   } else {
     // Move rs to rt and shift it left then right to get the
@@ -1170,7 +1170,7 @@ void MacroAssembler::Ins(Register rt,
   DCHECK(pos + size <= 32);
   DCHECK(size != 0);
 
-  if (kArchVariant() == kMips32r2) {
+  if (IsMipsArchVariant(kMips32r2)) {
     ins_(rt, rs, pos, size);
   } else {
     DCHECK(!rt.is(t8) && !rs.is(t8));
@@ -1242,7 +1242,7 @@ void MacroAssembler::Trunc_uw_d(FPURegister fd,
 
 
 void MacroAssembler::Trunc_w_d(FPURegister fd, FPURegister fs) {
-  if (kArchVariant() == kLoongson && fd.is(fs)) {
+  if (IsMipsArchVariant(kLoongson) && fd.is(fs)) {
     Mfhc1(t8, fs);
     trunc_w_d(fd, fs);
     Mthc1(t8, fs);
@@ -1253,7 +1253,7 @@ void MacroAssembler::Trunc_w_d(FPURegister fd, FPURegister fs) {
 
 
 void MacroAssembler::Round_w_d(FPURegister fd, FPURegister fs) {
-  if (kArchVariant() == kLoongson && fd.is(fs)) {
+  if (IsMipsArchVariant(kLoongson) && fd.is(fs)) {
     Mfhc1(t8, fs);
     round_w_d(fd, fs);
     Mthc1(t8, fs);
@@ -1264,7 +1264,7 @@ void MacroAssembler::Round_w_d(FPURegister fd, FPURegister fs) {
 
 
 void MacroAssembler::Floor_w_d(FPURegister fd, FPURegister fs) {
-  if (kArchVariant() == kLoongson && fd.is(fs)) {
+  if (IsMipsArchVariant(kLoongson) && fd.is(fs)) {
     Mfhc1(t8, fs);
     floor_w_d(fd, fs);
     Mthc1(t8, fs);
@@ -1275,7 +1275,7 @@ void MacroAssembler::Floor_w_d(FPURegister fd, FPURegister fs) {
 
 
 void MacroAssembler::Ceil_w_d(FPURegister fd, FPURegister fs) {
-  if (kArchVariant() == kLoongson && fd.is(fs)) {
+  if (IsMipsArchVariant(kLoongson) && fd.is(fs)) {
     Mfhc1(t8, fs);
     ceil_w_d(fd, fs);
     Mthc1(t8, fs);
@@ -1351,7 +1351,7 @@ void MacroAssembler::BranchF(Label* target,
   DCHECK(nan || target);
   // Check for unordered (NaN) cases.
   if (nan) {
-    if (kArchVariant() != kMips32r6) {
+    if (!IsMipsArchVariant(kMips32r6)) {
       c(UN, D, cmp1, cmp2);
       bc1t(nan);
     } else {
@@ -1363,7 +1363,7 @@ void MacroAssembler::BranchF(Label* target,
     }
   }
 
-  if (kArchVariant() != kMips32r6) {
+  if (!IsMipsArchVariant(kMips32r6)) {
     if (target) {
       // Here NaN cases were either handled by this function or are assumed to
       // have been handled by the caller.
@@ -1491,7 +1491,7 @@ void MacroAssembler::Move(FPURegister dst, double imm) {
 
 
 void MacroAssembler::Movz(Register rd, Register rs, Register rt) {
-  if (kArchVariant() == kLoongson || kArchVariant() == kMips32r6) {
+  if (IsMipsArchVariant(kLoongson) || IsMipsArchVariant(kMips32r6)) {
     Label done;
     Branch(&done, ne, rt, Operand(zero_reg));
     mov(rd, rs);
@@ -1503,7 +1503,7 @@ void MacroAssembler::Movz(Register rd, Register rs, Register rt) {
 
 
 void MacroAssembler::Movn(Register rd, Register rs, Register rt) {
-  if (kArchVariant() == kLoongson || kArchVariant() == kMips32r6) {
+  if (IsMipsArchVariant(kLoongson) || IsMipsArchVariant(kMips32r6)) {
     Label done;
     Branch(&done, eq, rt, Operand(zero_reg));
     mov(rd, rs);
@@ -1515,7 +1515,7 @@ void MacroAssembler::Movn(Register rd, Register rs, Register rt) {
 
 
 void MacroAssembler::Movt(Register rd, Register rs, uint16_t cc) {
-  if (kArchVariant() == kLoongson) {
+  if (IsMipsArchVariant(kLoongson)) {
     // Tests an FP condition code and then conditionally move rs to rd.
     // We do not currently use any FPU cc bit other than bit 0.
     DCHECK(cc == 0);
@@ -1541,7 +1541,7 @@ void MacroAssembler::Movt(Register rd, Register rs, uint16_t cc) {
 
 
 void MacroAssembler::Movf(Register rd, Register rs, uint16_t cc) {
-  if (kArchVariant() == kLoongson) {
+  if (IsMipsArchVariant(kLoongson)) {
     // Tests an FP condition code and then conditionally move rs to rd.
     // We do not currently use any FPU cc bit other than bit 0.
     DCHECK(cc == 0);
@@ -1567,7 +1567,7 @@ void MacroAssembler::Movf(Register rd, Register rs, uint16_t cc) {
 
 
 void MacroAssembler::Clz(Register rd, Register rs) {
-  if (kArchVariant() == kLoongson) {
+  if (IsMipsArchVariant(kLoongson)) {
     DCHECK(!(rd.is(t8) || rd.is(t9)) && !(rs.is(t8) || rs.is(t9)));
     Register mask = t8;
     Register scratch = t9;
@@ -2429,7 +2429,7 @@ void MacroAssembler::BranchAndLinkShort(int16_t offset, Condition cond,
     li(r2, rt);
   }
 
-  if (kArchVariant() != kMips32r6) {
+  if (!IsMipsArchVariant(kMips32r6)) {
     BlockTrampolinePoolScope block_trampoline_pool(this);
     switch (cond) {
       case cc_always:
@@ -2605,7 +2605,7 @@ void MacroAssembler::BranchAndLinkShort(Label* L, Condition cond, Register rs,
     li(r2, rt);
   }
 
-  if (kArchVariant() != kMips32r6) {
+  if (!IsMipsArchVariant(kMips32r6)) {
     BlockTrampolinePoolScope block_trampoline_pool(this);
     switch (cond) {
       case cc_always:

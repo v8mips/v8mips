@@ -110,7 +110,7 @@ TEST(Type0) {
   COMPARE(subu(v0, v1, s0),
           "00701023       subu    v0, v1, s0");
 
-  if (kArchVariant() != kMips32r6) {
+  if (IsMipsArchVariant(kMips32r6)) {
     COMPARE(mult(a0, a1),
             "00850018       mult    a0, a1");
     COMPARE(mult(t2, t3),
@@ -139,7 +139,7 @@ TEST(Type0) {
     COMPARE(divu(v0, v1),
             "0043001b       divu    v0, v1");
 
-    if (kArchVariant() != kLoongson) {
+    if (!IsMipsArchVariant(kLoongson)) {
       COMPARE(mul(a0, a1, a2),
               "70a62002       mul     a0, a1, a2");
       COMPARE(mul(t2, t3, t4),
@@ -352,7 +352,7 @@ TEST(Type0) {
   COMPARE(srav(v0, v1, fp),
           "03c31007       srav    v0, v1, fp");
 
-  if (kArchVariant() == kMips32r2) {
+  if (IsMipsArchVariant(kMips32r2)) {
     COMPARE(rotr(a0, a1, 0),
             "00252002       rotr    a0, a1, 0");
     COMPARE(rotr(s0, s1, 8),
@@ -455,7 +455,7 @@ TEST(Type0) {
   COMPARE(sltiu(v0, v1, -1),
           "2c62ffff       sltiu   v0, v1, -1");
 
-  if (kArchVariant() != kLoongson) {
+  if (!IsMipsArchVariant(kLoongson)) {
     COMPARE(movz(a0, a1, a2),
             "00a6200a       movz    a0, a1, a2");
     COMPARE(movz(s0, s1, s2),
@@ -490,7 +490,7 @@ TEST(Type0) {
     COMPARE(movf(v0, v1, 6),
             "00781001       movf    v0, v1, 6");
 
-    if (kArchVariant() == kMips32r6) {
+    if (IsMipsArchVariant(kMips32r6)) {
       COMPARE(clz(a0, a1),
               "00a02050       clz     a0, a1");
       COMPARE(clz(s6, s7),
@@ -507,7 +507,7 @@ TEST(Type0) {
     }
   }
 
-  if (kArchVariant() == kMips32r2) {
+  if (IsMipsArchVariant(kMips32r2)) {
     COMPARE(ins_(a0, a1, 31, 1),
             "7ca4ffc4       ins     a0, a1, 31, 1");
     COMPARE(ins_(s6, s7, 30, 2),

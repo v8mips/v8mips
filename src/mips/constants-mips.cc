@@ -335,19 +335,6 @@ Instruction::Type Instruction::InstructionType() const {
   }
   return kUnsupported;
 }
-
-ArchVariants GetArchVariant() {
-  if (CpuFeatures::IsSupported(MIPSr6)) {
-    return kMips32r6;
-  } else if (CpuFeatures::IsSupported(MIPSr2)) {
-    return kMips32r2;
-  } else {
-    DCHECK(CpuFeatures::IsSupported(MIPSr1));
-    return kMips32r1;
-  }
-}
-
-
 } }   // namespace v8::internal
 
 #endif  // V8_TARGET_ARCH_MIPS

@@ -607,7 +607,7 @@ enum CpuFeature {
     MOVW_MOVT_IMMEDIATE_LOADS,
     VFP32DREGS,
     NEON,
-    // MIPS
+    // MIPS, MIPS64
     FPU,
     FP64,
     MIPSr1,

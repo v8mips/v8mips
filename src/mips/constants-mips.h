@@ -4,7 +4,7 @@
 
 #ifndef  V8_MIPS_CONSTANTS_H_
 #define  V8_MIPS_CONSTANTS_H_
-
+#include "src/globals.h"
 // UNIMPLEMENTED_ macro for MIPS.
 #ifdef DEBUG
 #define UNIMPLEMENTED_MIPS()                                                  \
@@ -17,10 +17,10 @@
 #define UNSUPPORTED_MIPS() v8::internal::PrintF("Unsupported instruction.\n")
 
 enum ArchVariants {
-  kMips32r1,
-  kMips32r2,
+  kMips32r1 = v8::internal::MIPSr1,
+  kMips32r2 = v8::internal::MIPSr2,
+  kMips32r6 = v8::internal::MIPSr6,
   kLoongson,
-  kMips32r6
 };
 
 #ifdef _MIPS_ARCH_MIPS32R2
@@ -31,6 +31,11 @@ enum ArchVariants {
 // The loongson flag refers to the LOONGSON architectures based on MIPS-III,
 // which predates (and is a subset of) the mips32r2 and r1 architectures.
   static const ArchVariants kArchVariant = kLoongson;
+#elif _MIPS_ARCH_MIPS32RX
+// This flags referred to compatibility mode that creates universal code that
+// can run on any MIPS32 architecture revision. The dynamically generated code
+// by v8 is specialized for the MIPS host detected in runtime probing.
+  static const ArchVariants kArchVariant = kMips32r1;
 #else
   static const ArchVariants kArchVariant = kMips32r1;
 #endif
@@ -96,11 +101,11 @@ const uint32_t kHoleNanLower32Offset = 4;
 #endif
 
 #ifndef _MIPS_ARCH_MIPS32RX
-#define kArchVariant() \
-  (kArchVariant)
+#define IsMipsArchVariant(check) \
+  (kArchVariant == check)
 #else
-#define kArchVariant() \
-  (GetArchVariant())
+#define IsMipsArchVariant(check) \
+  (CpuFeatures::IsSupported(check))
 #endif
 
 
@@ -172,7 +177,6 @@ const int32_t kPrefHintLoadRetained = 6;
 const int32_t kPrefHintStoreRetained = 7;
 const int32_t kPrefHintWritebackInvalidate = 25;
 const int32_t kPrefHintPrepareForStore = 30;
-ArchVariants GetArchVariant();
 
 // Helper functions for converting between register numbers and names.
 class Registers {

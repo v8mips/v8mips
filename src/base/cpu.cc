@@ -130,9 +130,9 @@ int __detect_fp64_mode(void) {
   return !(result == (double)1);
 }
 
-int __detect_arch_revision(void) {
+int __detect_mips_arch_revision(void) {
   // TODO: Do the specific syscall as soon as it is implemented in mips kernel.
-  // Currently fail-back to the greatest common dominator which is mips32r1.
+  // Currently fail-back to the least common denominator which is mips32r1.
    return 1;
 }
 
@@ -491,7 +491,7 @@ CPU::CPU() : stepping_(0),
   delete[] cpu_model;
 #ifdef V8_HOST_ARCH_MIPS
   is_fp64_mode_ = __detect_fp64_mode();
-  architecture_ = __detect_arch_revision();
+  architecture_ = __detect_mips_arch_revision();
 #endif
 
 #elif V8_HOST_ARCH_ARM64
