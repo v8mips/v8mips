@@ -127,15 +127,16 @@ int __detect_fp64_mode(void) {
     : "+m" (result)
     : : "t0", "$f0", "$f1", "memory");
 
-  return !(result == (double)1);
+  return !(result == 1);
 }
+
 
 int __detect_mips_arch_revision(void) {
-  // TODO: Do the specific syscall as soon as it is implemented in mips kernel.
-  // Currently fail-back to the least common denominator which is mips32r1.
-   return 1;
+  // TODO(dusmil): Do the specific syscall as soon as it is implemented in mips
+  // kernel. Currently fail-back to the least common denominator which is
+  // mips32 revision 1.
+  return 1;
 }
-
 #endif
 
 // Extract the information exposed by the kernel via /proc/cpuinfo.

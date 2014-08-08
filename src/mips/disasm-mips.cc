@@ -688,8 +688,8 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
         case MFLO:
           Format(instr, "mflo    'rd");
           break;
-        case MULT: // @Mips32r6 == MUL_MUH.
-          if (!IsMipsArchVariant( kMips32r6)) {
+        case MULT:  // @Mips32r6 == MUL_MUH.
+          if (!IsMipsArchVariant(kMips32r6)) {
             Format(instr, "mult    'rs, 'rt");
           } else {
             if (instr->SaValue() == MUL_OP) {
@@ -710,7 +710,7 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
             }
           }
           break;
-        case DIV: // @Mips32r6 == DIV_MOD.
+        case DIV:  // @Mips32r6 == DIV_MOD.
           if (!IsMipsArchVariant(kMips32r6)) {
             Format(instr, "div     'rs, 'rt");
           } else {
@@ -721,7 +721,7 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
             }
           }
           break;
-        case DIVU: // @Mips32r6 == DIV_MOD_U.
+        case DIVU:  // @Mips32r6 == DIV_MOD_U.
           if (!IsMipsArchVariant(kMips32r6)) {
             Format(instr, "divu    'rs, 'rt");
           } else {
@@ -871,7 +871,7 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
         case BC1NEZ:
           Format(instr, "bc1nez    'ft, 'imm16u");
           break;
-        case W: // CMP.S instruction.
+        case W:  // CMP.S instruction.
           switch (instr->FunctionValue()) {
             case CMP_AF:
               Format(instr, "cmp.af.S    'ft, 'fs, 'fd");
@@ -910,7 +910,7 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
               UNREACHABLE();
           }
           break;
-        case L: // CMP.D instruction.
+        case L:  // CMP.D instruction.
           switch (instr->FunctionValue()) {
             case CMP_AF:
               Format(instr, "cmp.af.D    'ft, 'fs, 'fd");

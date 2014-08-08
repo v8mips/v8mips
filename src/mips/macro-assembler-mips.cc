@@ -703,6 +703,7 @@ void MacroAssembler::Mul(Register rd_hi, Register rd_lo,
   }
 }
 
+
 void MacroAssembler::Mulh(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     if (!IsMipsArchVariant(kMips32r6)) {
@@ -768,10 +769,10 @@ void MacroAssembler::Div(Register rem, Register res,
       div(rs, rt.rm());
       mflo(res);
       mfhi(rem);
-   } else {
+    } else {
       div(res, rs, rt.rm());
       mod(rem, rs, rt.rm());
-   }
+    }
   } else {
     // li handles the relocation.
     DCHECK(!rs.is(at));
@@ -793,9 +794,9 @@ void MacroAssembler::Mod(Register rd, Register rs, const Operand& rt) {
     if (!IsMipsArchVariant(kMips32r6)) {
       div(rs, rt.rm());
       mfhi(rd);
-   } else {
+    } else {
       mod(rd, rs, rt.rm());
-   }
+    }
   } else {
     // li handles the relocation.
     DCHECK(!rs.is(at));
@@ -1320,7 +1321,7 @@ void MacroAssembler::Trunc_uw_d(FPURegister fd,
 
 void MacroAssembler::Mthc1(Register rt, FPURegister fs) {
   if (IsFp64Mode()) {
-    mthc1(rt ,fs);
+    mthc1(rt, fs);
   } else {
     mtc1(rt, fs.high());
   }
@@ -1355,8 +1356,8 @@ void MacroAssembler::BranchF(Label* target,
       c(UN, D, cmp1, cmp2);
       bc1t(nan);
     } else {
-      // Use f31 for comparison result. It has to be unavailable to lithium
-      // register allocator.
+      // Use kDoubleCompareReg for comparison result. It has to be unavailable
+      // to lithium register allocator.
       DCHECK(!cmp1.is(kDoubleCompareReg) && !cmp2.is(kDoubleCompareReg));
       cmp(UN, L, kDoubleCompareReg, cmp1, cmp2);
       bc1nez(nan, kDoubleCompareReg);
@@ -1409,13 +1410,13 @@ void MacroAssembler::BranchF(Label* target,
       // Here NaN cases were either handled by this function or are assumed to
       // have been handled by the caller.
       // Unsigned conditions are treated as their signed counterpart.
-      // Use f31 for comparison result, it is valid in fp64 (FR = 1) mode which
-      // is implied for mips32r6.
+      // Use kDoubleCompareReg for comparison result, it is
+      // valid in fp64 (FR = 1) mode which is implied for mips32r6.
       DCHECK(!cmp1.is(kDoubleCompareReg) && !cmp2.is(kDoubleCompareReg));
       switch (cc) {
         case lt:
           cmp(OLT, L, kDoubleCompareReg, cmp1, cmp2);
-          bc1nez(target, f31);
+          bc1nez(target, kDoubleCompareReg);
           break;
         case gt:
           cmp(ULE, L, kDoubleCompareReg, cmp1, cmp2);
@@ -2516,7 +2517,7 @@ void MacroAssembler::BranchAndLinkShort(int16_t offset, Condition cond,
         slt(scratch, r2, rs);
         beq(scratch, zero_reg, 2);
         nop();
-        bal( offset);
+        bal(offset);
         break;
       case greater_equal:
         // rs >= rt
@@ -2547,7 +2548,7 @@ void MacroAssembler::BranchAndLinkShort(int16_t offset, Condition cond,
         sltu(scratch, r2, rs);
         beq(scratch, zero_reg, 2);
         nop();
-        bal( offset);
+        bal(offset);
         break;
       case Ugreater_equal:
         // rs >= rt
@@ -2707,7 +2708,7 @@ void MacroAssembler::BranchAndLinkShort(Label* L, Condition cond, Register rs,
         beq(scratch, zero_reg, 2);
         nop();
         offset = shifted_branch_offset(L, false);
-        bal( offset);
+        bal(offset);
         break;
       case greater_equal:
         // rs >= rt
@@ -2742,7 +2743,7 @@ void MacroAssembler::BranchAndLinkShort(Label* L, Condition cond, Register rs,
         beq(scratch, zero_reg, 2);
         nop();
         offset = shifted_branch_offset(L, false);
-        bal( offset);
+        bal(offset);
         break;
       case Ugreater_equal:
         // rs >= rt

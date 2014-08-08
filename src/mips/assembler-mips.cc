@@ -1049,9 +1049,9 @@ int32_t Assembler::branch_offset(Label* L, bool jump_elimination_allowed) {
 }
 
 
-int32_t Assembler::branch_offset_compact(Label* L, bool jump_elimination_allowed) {
+int32_t Assembler::branch_offset_compact(Label* L,
+    bool jump_elimination_allowed) {
   int32_t target_pos;
-
   if (L->is_bound()) {
     target_pos = L->pos();
   } else {
@@ -1097,7 +1097,7 @@ int32_t Assembler::branch_offset21(Label* L, bool jump_elimination_allowed) {
 
   int32_t offset = target_pos - (pc_offset() + kBranchPCOffset);
   DCHECK((offset & 3) == 0);
-  DCHECK(((offset >> 2) & 0xFFE00000) == 0); // Offset is 21bit width.
+  DCHECK(((offset >> 2) & 0xFFE00000) == 0);  // Offset is 21bit width.
 
   return offset;
 }
@@ -1125,7 +1125,7 @@ int32_t Assembler::branch_offset21_compact(Label* L,
 
   int32_t offset = target_pos - pc_offset();
   DCHECK((offset & 3) == 0);
-  DCHECK(((offset >> 2) & 0xFFe00000) == 0); // Offset is 21bit width.
+  DCHECK(((offset >> 2) & 0xFFe00000) == 0);  // Offset is 21bit width.
 
   return offset;
 }
@@ -1207,6 +1207,8 @@ void Assembler::bgec(Register rs, Register rt, int16_t offset) {
   DCHECK(rs.code() != rt.code());
   GenInstrImmediate(BLEZL, rs, rt, offset);
 }
+
+
 void Assembler::bgezal(Register rs, int16_t offset) {
   DCHECK(!IsMipsArchVariant(kMips32r6) || rs.is(zero_reg));
   BlockTrampolinePoolScope block_trampoline_pool(this);
@@ -1767,6 +1769,8 @@ void Assembler::lui(Register rd, int32_t j) {
 
 
 void Assembler::aui(Register rs, Register rt, int32_t j) {
+  // This instruction uses same opcode as 'lui'. The difference in encoding is
+  // 'lui' has zero reg. for rs field.
   DCHECK(is_uint16(j));
   GenInstrImmediate(LUI, rs, rt, j);
 }
@@ -1961,8 +1965,10 @@ void Assembler::ldc1(FPURegister fd, const MemOperand& src) {
   // Workaround for non-8-byte alignment of HeapNumber, convert 64-bit
   // load to two 32-bit loads.
   if (IsFp64Mode()) {
-    GenInstrImmediate(LWC1, src.rm(), fd, src.offset_ + Register::kMantissaOffset);
-    GenInstrImmediate(LW, src.rm(), at, src.offset_ + Register::kExponentOffset);
+    GenInstrImmediate(LWC1, src.rm(), fd, src.offset_ +
+        Register::kMantissaOffset);
+    GenInstrImmediate(LW, src.rm(), at, src.offset_ +
+        Register::kExponentOffset);
     mthc1(at, fd);
   } else {
     GenInstrImmediate(LWC1, src.rm(), fd, src.offset_ +
@@ -2193,7 +2199,7 @@ void Assembler::ceil_l_d(FPURegister fd, FPURegister fs) {
 }
 
 
-void Assembler::min(SecondaryField fmt,FPURegister fd, FPURegister ft,
+void Assembler::min(SecondaryField fmt, FPURegister fd, FPURegister ft,
     FPURegister fs) {
   DCHECK(IsMipsArchVariant(kMips32r6));
   DCHECK((fmt == D) || (fmt == S));
@@ -2201,7 +2207,7 @@ void Assembler::min(SecondaryField fmt,FPURegister fd, FPURegister ft,
 }
 
 
-void Assembler::mina(SecondaryField fmt,FPURegister fd, FPURegister ft,
+void Assembler::mina(SecondaryField fmt, FPURegister fd, FPURegister ft,
     FPURegister fs) {
   DCHECK(IsMipsArchVariant(kMips32r6));
   DCHECK((fmt == D) || (fmt == S));
@@ -2209,7 +2215,7 @@ void Assembler::mina(SecondaryField fmt,FPURegister fd, FPURegister ft,
 }
 
 
-void Assembler::max(SecondaryField fmt,FPURegister fd, FPURegister ft,
+void Assembler::max(SecondaryField fmt, FPURegister fd, FPURegister ft,
     FPURegister fs) {
   DCHECK(IsMipsArchVariant(kMips32r6));
   DCHECK((fmt == D) || (fmt == S));
@@ -2217,12 +2223,13 @@ void Assembler::max(SecondaryField fmt,FPURegister fd, FPURegister ft,
 }
 
 
-void Assembler::maxa(SecondaryField fmt,FPURegister fd, FPURegister ft,
+void Assembler::maxa(SecondaryField fmt, FPURegister fd, FPURegister ft,
     FPURegister fs) {
   DCHECK(IsMipsArchVariant(kMips32r6));
   DCHECK((fmt == D) || (fmt == S));
   GenInstrRegister(COP1, fmt, ft, fs, fd, MAXA);
 }
+
 
 void Assembler::cvt_s_w(FPURegister fd, FPURegister fs) {
   GenInstrRegister(COP1, W, f0, fs, fd, CVT_S_W);

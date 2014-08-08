@@ -110,7 +110,7 @@ TEST(Type0) {
   COMPARE(subu(v0, v1, s0),
           "00701023       subu    v0, v1, s0");
 
-  if (IsMipsArchVariant(kMips32r6)) {
+  if (!IsMipsArchVariant(kMips32r6)) {
     COMPARE(mult(a0, a1),
             "00850018       mult    a0, a1");
     COMPARE(mult(t2, t3),
@@ -147,7 +147,7 @@ TEST(Type0) {
       COMPARE(mul(v0, v1, s0),
               "70701002       mul     v0, v1, s0");
     }
-  } else { // MIPS32r6.
+  } else {  // MIPS32r6.
     COMPARE(mul(a0, a1, a2),
             "00a62098       mul    a0, a1, a2");
     COMPARE(muh(a0, a1, a2),

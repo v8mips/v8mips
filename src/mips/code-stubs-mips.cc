@@ -1022,7 +1022,7 @@ void ICCompareStub::GenerateGeneric(MacroAssembler* masm) {
 
   // Check if LESS condition is satisfied. If true, move conditionally
   // result to v0.
-  if (kArchVariant != kMips32r6) {
+  if (!IsMipsArchVariant(kMips32r6)) {
     __ c(OLT, D, f12, f14);
     __ Movt(v0, t0);
     // Use previous check to store conditionally to v0 oposite condition

@@ -7,7 +7,6 @@
 #if V8_TARGET_ARCH_MIPS
 
 #include "src/mips/constants-mips.h"
-#include "src/assembler.h"
 
 namespace v8 {
 namespace internal {
@@ -335,6 +334,8 @@ Instruction::Type Instruction::InstructionType() const {
   }
   return kUnsupported;
 }
+
+
 } }   // namespace v8::internal
 
 #endif  // V8_TARGET_ARCH_MIPS
