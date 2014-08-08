@@ -2689,7 +2689,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
   int16_t  imm16  = instr->Imm16Value();
 
   int32_t  ft_reg = instr->FtValue();  // Destination register.
-  int64_t  ft     = get_fpu_register(ft_reg);
+  int64_t  ft;
 
   // Zero extended immediate.
   uint32_t  oe_imm16 = 0xffff & imm16;
@@ -2735,6 +2735,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
           }
           break;
         case BC1EQZ:
+          ft = get_fpu_register(ft_reg);
           do_branch = (ft & 0x1) ? false : true;
           execute_branch_delay_instruction = true;
           // Set next_pc.
@@ -2745,6 +2746,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
           }
           break;
         case BC1NEZ:
+          ft = get_fpu_register(ft_reg);
           do_branch = (ft & 0x1) ? true : false;
           execute_branch_delay_instruction = true;
           // Set next_pc.
