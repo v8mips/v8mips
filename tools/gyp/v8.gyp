@@ -939,6 +939,10 @@
             '../../src/mips/regexp-macro-assembler-mips.h',
             '../../src/mips/simulator-mips.cc',
             '../../src/mips/stub-cache-mips.cc',
+            '../../src/compiler/mips/code-generator-mips.cc',
+            '../../src/compiler/mips/instruction-codes-mips.h',
+            '../../src/compiler/mips/instruction-selector-mips.cc',
+            '../../src/compiler/mips/linkage-mips.cc',
           ],
         }],
         ['v8_target_arch=="mips64el"', {
