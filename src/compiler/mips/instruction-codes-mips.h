@@ -13,23 +13,26 @@ namespace compiler {
 // Most opcodes specify a single instruction.
 #define TARGET_ARCH_OPCODE_LIST(V) \
   V(MipsAdd)                        \
-  V(MipsAnd)                        \
-  V(MipsCmp)                        \
-  V(MipsOrr)                        \
   V(MipsSub)                        \
   V(MipsMul)                        \
+  V(MipsAnd)                        \
+  V(MipsOr)                         \
+  V(MipsXor)                        \
   V(MipsMov)                        \
+  V(MipsCmp)                        \
   V(MipsCallCodeObject)             \
   V(MipsCallJSFunction)             \
   V(MipsCallAddress)                \
   V(MipsPush)                       \
   V(MipsDrop)                       \
-  V(MipsLoadWord8)                  \
-  V(MipsStoreWord8)                 \
-  V(MipsLoadWord16)                 \
-  V(MipsStoreWord16)                \
-  V(MipsLoadWord32)                 \
-  V(MipsStoreWord32)                \
+  V(MipsLbu)                        \
+  V(MipsSb)                         \
+  V(MipsLhu)                        \
+  V(MipsSh)                         \
+  V(MipsLw)                         \
+  V(MipsSw)                         \
+  V(MipsLdc1)                       \
+  V(MipsSdc1)                       \
   V(MipsStoreWriteBarrier)
 
 /*** plind
@@ -70,19 +73,20 @@ namespace compiler {
 // Many instructions support multiple addressing modes. Addressing modes
 // are encoded into the InstructionCode of the instruction and tell the
 // code generator after register allocation which assembler method to call.
-#define TARGET_ADDRESSING_MODE_LIST(V)  \
-  V(Offset_RI)        /* [%r0 + K] */   \
-  V(Offset_RR)        /* [%r0 + %r1] */ \
-  V(Operand2_I)       /* K */           \
-  V(Operand2_R)       /* %r0 */         \
-  V(Operand2_R_ASR_I) /* %r0 ASR K */   \
-  V(Operand2_R_LSL_I) /* %r0 LSL K */   \
-  V(Operand2_R_LSR_I) /* %r0 LSR K */   \
-  V(Operand2_R_ROR_I) /* %r0 ROR K */   \
-  V(Operand2_R_ASR_R) /* %r0 ASR %r1 */ \
-  V(Operand2_R_LSL_R) /* %r0 LSL %r1 */ \
-  V(Operand2_R_LSR_R) /* %r0 LSR %r1 */ \
-  V(Operand2_R_ROR_R) /* %r0 ROR %r1 */
+//
+// We use the following local notation for addressing modes:
+//
+// R = register
+// O = register or stack slot
+// D = double register
+// I = immediate (handle, external, int32)
+// MRI = [register + immediate]
+// MRR = [register + register]
+// TODO(plind): Add the new r6 address modes.
+#define TARGET_ADDRESSING_MODE_LIST(V) \
+  V(MRI) /* [%r0 + K] */               \
+  V(MRR) /* [%r0 + %r1] */
+
 
 }  // namespace compiler
 }  // namespace internal
