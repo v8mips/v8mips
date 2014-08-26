@@ -255,11 +255,17 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
     case kMipsLbu:
       __ lbu(i.OutputRegister(), i.MemoryOperand());
       break;
+    case kMipsLb:
+      __ lb(i.OutputRegister(), i.MemoryOperand());
+      break;
     case kMipsSb:
       __ sb(i.InputRegister(2), i.MemoryOperand());
       break;
     case kMipsLhu:
       __ lhu(i.OutputRegister(), i.MemoryOperand());
+      break;
+    case kMipsLh:
+      __ lh(i.OutputRegister(), i.MemoryOperand());
       break;
     case kMipsSh:
       __ sh(i.InputRegister(2), i.MemoryOperand());

@@ -113,6 +113,7 @@ static void VisitBinop(InstructionSelector* selector, Node* node,
 void InstructionSelector::VisitLoad(Node* node) {
   TRACE();
   MachineType rep = RepresentationOf(OpParameter<MachineType>(node));
+  MachineType typ = TypeOf(OpParameter<MachineType>(node));
   MipsOperandGenerator g(this);
   Node* base = node->InputAt(0);
   Node* index = node->InputAt(1);
@@ -122,17 +123,16 @@ void InstructionSelector::VisitLoad(Node* node) {
                                    : g.DefineAsRegister(node);
 
   ArchOpcode opcode;
-  // TODO(titzer): signed/unsigned small loads
   switch (rep) {
     case kRepFloat64:
       opcode = kMipsLdc1;
       break;
     case kRepBit:  // Fall through.
     case kRepWord8:
-      opcode = kMipsLbu;
+      opcode = typ == kTypeUint32 ? kMipsLbu : kMipsLb;
       break;
     case kRepWord16:
-      opcode = kMipsLhu;
+      opcode = typ == kTypeUint32 ? kMipsLhu : kMipsLh;
       break;
     case kRepTagged:  // Fall through.
     case kRepWord32:
@@ -143,15 +143,11 @@ void InstructionSelector::VisitLoad(Node* node) {
       return;
   }
 
-  // TODO(plind): I don't undertand interchangeable base/offset here.
   if (g.CanBeImmediate(index)) {
     Emit(opcode | AddressingModeField::encode(kMode_MRI), result,
          g.UseRegister(base), g.UseImmediate(index));
-  } else if (g.CanBeImmediate(base)) {
-    Emit(opcode | AddressingModeField::encode(kMode_MRI), result,
-         g.UseRegister(index), g.UseImmediate(base));
   } else {
-    // TODO(plind): Improve: use of temp reg to hold base + large-offset.
+    // TODO(plind): This could be done via assembler, saving a reg alloc.
     InstructionOperand* addr_reg = g.TempRegister();
     Emit(kMipsMov | AddressingModeField::encode(kMode_MRI), addr_reg,
          g.UseImmediate(index));
@@ -209,15 +205,11 @@ void InstructionSelector::VisitStore(Node* node) {
       return;
   }
 
-  // TODO(plind): see VisitLoad comment re interchangeable base/offset.
   if (g.CanBeImmediate(index)) {
     Emit(opcode | AddressingModeField::encode(kMode_MRI), NULL,
          g.UseRegister(base), g.UseImmediate(index), val);
-  } else if (g.CanBeImmediate(base)) {
-    Emit(opcode | AddressingModeField::encode(kMode_MRI), NULL,
-         g.UseRegister(index), g.UseImmediate(base), val);
   } else {
-    // TODO(plind): Improve: use of temp reg to hold base + large-offset.
+    // TODO(plind): This could be done via assembler, saving a reg alloc.
     InstructionOperand* addr_reg = g.TempRegister();
     Emit(kMipsMov | AddressingModeField::encode(kMode_MRI), addr_reg,
          g.UseImmediate(index));

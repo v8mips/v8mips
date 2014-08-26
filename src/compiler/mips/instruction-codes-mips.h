@@ -29,8 +29,10 @@ namespace compiler {
   V(MipsCallAddress)                \
   V(MipsPush)                       \
   V(MipsDrop)                       \
+  V(MipsLb)                        \
   V(MipsLbu)                        \
   V(MipsSb)                         \
+  V(MipsLh)                        \
   V(MipsLhu)                        \
   V(MipsSh)                         \
   V(MipsLw)                         \
