@@ -5885,9 +5885,10 @@ class DependentCode: public FixedArray {
     kAllocationSiteTenuringChangedGroup,
     // Group of code that depends on element transition information in
     // AllocationSites not being changed.
-    kAllocationSiteTransitionChangedGroup,
-    kGroupCount = kAllocationSiteTransitionChangedGroup + 1
+    kAllocationSiteTransitionChangedGroup
   };
+
+  static const int kGroupCount = kAllocationSiteTransitionChangedGroup + 1;
 
   // Array for holding the index of the first code object of each group.
   // The last element stores the total number of code objects.
@@ -7797,9 +7798,6 @@ class GlobalObject: public JSObject {
   // [global proxy]: the global proxy object of the context
   DECL_ACCESSORS(global_proxy, JSObject)
 
-  // Retrieve the property cell used to store a property.
-  PropertyCell* GetPropertyCell(LookupResult* result);
-
   DECLARE_CAST(GlobalObject)
 
   // Layout description.
@@ -8409,6 +8407,12 @@ class TypeFeedbackInfo: public Struct {
 
   // The object that indicates a megamorphic state.
   static inline Handle<Object> MegamorphicSentinel(Isolate* isolate);
+
+  // The object that indicates a premonomorphic state.
+  static inline Handle<Object> PremonomorphicSentinel(Isolate* isolate);
+
+  // The object that indicates a generic state.
+  static inline Handle<Object> GenericSentinel(Isolate* isolate);
 
   // The object that indicates a monomorphic state of Array with
   // ElementsKind
