@@ -3584,14 +3584,14 @@ OStream& HTransitionElementsKind::PrintDataTo(OStream& os) const {  // NOLINT
 
 OStream& HLoadGlobalCell::PrintDataTo(OStream& os) const {  // NOLINT
   os << "[" << *cell().handle() << "]";
-  if (!details_.IsDontDelete()) os << " (deleteable)";
+  if (details_.IsConfigurable()) os << " (configurable)";
   if (details_.IsReadOnly()) os << " (read-only)";
   return os;
 }
 
 
 bool HLoadGlobalCell::RequiresHoleCheck() const {
-  if (details_.IsDontDelete() && !details_.IsReadOnly()) return false;
+  if (!details_.IsConfigurable()) return false;
   for (HUseIterator it(uses()); !it.Done(); it.Advance()) {
     HValue* use = it.value();
     if (!use->IsChange()) return true;
@@ -3613,7 +3613,7 @@ OStream& HInnerAllocatedObject::PrintDataTo(OStream& os) const {  // NOLINT
 
 OStream& HStoreGlobalCell::PrintDataTo(OStream& os) const {  // NOLINT
   os << "[" << *cell().handle() << "] = " << NameOf(value());
-  if (!details_.IsDontDelete()) os << " (deleteable)";
+  if (details_.IsConfigurable()) os << " (configurable)";
   if (details_.IsReadOnly()) os << " (read-only)";
   return os;
 }
@@ -4642,24 +4642,9 @@ HObjectAccess HObjectAccess::ForBackingStoreOffset(int offset,
 }
 
 
-HObjectAccess HObjectAccess::ForField(Handle<Map> map,
-                                      LookupResult* lookup,
+HObjectAccess HObjectAccess::ForField(Handle<Map> map, int index,
+                                      Representation representation,
                                       Handle<String> name) {
-  DCHECK(lookup->IsField() || lookup->IsTransitionToField());
-  int index;
-  Representation representation;
-  if (lookup->IsField()) {
-    index = lookup->GetLocalFieldIndexFromMap(*map);
-    representation = lookup->representation();
-  } else {
-    Map* transition = lookup->GetTransitionTarget();
-    int descriptor = transition->LastAdded();
-    index = transition->instance_descriptors()->GetFieldIndex(descriptor) -
-        map->inobject_properties();
-    PropertyDetails details =
-        transition->instance_descriptors()->GetDetails(descriptor);
-    representation = details.representation();
-  }
   if (index < 0) {
     // Negative property indices are in-object properties, indexed
     // from the end of the fixed part of the object.

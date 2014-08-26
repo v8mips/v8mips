@@ -355,21 +355,6 @@ class ParserTraits {
     typedef Variable GeneratorVariable;
     typedef v8::internal::Zone Zone;
 
-    class Checkpoint BASE_EMBEDDED {
-     public:
-      template <typename Parser>
-      explicit Checkpoint(Parser* parser) {
-        isolate_ = parser->zone()->isolate();
-        saved_ast_node_id_ = isolate_->ast_node_id();
-      }
-
-      void Restore() { isolate_->set_ast_node_id(saved_ast_node_id_); }
-
-     private:
-      Isolate* isolate_;
-      int saved_ast_node_id_;
-    };
-
     typedef v8::internal::AstProperties AstProperties;
     typedef Vector<VariableProxy*> ParameterIdentifierVector;
 
@@ -387,6 +372,8 @@ class ParserTraits {
     // For constructing objects returned by the traversing functions.
     typedef AstNodeFactory<AstConstructionVisitor> Factory;
   };
+
+  class Checkpoint;
 
   explicit ParserTraits(Parser* parser) : parser_(parser) {}
 
@@ -439,7 +426,8 @@ class ParserTraits {
   }
 
   static void CheckFunctionLiteralInsideTopLevelObjectLiteral(
-      Scope* scope, Expression* value, bool* has_function) {
+      Scope* scope, ObjectLiteralProperty* property, bool* has_function) {
+    Expression* value = property->value();
     if (scope->DeclarationScope()->is_global_scope() &&
         value->AsFunctionLiteral() != NULL) {
       *has_function = true;
@@ -529,6 +517,7 @@ class ParserTraits {
   static Literal* EmptyLiteral() {
     return NULL;
   }
+  static ObjectLiteralProperty* EmptyObjectLiteralProperty() { return NULL; }
 
   // Used in error return values.
   static ZoneList<Expression*>* NullExpressionList() {
