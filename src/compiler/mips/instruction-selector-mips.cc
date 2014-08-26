@@ -61,6 +61,15 @@ class MipsOperandGenerator V8_FINAL : public OperandGenerator {
 };
 
 
+// TODO(plind): Using for Shifts, probably WRONG, need to qualify immediate shift value. See x64 shift.
+static void VisitRRO(InstructionSelector* selector, ArchOpcode opcode, Node* node) {
+  MipsOperandGenerator g(selector);
+  selector->Emit(opcode, g.DefineAsRegister(node),
+                 g.UseRegister(node->InputAt(0)),
+                 g.UseOperand(node->InputAt(1)));
+}
+
+
 static void VisitBinop(InstructionSelector* selector, Node* node,
                        InstructionCode opcode, FlagsContinuation* cont) {
   MipsOperandGenerator g(selector);
@@ -240,22 +249,26 @@ void InstructionSelector::VisitWord32Xor(Node* node) {
 
 
 void InstructionSelector::VisitWord32Shl(Node* node) {
-  TRACE_UNIMPL();
+  TRACE();
+  VisitRRO(this, kMipsShl, node);
 }
 
 
 void InstructionSelector::VisitWord32Shr(Node* node) {
-  TRACE_UNIMPL();
+  TRACE();
+  VisitRRO(this, kMipsShr, node);
 }
 
 
 void InstructionSelector::VisitWord32Sar(Node* node) {
-  TRACE_UNIMPL();
+  TRACE();
+  VisitRRO(this, kMipsSar, node);
 }
 
 
 void InstructionSelector::VisitWord32Ror(Node* node) {
-  TRACE_UNIMPL();
+  TRACE();
+  VisitRRO(this, kMipsRor, node);
 }
 
 

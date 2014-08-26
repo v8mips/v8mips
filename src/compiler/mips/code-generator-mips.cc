@@ -111,9 +111,21 @@ class MipsOperandConverter : public InstructionOperandConverter {
 };
 
 
-static bool HasRegisterInput(Instruction* instr, int index) {
+static inline bool HasRegisterInput(Instruction* instr, int index) {
   return instr->InputAt(index)->IsRegister();
 }
+
+#define ASSEMBLE_SHIFT(asm_instr)                                              \
+  do {                                                                         \
+    if (instr->InputAt(1)->IsRegister()) {                                     \
+      __ asm_instr##v(i.OutputRegister(), i.InputRegister(0),                  \
+                   i.InputRegister(1));                                        \
+    } else {                                                                   \
+      int32_t imm = i.InputOperand(1).immediate();                             \
+      __ asm_instr(i.OutputRegister(), i.InputRegister(0), imm);               \
+    }                                                                          \
+  } while (0);
+
 
 // Assembles an instruction after register allocation, producing machine code.
 void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
@@ -162,6 +174,18 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
     case kMipsXor:
       __ Xor(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
+      case kMipsShl:
+        ASSEMBLE_SHIFT(sll);
+        break;
+      case kMipsShr:
+        ASSEMBLE_SHIFT(srl);
+        break;
+      case kMipsSar:
+        ASSEMBLE_SHIFT(sra);
+        break;
+      case kMipsRor:
+        __ Ror(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
+        break;
     case kMipsCmp:
       // TODO(plind): WTF to do with cmp & friends?
       TRACE_UNIMPL();

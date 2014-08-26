@@ -18,6 +18,10 @@ namespace compiler {
   V(MipsAnd)                        \
   V(MipsOr)                         \
   V(MipsXor)                        \
+  V(MipsShl)                        \
+  V(MipsShr)                        \
+  V(MipsSar)                        \
+  V(MipsRor)                        \
   V(MipsMov)                        \
   V(MipsCmp)                        \
   V(MipsCallCodeObject)             \
