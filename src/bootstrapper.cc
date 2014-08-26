@@ -1204,6 +1204,7 @@ void Genesis::InitializeGlobal(Handle<GlobalObject> global_object,
                         DONT_ENUM, Representation::Tagged());
       map->AppendDescriptor(&d);
     }
+    // @@iterator method is added later.
 
     map->set_function_with_prototype(true);
     map->set_pre_allocated_property_fields(2);
@@ -1262,6 +1263,7 @@ void Genesis::InitializeGlobal(Handle<GlobalObject> global_object,
       CallbacksDescriptor d(factory->caller_string(), caller, attributes);
       map->AppendDescriptor(&d);
     }
+    // @@iterator method is added later.
 
     map->set_function_with_prototype(true);
     map->set_prototype(native_context()->object_function()->prototype());
@@ -1596,6 +1598,7 @@ void Genesis::InstallNativeFunctions() {
 
   INSTALL_NATIVE(Symbol, "symbolIterator", iterator_symbol);
   INSTALL_NATIVE(Symbol, "symbolUnscopables", unscopables_symbol);
+  INSTALL_NATIVE(JSFunction, "ArrayValues", array_values_iterator);
 
   INSTALL_NATIVE_MATH(abs)
   INSTALL_NATIVE_MATH(acos)
@@ -2039,6 +2042,34 @@ bool Genesis::InstallNatives() {
     native_context()->set_regexp_result_map(*initial_map);
   }
 
+  // Add @@iterator method to the arguments object maps.
+  {
+    PropertyAttributes attribs = DONT_ENUM;
+    Handle<AccessorInfo> arguments_iterator =
+        Accessors::ArgumentsIteratorInfo(isolate(), attribs);
+    {
+      CallbacksDescriptor d(Handle<Name>(native_context()->iterator_symbol()),
+                            arguments_iterator, attribs);
+      Handle<Map> map(native_context()->sloppy_arguments_map());
+      Map::EnsureDescriptorSlack(map, 1);
+      map->AppendDescriptor(&d);
+    }
+    {
+      CallbacksDescriptor d(Handle<Name>(native_context()->iterator_symbol()),
+                            arguments_iterator, attribs);
+      Handle<Map> map(native_context()->aliased_arguments_map());
+      Map::EnsureDescriptorSlack(map, 1);
+      map->AppendDescriptor(&d);
+    }
+    {
+      CallbacksDescriptor d(Handle<Name>(native_context()->iterator_symbol()),
+                            arguments_iterator, attribs);
+      Handle<Map> map(native_context()->strict_arguments_map());
+      Map::EnsureDescriptorSlack(map, 1);
+      map->AppendDescriptor(&d);
+    }
+  }
+
 #ifdef VERIFY_HEAP
   builtins->ObjectVerify();
 #endif
@@ -2063,6 +2094,7 @@ bool Genesis::InstallExperimentalNatives() {
     INSTALL_EXPERIMENTAL_NATIVE(i, generators, "generator.js")
     INSTALL_EXPERIMENTAL_NATIVE(i, strings, "harmony-string.js")
     INSTALL_EXPERIMENTAL_NATIVE(i, arrays, "harmony-array.js")
+    INSTALL_EXPERIMENTAL_NATIVE(i, classes, "harmony-classes.js")
   }
 
   InstallExperimentalNativeFunctions();

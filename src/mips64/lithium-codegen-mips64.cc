@@ -8,7 +8,6 @@
 #include "src/hydrogen-osr.h"
 #include "src/mips64/lithium-codegen-mips64.h"
 #include "src/mips64/lithium-gap-resolver-mips64.h"
-#include "src/stub-cache.h"
 
 namespace v8 {
 namespace internal {
@@ -852,7 +851,7 @@ void LCodeGen::PopulateDeoptimizationData(Handle<Code> code) {
   int length = deoptimizations_.length();
   if (length == 0) return;
   Handle<DeoptimizationInputData> data =
-      DeoptimizationInputData::New(isolate(), length, 0, TENURED);
+      DeoptimizationInputData::New(isolate(), length, TENURED);
 
   Handle<ByteArray> translations =
       translations_.CreateByteArray(isolate()->factory());
