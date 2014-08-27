@@ -138,6 +138,48 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
   TRACE();
 
   switch (ArchOpcodeField::decode(opcode)) {
+    case kArchCallAddress: {
+      DirectCEntryStub stub(isolate());
+      stub.GenerateCall(masm(), i.InputRegister(0));
+      __ Drop(kCArgSlotCount);  // TODO(plind): speculative - needs to be tested!! ............
+      break;
+    }
+    case kArchCallCodeObject: {
+      if (instr->InputAt(0)->IsImmediate()) {
+        __ Call(Handle<Code>::cast(i.InputHeapObject(0)),
+                RelocInfo::CODE_TARGET);
+      } else {
+        __ addiu(at, i.InputRegister(0), Code::kHeaderSize - kHeapObjectTag);
+        __ Call(at);
+      }
+      AddSafepointAndDeopt(instr);
+      // Meaningless instruction for ICs to overwrite.
+      AddNopForSmiCodeInlining();  // TODO(plind): Use this, or not ? ..........................
+      break;
+    }
+    case kArchCallJSFunction: {
+      // TODO(jarin) The load of the context should be separated from the call.
+      Register func = i.InputRegister(0);
+      __ lw(cp, FieldMemOperand(func, JSFunction::kContextOffset));
+      __ lw(at, FieldMemOperand(func, JSFunction::kCodeEntryOffset));
+      __ Call(at);
+      AddSafepointAndDeopt(instr);
+      break;
+    }
+    case kArchDeoptimize: {
+      int deoptimization_id = MiscField::decode(instr->opcode());
+      BuildTranslation(instr, 0, deoptimization_id);
+      Address deopt_entry = Deoptimizer::GetDeoptimizationEntry(
+          isolate(), deoptimization_id, Deoptimizer::LAZY);
+      __ Call(deopt_entry, RelocInfo::RUNTIME_ENTRY);
+      break;
+    }
+    case kArchDrop: {
+      int words = MiscField::decode(instr->opcode());
+      __ Drop(words);
+      DCHECK_LT(0, words);
+      break;
+    }
     case kArchJmp:
       __ Branch(code_->GetLabel(i.InputBlock(0)));
       break;
@@ -147,15 +189,6 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
     case kArchRet:
       AssembleReturn();
       break;
-    case kArchDeoptimize: {
-      int deoptimization_id = MiscField::decode(instr->opcode());
-      BuildTranslation(instr, 0, deoptimization_id);
-
-      Address deopt_entry = Deoptimizer::GetDeoptimizationEntry(
-          isolate(), deoptimization_id, Deoptimizer::LAZY);
-      __ Call(deopt_entry, RelocInfo::RUNTIME_ENTRY);
-      break;
-    }
     case kArchTruncateDoubleToI:
       __ TruncateDoubleToI(i.OutputRegister(), i.InputDoubleRegister(0));
       break;
@@ -177,18 +210,18 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
     case kMipsXor:
       __ Xor(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
-      case kMipsShl:
-        ASSEMBLE_SHIFT(sll);
-        break;
-      case kMipsShr:
-        ASSEMBLE_SHIFT(srl);
-        break;
-      case kMipsSar:
-        ASSEMBLE_SHIFT(sra);
-        break;
-      case kMipsRor:
-        __ Ror(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
-        break;
+    case kMipsShl:
+      ASSEMBLE_SHIFT(sll);
+      break;
+    case kMipsShr:
+      ASSEMBLE_SHIFT(srl);
+      break;
+    case kMipsSar:
+      ASSEMBLE_SHIFT(sra);
+      break;
+    case kMipsRor:
+      __ Ror(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
+      break;
     case kMipsCmp:
       // TODO(plind): WTF to do with cmp & friends?
       TRACE_UNIMPL();
@@ -205,52 +238,6 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       break;
 
     // ... many more basic instructions ...
-
-    case kMipsCallCodeObject: {
-      if (instr->InputAt(0)->IsImmediate()) {
-        Handle<Code> code = Handle<Code>::cast(i.InputHeapObject(0));
-        __ Call(code, RelocInfo::CODE_TARGET);
-      } else {
-        Register reg = i.InputRegister(0);
-        int entry = Code::kHeaderSize - kHeapObjectTag;
-        __ lw(reg, MemOperand(reg, entry));
-        __ Call(reg);
-      }
-
-      AddSafepointAndDeopt(instr);
-
-      // Meaningless instruction for ICs to overwrite.
-      AddNopForSmiCodeInlining();  // TODO(plind): Use this, or not ? ..........................
-      break;
-    }
-    case kMipsCallJSFunction: {
-      Register func = i.InputRegister(0);
-
-      // TODO(jarin) The load of the context should be separated from the call.
-      __ lw(cp, FieldMemOperand(func, JSFunction::kContextOffset));
-      __ lw(at, FieldMemOperand(func, JSFunction::kCodeEntryOffset));
-      __ Call(at);
-
-      AddSafepointAndDeopt(instr);
-
-      break;
-    }
-    case kMipsCallAddress: {
-      DirectCEntryStub stub(isolate());
-      stub.GenerateCall(masm(), i.InputRegister(0));
-      __ Drop(kCArgSlotCount);  // TODO(plind): speculative - needs to be tested!! ..............
-      break;
-    }
-    case kMipsPush:
-      __ Push(i.InputRegister(0));
-      break;
-    case kMipsDrop: {
-      int words = MiscField::decode(instr->opcode());
-      __ Drop(words);
-      break;
-    }
-
-
 
     case kMipsLbu:
       __ lbu(i.OutputRegister(), i.MemoryOperand());
@@ -295,6 +282,9 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       break;
     case kMipsSdc1:
       __ sdc1(i.InputDoubleRegister(2), i.MemoryOperand());
+      break;
+     case kMipsPush:
+      __ Push(i.InputRegister(0));
       break;
     case kMipsStoreWriteBarrier:
       Register object = i.InputRegister(0);

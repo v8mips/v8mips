@@ -24,15 +24,10 @@ namespace compiler {
   V(MipsRor)                        \
   V(MipsMov)                        \
   V(MipsCmp)                        \
-  V(MipsCallCodeObject)             \
-  V(MipsCallJSFunction)             \
-  V(MipsCallAddress)                \
-  V(MipsPush)                       \
-  V(MipsDrop)                       \
-  V(MipsLb)                        \
+  V(MipsLb)                         \
   V(MipsLbu)                        \
   V(MipsSb)                         \
-  V(MipsLh)                        \
+  V(MipsLh)                         \
   V(MipsLhu)                        \
   V(MipsSh)                         \
   V(MipsLw)                         \
@@ -41,6 +36,7 @@ namespace compiler {
   V(MipsSwc1)                       \
   V(MipsLdc1)                       \
   V(MipsSdc1)                       \
+  V(MipsPush)                       \
   V(MipsStoreWriteBarrier)
 
 /*** plind
