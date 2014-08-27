@@ -94,8 +94,8 @@ static void VisitBinop(InstructionSelector* selector, Node* node,
 
   DCHECK_NE(0, input_count);
   DCHECK_NE(0, output_count);
-  DCHECK_GE(ARRAY_SIZE(inputs), input_count);
-  DCHECK_GE(ARRAY_SIZE(outputs), output_count);
+  DCHECK_GE(arraysize(inputs), input_count);
+  DCHECK_GE(arraysize(outputs), output_count);
 
   Instruction* instr = selector->Emit(cont->Encode(opcode), output_count,
                                       outputs, input_count, inputs);
@@ -175,7 +175,7 @@ void InstructionSelector::VisitStore(Node* node) {
     // TODO(dcarney): handle immediate indices.
     InstructionOperand* temps[] = {g.TempRegister(t1), g.TempRegister(t2)};
     Emit(kMipsStoreWriteBarrier, NULL, g.UseFixed(base, t0),
-         g.UseFixed(index, t1), g.UseFixed(value, t2), ARRAY_SIZE(temps),
+         g.UseFixed(index, t1), g.UseFixed(value, t2), arraysize(temps),
          temps);
     return;
   }
