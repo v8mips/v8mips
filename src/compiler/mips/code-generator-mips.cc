@@ -276,6 +276,20 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
     case kMipsSw:
       __ sw(i.InputRegister(2), i.MemoryOperand());
       break;
+    case kMipsLwc1: {
+      FPURegister scratch = kScratchDoubleReg;
+      __ lwc1(scratch, i.MemoryOperand());
+      __ cvt_d_w(i.OutputDoubleRegister(), scratch);
+      break;
+    }
+    case kMipsSwc1: {
+      int index = 0;
+      FPURegister scratch = kScratchDoubleReg;
+      MemOperand operand = i.MemoryOperand(&index);
+      __ cvt_w_d(scratch, i.InputDoubleRegister(index));
+      __ sdc1(scratch, operand);
+      break;
+    }
     case kMipsLdc1:
       __ ldc1(i.OutputDoubleRegister(), i.MemoryOperand());
       break;

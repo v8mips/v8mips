@@ -118,12 +118,15 @@ void InstructionSelector::VisitLoad(Node* node) {
   Node* base = node->InputAt(0);
   Node* index = node->InputAt(1);
 
-  InstructionOperand* result = rep == kRepFloat64
+  InstructionOperand* result = (rep == kRepFloat32 || rep == kRepFloat64)
                                    ? g.DefineAsDoubleRegister(node)
                                    : g.DefineAsRegister(node);
 
   ArchOpcode opcode;
   switch (rep) {
+    case kRepFloat32:
+      opcode = kMipsLwc1;
+      break;
     case kRepFloat64:
       opcode = kMipsLdc1;
       break;
@@ -181,11 +184,15 @@ void InstructionSelector::VisitStore(Node* node) {
     return;
   }
   DCHECK_EQ(kNoWriteBarrier, store_rep.write_barrier_kind);
-  InstructionOperand* val =
-      rep == kRepFloat64 ? g.UseDoubleRegister(value) : g.UseRegister(value);
+  InstructionOperand* val = (rep == kRepFloat32 || rep == kRepFloat64)
+                                ? g.UseDoubleRegister(value)
+                                : g.UseRegister(value);
 
   ArchOpcode opcode;
   switch (rep) {
+    case kRepFloat32:
+      opcode = kMipsSwc1;
+      break;
     case kRepFloat64:
       opcode = kMipsSdc1;
       break;

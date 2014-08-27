@@ -37,6 +37,8 @@ namespace compiler {
   V(MipsSh)                         \
   V(MipsLw)                         \
   V(MipsSw)                         \
+  V(MipsLwc1)                       \
+  V(MipsSwc1)                       \
   V(MipsLdc1)                       \
   V(MipsSdc1)                       \
   V(MipsStoreWriteBarrier)
