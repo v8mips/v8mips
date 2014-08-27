@@ -118,10 +118,6 @@ void InstructionSelector::VisitLoad(Node* node) {
   Node* base = node->InputAt(0);
   Node* index = node->InputAt(1);
 
-  InstructionOperand* result = (rep == kRepFloat32 || rep == kRepFloat64)
-                                   ? g.DefineAsDoubleRegister(node)
-                                   : g.DefineAsRegister(node);
-
   ArchOpcode opcode;
   switch (rep) {
     case kRepFloat32:
@@ -147,8 +143,8 @@ void InstructionSelector::VisitLoad(Node* node) {
   }
 
   if (g.CanBeImmediate(index)) {
-    Emit(opcode | AddressingModeField::encode(kMode_MRI), result,
-         g.UseRegister(base), g.UseImmediate(index));
+    Emit(opcode | AddressingModeField::encode(kMode_MRI),
+         g.DefineAsRegister(node), g.UseRegister(base), g.UseImmediate(index));
   } else {
     // TODO(plind): This could be done via assembler, saving a reg alloc.
     InstructionOperand* addr_reg = g.TempRegister();
@@ -157,8 +153,8 @@ void InstructionSelector::VisitLoad(Node* node) {
     Emit(kMipsAdd | AddressingModeField::encode(kMode_None), addr_reg,
          addr_reg, g.UseRegister(base));
     // Emit desired load opcode, using temp addr_reg.
-    Emit(opcode | AddressingModeField::encode(kMode_MRI), result,
-         addr_reg, g.TempImmediate(0));
+    Emit(opcode | AddressingModeField::encode(kMode_MRI),
+         g.DefineAsRegister(node), addr_reg, g.TempImmediate(0));
   }
 
 }
@@ -184,9 +180,6 @@ void InstructionSelector::VisitStore(Node* node) {
     return;
   }
   DCHECK_EQ(kNoWriteBarrier, store_rep.write_barrier_kind);
-  InstructionOperand* val = (rep == kRepFloat32 || rep == kRepFloat64)
-                                ? g.UseDoubleRegister(value)
-                                : g.UseRegister(value);
 
   ArchOpcode opcode;
   switch (rep) {
@@ -214,7 +207,7 @@ void InstructionSelector::VisitStore(Node* node) {
 
   if (g.CanBeImmediate(index)) {
     Emit(opcode | AddressingModeField::encode(kMode_MRI), NULL,
-         g.UseRegister(base), g.UseImmediate(index), val);
+         g.UseRegister(base), g.UseImmediate(index), g.UseRegister(value));
   } else {
     // TODO(plind): This could be done via assembler, saving a reg alloc.
     InstructionOperand* addr_reg = g.TempRegister();
@@ -224,7 +217,7 @@ void InstructionSelector::VisitStore(Node* node) {
          addr_reg, g.UseRegister(base));
     // Emit desired store opcode, using temp addr_reg.
     Emit(opcode | AddressingModeField::encode(kMode_MRI), NULL,
-         addr_reg, g.TempImmediate(0), val);
+         addr_reg, g.TempImmediate(0), g.UseRegister(value));
   }
 }
 
