@@ -111,7 +111,6 @@ static void VisitBinop(InstructionSelector* selector, Node* node,
 
 
 void InstructionSelector::VisitLoad(Node* node) {
-  TRACE();
   MachineType rep = RepresentationOf(OpParameter<MachineType>(node));
   MachineType typ = TypeOf(OpParameter<MachineType>(node));
   MipsOperandGenerator g(this);
@@ -160,7 +159,6 @@ void InstructionSelector::VisitLoad(Node* node) {
 }
 
 void InstructionSelector::VisitStore(Node* node) {
-  TRACE();
   MipsOperandGenerator g(this);
   Node* base = node->InputAt(0);
   Node* index = node->InputAt(1);
@@ -223,49 +221,41 @@ void InstructionSelector::VisitStore(Node* node) {
 
 
 void InstructionSelector::VisitWord32And(Node* node) {
-  TRACE();
   VisitBinop(this, node, kMipsAnd);
 }
 
 
 void InstructionSelector::VisitWord32Or(Node* node) {
-  TRACE();
   VisitBinop(this, node, kMipsOr);
 }
 
 
 void InstructionSelector::VisitWord32Xor(Node* node) {
-  TRACE();
   VisitBinop(this, node, kMipsXor);
 }
 
 
 void InstructionSelector::VisitWord32Shl(Node* node) {
-  TRACE();
   VisitRRO(this, kMipsShl, node);
 }
 
 
 void InstructionSelector::VisitWord32Shr(Node* node) {
-  TRACE();
   VisitRRO(this, kMipsShr, node);
 }
 
 
 void InstructionSelector::VisitWord32Sar(Node* node) {
-  TRACE();
   VisitRRO(this, kMipsSar, node);
 }
 
 
 void InstructionSelector::VisitWord32Ror(Node* node) {
-  TRACE();
   VisitRRO(this, kMipsRor, node);
 }
 
 
 void InstructionSelector::VisitInt32Add(Node* node) {
-  TRACE();
   MipsOperandGenerator g(this);
 
   // TODO(plind): Consider multiply & add optimization from arm port.

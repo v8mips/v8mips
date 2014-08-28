@@ -68,8 +68,6 @@ class MipsOperandConverter : public InstructionOperandConverter {
     return Operand(zero_reg);
   }
 
-  // TODO(plind): clean up naming thru here, it is AFU, and unclear...........................
-
   Operand InputOperand(int index) {
     InstructionOperand* op = instr_->InputAt(index);
     if (op->IsRegister()) {
@@ -134,8 +132,6 @@ static inline bool HasRegisterInput(Instruction* instr, int index) {
 void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
   MipsOperandConverter i(this, instr);
   InstructionCode opcode = instr->opcode();
-
-  TRACE();
 
   switch (ArchOpcodeField::decode(opcode)) {
     case kArchCallAddress: {
@@ -397,7 +393,6 @@ void CodeGenerator::AssembleReturn() {
 
 void CodeGenerator::AssembleMove(InstructionOperand* source,
                                  InstructionOperand* destination) {
-  TRACE();
   MipsOperandConverter g(this, NULL);
   // Dispatch on the source and destination operand kinds.  Not all
   // combinations are possible.
