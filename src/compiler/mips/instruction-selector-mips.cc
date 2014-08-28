@@ -340,7 +340,67 @@ void InstructionSelector::VisitFloat64Mod(Node* node) {
 
 void InstructionSelector::VisitCall(Node* call, BasicBlock* continuation,
                                     BasicBlock* deoptimization) {
-  TRACE_UNIMPL();
+  MipsOperandGenerator g(this);
+  CallDescriptor* descriptor = OpParameter<CallDescriptor*>(call);
+
+  FrameStateDescriptor* frame_state_descriptor = NULL;
+  if (descriptor->NeedsFrameState()) {
+    frame_state_descriptor =
+        GetFrameStateDescriptor(call->InputAt(descriptor->InputCount()));
+  }
+
+  CallBuffer buffer(zone(), descriptor, frame_state_descriptor);
+
+  // Compute InstructionOperands for inputs and outputs.
+  InitializeCallBuffer(call, &buffer, true, false, continuation,
+                       deoptimization);
+
+  // TODO(dcarney): might be possible to use claim/poke instead
+  // Push any stack arguments.
+  for (NodeVectorRIter input = buffer.pushed_nodes.rbegin();
+       input != buffer.pushed_nodes.rend(); input++) {
+    // TODO(plind): inefficient for MIPS, use MultiPush here.
+    //    - Also need to align the stack. See arm64.
+    //    - Maybe combine with arg slot stuff in DirectCEntry stub.
+    Emit(kMipsPush, NULL, g.UseRegister(*input));
+  }
+
+  // Select the appropriate opcode based on the call type.
+  InstructionCode opcode;
+  switch (descriptor->kind()) {
+    case CallDescriptor::kCallCodeObject: {
+      opcode = kArchCallCodeObject;
+      break;
+    }
+    case CallDescriptor::kCallAddress:
+      opcode = kArchCallAddress;
+      break;
+    case CallDescriptor::kCallJSFunction:
+      opcode = kArchCallJSFunction;
+      break;
+    default:
+      UNREACHABLE();
+      return;
+  }
+  opcode |= MiscField::encode(descriptor->deoptimization_support());
+
+  // Emit the call instruction.
+  Instruction* call_instr =
+      Emit(opcode, buffer.outputs.size(), &buffer.outputs.front(),
+           buffer.instruction_args.size(), &buffer.instruction_args.front());
+
+  call_instr->MarkAsCall();
+  if (deoptimization != NULL) {
+    DCHECK(continuation != NULL);
+    call_instr->MarkAsControl();
+  }
+
+  // Caller clean up of stack for C-style calls.
+  if (descriptor->kind() == CallDescriptor::kCallAddress &&
+      !buffer.pushed_nodes.empty()) {
+    DCHECK(deoptimization == NULL && continuation == NULL);
+    Emit(kArchDrop | MiscField::encode(buffer.pushed_nodes.size()), NULL);
+  }
 }
 
 
