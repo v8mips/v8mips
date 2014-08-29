@@ -416,14 +416,66 @@ void InstructionSelector::VisitInt32SubWithOverflow(Node* node,
 }
 
 
+// Shared routine for multiple compare operations.
+static void VisitCompare(InstructionSelector* selector, InstructionCode opcode,
+                         InstructionOperand* left, InstructionOperand* right,
+                         FlagsContinuation* cont) {
+  MipsOperandGenerator g(selector);
+  opcode = cont->Encode(opcode);
+  if (cont->IsBranch()) {
+    selector->Emit(opcode, NULL, left, right, g.Label(cont->true_block()),
+                   g.Label(cont->false_block()))->MarkAsControl();
+  } else {
+    DCHECK(cont->IsSet());
+    // TODO(plind): this clause WONT work for mips right now.
+    selector->Emit(opcode, g.DefineAsRegister(cont->result()), left, right);
+  }
+}
+
+
+// Shared routine for multiple word compare operations.
+static void VisitWordCompare(InstructionSelector* selector, Node* node,
+                             InstructionCode opcode, FlagsContinuation* cont,
+                             bool commutative) {
+  MipsOperandGenerator g(selector);
+  Node* left = node->InputAt(0);
+  Node* right = node->InputAt(1);
+
+  // Match immediates on left or right side of comparison.
+  if (g.CanBeImmediate(right)) {
+    VisitCompare(selector, opcode, g.UseRegister(left), g.UseImmediate(right),
+                 cont);
+  } else if (g.CanBeImmediate(left)) {
+    if (!commutative) cont->Commute();
+    VisitCompare(selector, opcode, g.UseRegister(right), g.UseImmediate(left),
+                 cont);
+  } else {
+    VisitCompare(selector, opcode, g.UseRegister(left), g.UseRegister(right),
+                 cont);
+  }
+}
+
+
 void InstructionSelector::VisitWord32Test(Node* node, FlagsContinuation* cont) {
-  TRACE_UNIMPL();
+  switch (node->opcode()) {
+    case IrOpcode::kWord32And:
+      // TODO(plind): understand the significance of this 'IR and' special case.)
+      return VisitWordCompare(this, node, kMipsTst, cont, true);
+    default:
+      break;
+  }
+
+  MipsOperandGenerator g(this);
+  // kMipsTst is a pseudo-instruction to do logical 'and' and leave the result
+  // in tmp register at.
+  VisitCompare(this, kMipsTst, g.UseRegister(node), g.UseRegister(node),
+               cont);
 }
 
 
 void InstructionSelector::VisitWord32Compare(Node* node,
                                              FlagsContinuation* cont) {
-  TRACE_UNIMPL();
+  VisitWordCompare(this, node, kMipsCmp, cont, false);
 }
 
 

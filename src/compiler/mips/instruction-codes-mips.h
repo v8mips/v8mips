@@ -23,6 +23,7 @@ namespace compiler {
   V(MipsSar)                        \
   V(MipsRor)                        \
   V(MipsMov)                        \
+  V(MipsTst)                        \
   V(MipsCmp)                        \
   V(MipsLb)                         \
   V(MipsLbu)                        \

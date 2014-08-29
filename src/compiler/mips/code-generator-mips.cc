@@ -26,7 +26,7 @@ namespace compiler {
 
 // TODO(plind): remove these debug lines.
 
-#if 0
+#if 1
 #define TRACE() PrintF("code_gen: %s at line %d\n", \
     __FUNCTION__, __LINE__)
 
@@ -218,10 +218,12 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
     case kMipsRor:
       __ Ror(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
+    case kMipsTst:
+      // Psuedo-instruction used for tst/branch.
+      __ And(at, i.InputRegister(0), i.InputOperand(1));
+      break;
     case kMipsCmp:
-      // TODO(plind): WTF to do with cmp & friends?
-      TRACE_UNIMPL();
-      __ Slt(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
+      // Psuedo-instruction used for cmp/branch. No opcode emitted here.
       break;
     case kMipsMov:
       // TODO(plind): Should we combine mov/li like this, or use separate instr?
@@ -300,7 +302,95 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
 // Assembles branches after an instruction.
 void CodeGenerator::AssembleArchBranch(Instruction* instr,
                                        FlagsCondition condition) {
-  TRACE_UNIMPL();
+  MipsOperandConverter i(this, instr);
+  Label done;
+
+  // Emit a branch. The true and false targets are always the last two inputs
+  // to the instruction.
+  BasicBlock* tblock = i.InputBlock(instr->InputCount() - 2);
+  BasicBlock* fblock = i.InputBlock(instr->InputCount() - 1);
+  bool fallthru = IsNextInAssemblyOrder(fblock);
+  Label* tlabel = code()->GetLabel(tblock);
+  Label* flabel = fallthru ? &done : code()->GetLabel(fblock);
+
+  // MIPS does not have condition code flags, so compare and branch are
+  // implemented differently than on the other arch's. The compare operations
+  // emit mips psuedo-instructions, which are checked and handled here.
+  // TODO(plind): Add CHECK() to ensure that test/cmp and this branch were
+  //    not separated by other instructions.
+  if (instr->arch_opcode() == kMipsTst) {
+    // The kMipsTst psuedo-instruction emits And to 'at' register.
+    switch (condition) {
+      case kNotEqual:
+        __ Branch(tlabel, ne, at, Operand(zero_reg));
+        break;
+      case kEqual:
+        __ Branch(tlabel, eq, at, Operand(zero_reg));
+        break;
+      default:
+        // TODO(plind): Find debug printing support for text condition codes.
+        PrintF("Unsupported kMipsTst condition: %d\n", condition);
+        UNIMPLEMENTED();
+        break;
+    }
+  } else if (instr->arch_opcode() == kMipsCmp) {
+    switch (condition) {
+      case kEqual:
+        __ Branch(tlabel, eq, i.InputRegister(0), i.InputOperand(1));
+        break;
+      case kNotEqual:
+        __ Branch(tlabel, ne, i.InputRegister(0), i.InputOperand(1));
+        break;
+      case kSignedLessThan:
+        __ Branch(tlabel, lt, i.InputRegister(0), i.InputOperand(1));
+        break;
+      case kSignedGreaterThanOrEqual:
+        __ Branch(tlabel, ge, i.InputRegister(0), i.InputOperand(1));
+        break;
+      case kSignedLessThanOrEqual:
+        __ Branch(tlabel, le, i.InputRegister(0), i.InputOperand(1));
+        break;
+      case kSignedGreaterThan:
+        __ Branch(tlabel, gt, i.InputRegister(0), i.InputOperand(1));
+        break;
+      case kUnsignedLessThan:
+        __ Branch(tlabel, lo, i.InputRegister(0), i.InputOperand(1));
+        break;
+      case kUnsignedGreaterThanOrEqual:
+        __ Branch(tlabel, hs, i.InputRegister(0), i.InputOperand(1));
+        break;
+      case kUnsignedLessThanOrEqual:
+        __ Branch(tlabel, ls, i.InputRegister(0), i.InputOperand(1));
+        break;
+      case kUnsignedGreaterThan:
+        __ Branch(tlabel, hi, i.InputRegister(0), i.InputOperand(1));
+        break;
+      case kOverflow:
+      case kNotOverflow:
+        TRACE_MSG("Under/Overflow not implemented on integer compare.\n");
+        UNIMPLEMENTED();
+        break;
+      case kUnorderedEqual:
+      case kUnorderedNotEqual:
+      case kUnorderedLessThan:
+      case kUnorderedGreaterThanOrEqual:
+      case kUnorderedLessThanOrEqual:
+      case kUnorderedGreaterThan:
+        TRACE_MSG("Unordered tests not implemented on integer compare.\n");
+        UNIMPLEMENTED();
+        break;
+    }
+    if (!fallthru) __ b(flabel);  // no fallthru to flabel.
+    __ bind(&done);
+
+  } else {
+    PrintF("AssembleArchBranch Unimplemented arch_opcode is : %d\n",
+           instr->arch_opcode());
+    TRACE_UNIMPL();
+    UNIMPLEMENTED();
+  }
+
+
 }
 
 
