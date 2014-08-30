@@ -25,6 +25,16 @@ namespace compiler {
   V(MipsMov)                        \
   V(MipsTst)                        \
   V(MipsCmp)                        \
+  V(MipsFloat64Cmp)                 \
+  V(MipsFloat64Add)                 \
+  V(MipsFloat64Sub)                 \
+  V(MipsFloat64Mul)                 \
+  V(MipsFloat64Div)                 \
+  V(MipsFloat64Mod)                 \
+  V(MipsFloat64ToInt32)             \
+  V(MipsFloat64ToUint32)            \
+  V(MipsInt32ToFloat64)             \
+  V(MipsUint32ToFloat64)            \
   V(MipsLb)                         \
   V(MipsLbu)                        \
   V(MipsSb)                         \

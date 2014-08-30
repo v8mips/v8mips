@@ -61,6 +61,15 @@ class MipsOperandGenerator V8_FINAL : public OperandGenerator {
 };
 
 
+static void VisitRRR(InstructionSelector* selector, ArchOpcode opcode,
+                     Node* node) {
+  MipsOperandGenerator g(selector);
+  selector->Emit(opcode, g.DefineAsRegister(node),
+                 g.UseRegister(node->InputAt(0)),
+                 g.UseRegister(node->InputAt(1)));
+}
+
+
 // TODO(plind): Using for Shifts, probably WRONG, need to qualify immediate shift value. See x64 shift.
 static void VisitRRO(InstructionSelector* selector, ArchOpcode opcode, Node* node) {
   MipsOperandGenerator g(selector);
@@ -294,42 +303,50 @@ void InstructionSelector::VisitInt32UMod(Node* node) {
 
 
 void InstructionSelector::VisitChangeInt32ToFloat64(Node* node) {
-  TRACE_UNIMPL();
+  MipsOperandGenerator g(this);
+  Emit(kMipsInt32ToFloat64, g.DefineAsRegister(node),
+       g.UseRegister(node->InputAt(0)));
 }
 
 
 void InstructionSelector::VisitChangeUint32ToFloat64(Node* node) {
-  TRACE_UNIMPL();
+  MipsOperandGenerator g(this);
+  Emit(kMipsUint32ToFloat64, g.DefineAsRegister(node),
+       g.UseRegister(node->InputAt(0)));
 }
 
 
 void InstructionSelector::VisitChangeFloat64ToInt32(Node* node) {
-  TRACE_UNIMPL();
+  MipsOperandGenerator g(this);
+  Emit(kMipsFloat64ToInt32, g.DefineAsRegister(node),
+       g.UseRegister(node->InputAt(0)));
 }
 
 
 void InstructionSelector::VisitChangeFloat64ToUint32(Node* node) {
-  TRACE_UNIMPL();
+  MipsOperandGenerator g(this);
+  Emit(kMipsFloat64ToUint32, g.DefineAsRegister(node),
+       g.UseRegister(node->InputAt(0)));
 }
 
 
 void InstructionSelector::VisitFloat64Add(Node* node) {
-  TRACE_UNIMPL();
+  VisitRRR(this, kMipsFloat64Add, node);
 }
 
 
 void InstructionSelector::VisitFloat64Sub(Node* node) {
-  TRACE_UNIMPL();
+  VisitRRR(this, kMipsFloat64Sub, node);
 }
 
 
 void InstructionSelector::VisitFloat64Mul(Node* node) {
-  TRACE_UNIMPL();
+  VisitRRR(this, kMipsFloat64Mul, node);
 }
 
 
 void InstructionSelector::VisitFloat64Div(Node* node) {
-  TRACE_UNIMPL();
+  VisitRRR(this, kMipsFloat64Div, node);
 }
 
 

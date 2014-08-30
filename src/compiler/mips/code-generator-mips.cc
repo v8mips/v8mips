@@ -235,7 +235,56 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       }
       break;
 
-    // ... many more basic instructions ...
+    case kMipsFloat64Cmp:
+      // Psuedo-instruction used for FP cmp/branch. No opcode emitted here.
+      break;
+    case kMipsFloat64Add:
+    // TODO(plind): add special case: combine mult & add.
+      __ add_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0),
+              i.InputDoubleRegister(1));
+      break;
+    case kMipsFloat64Sub:
+      __ sub_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0),
+              i.InputDoubleRegister(1));
+      break;
+    case kMipsFloat64Mul:
+      // TODO(plind): add special case: right op is -1.0, see arm port.
+      __ mul_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0),
+              i.InputDoubleRegister(1));
+      break;
+    case kMipsFloat64Div:
+      __ div_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0),
+              i.InputDoubleRegister(1));
+      break;
+    case kMipsFloat64Mod: {
+      TRACE_UNIMPL();
+      UNIMPLEMENTED();
+      break;
+    }
+    case kMipsInt32ToFloat64: {
+      FPURegister scratch = kScratchDoubleReg;
+      __ mtc1(i.InputRegister(0), scratch);
+      __ cvt_d_w(i.OutputDoubleRegister(), scratch);
+      break;
+    }
+    case kMipsUint32ToFloat64: {
+      FPURegister scratch = kScratchDoubleReg;
+      __ Cvt_d_uw(i.OutputDoubleRegister(), i.InputRegister(0), scratch);
+      break;
+    }
+    case kMipsFloat64ToInt32: {
+      FPURegister scratch = kScratchDoubleReg;
+      __ cvt_w_d(scratch, i.InputDoubleRegister(0));
+      __ mfc1(i.OutputRegister(), scratch);
+      break;
+    }
+    case kMipsFloat64ToUint32: {
+      FPURegister scratch = kScratchDoubleReg;
+      // TODO(plind): Fix wrong param order of Trunc_uw_d() macro-asm function.
+      __ Trunc_uw_d(i.InputDoubleRegister(0), i.OutputRegister(), scratch);
+      break;
+    }
+    // ... more basic instructions ...
 
     case kMipsLbu:
       __ lbu(i.OutputRegister(), i.MemoryOperand());
@@ -380,7 +429,76 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
         UNIMPLEMENTED();
         break;
     }
-    if (!fallthru) __ b(flabel);  // no fallthru to flabel.
+    if (!fallthru) __ Branch(flabel);  // no fallthru to flabel.
+    __ bind(&done);
+
+  } else if (instr->arch_opcode() == kMipsFloat64Cmp) {
+    Label *nan = NULL;
+    switch (condition) {
+      case kUnorderedEqual:
+        nan = flabel;
+      // Fall through.
+      case kEqual:
+        __ BranchF(tlabel, nan, eq,
+                   i.InputDoubleRegister(0), i.InputDoubleRegister(1));
+        break;
+      case kUnorderedNotEqual:
+        nan = tlabel;
+      // Fall through.
+      case kNotEqual:
+        __ BranchF(tlabel, nan, ne,
+                   i.InputDoubleRegister(0), i.InputDoubleRegister(1));
+        break;
+      case kSignedLessThan:
+        __ BranchF(tlabel, nan, lt,
+                   i.InputDoubleRegister(0), i.InputDoubleRegister(1));
+        break;
+      case kSignedGreaterThanOrEqual:
+        __ BranchF(tlabel, nan, ge,
+                   i.InputDoubleRegister(0), i.InputDoubleRegister(1));
+        break;
+      case kSignedLessThanOrEqual:
+        __ BranchF(tlabel, nan, le,
+                   i.InputDoubleRegister(0), i.InputDoubleRegister(1));
+        break;
+      case kSignedGreaterThan:
+        __ BranchF(tlabel, nan, gt,
+                   i.InputDoubleRegister(0), i.InputDoubleRegister(1));
+        break;
+      case kUnorderedLessThan:
+        nan = flabel;
+      // Fall through.
+      case kUnsignedLessThan:
+        __ BranchF(tlabel, nan, lo,
+                   i.InputDoubleRegister(0), i.InputDoubleRegister(1));
+        break;
+      case kUnorderedGreaterThanOrEqual:
+        nan = tlabel;
+      // Fall through.
+      case kUnsignedGreaterThanOrEqual:
+        __ BranchF(tlabel, nan, hs,
+                   i.InputDoubleRegister(0), i.InputDoubleRegister(1));
+        break;
+      case kUnorderedLessThanOrEqual:
+        nan = flabel;
+      // Fall through.
+      case kUnsignedLessThanOrEqual:
+        __ BranchF(tlabel, nan, ls,
+                   i.InputDoubleRegister(0), i.InputDoubleRegister(1));
+        break;
+      case kUnorderedGreaterThan:
+      // Fall through.
+      case kUnsignedGreaterThan:
+        __ BranchF(tlabel, nan, hi,
+                   i.InputDoubleRegister(0), i.InputDoubleRegister(1));
+        break;
+      case kOverflow:
+      case kNotOverflow:
+        TRACE_MSG("Under/Overflow not implemented on FP compare.\n");
+        UNIMPLEMENTED();
+        break;
+    }
+    if (!fallthru) __ Branch(flabel);  // no fallthru to flabel.
     __ bind(&done);
 
   } else {
