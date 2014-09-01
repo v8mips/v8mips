@@ -191,8 +191,16 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
     case kMipsAdd:
       __ Addu(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
+    case kMipsAddOvf:
+      __ AdduAndCheckForOverflow(i.OutputRegister(), i.InputRegister(0),
+                                 i.InputRegister(1), at, i.InputRegister(2));
+      break;
     case kMipsSub:
       __ Subu(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
+      break;
+    case kMipsSubOvf:
+      __ SubuAndCheckForOverflow(i.OutputRegister(), i.InputRegister(0),
+                                 i.InputRegister(1), at, i.InputRegister(2));
       break;
     case kMipsMul:
       __ Mul(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
@@ -379,6 +387,22 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
       default:
         // TODO(plind): Find debug printing support for text condition codes.
         PrintF("Unsupported kMipsTst condition: %d\n", condition);
+        UNIMPLEMENTED();
+        break;
+    }
+  } else if (instr->arch_opcode() == kMipsAddOvf ||
+             instr->arch_opcode() == kMipsSubOvf) {
+    // The kMipsAddOvf, SubOvf emits negative result to 'at' on overflow.
+    switch (condition) {
+      case kOverflow:
+        __ Branch(tlabel, lt, at, Operand(zero_reg));
+        break;
+      case kNotOverflow:
+        __ Branch(tlabel, ge, at, Operand(zero_reg));
+        break;
+      default:
+        // TODO(plind): Find debug printing support for text condition codes.
+        PrintF("Unsupported kMipsAdd/SubOvf condition: %d\n", condition);
         UNIMPLEMENTED();
         break;
     }

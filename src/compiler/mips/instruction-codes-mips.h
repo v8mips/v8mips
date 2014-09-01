@@ -13,7 +13,9 @@ namespace compiler {
 // Most opcodes specify a single instruction.
 #define TARGET_ARCH_OPCODE_LIST(V) \
   V(MipsAdd)                        \
+  V(MipsAddOvf)                     \
   V(MipsSub)                        \
+  V(MipsSubOvf)                     \
   V(MipsMul)                        \
   V(MipsAnd)                        \
   V(MipsOr)                         \
