@@ -436,7 +436,7 @@ static void VisitBinopOverflow(InstructionSelector* selector, Node* node,
 
   inputs[input_count++] = g.UseRegister(m.left().node());
   inputs[input_count++] = g.UseRegister(m.right().node());
-  inputs[input_count++] = g.TempRegister();
+  // inputs[input_count++] = g.TempRegister();
 
   if (cont->IsBranch()) {
     inputs[input_count++] = g.Label(cont->true_block());

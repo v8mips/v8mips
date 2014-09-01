@@ -193,14 +193,14 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       break;
     case kMipsAddOvf:
       __ AdduAndCheckForOverflow(i.OutputRegister(), i.InputRegister(0),
-                                 i.InputRegister(1), at, i.InputRegister(2));
+                                 i.InputRegister(1), at, t8);
       break;
     case kMipsSub:
       __ Subu(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
     case kMipsSubOvf:
       __ SubuAndCheckForOverflow(i.OutputRegister(), i.InputRegister(0),
-                                 i.InputRegister(1), at, i.InputRegister(2));
+                                 i.InputRegister(1), at, t8);
       break;
     case kMipsMul:
       __ Mul(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
@@ -711,8 +711,10 @@ void CodeGenerator::AssembleSwap(InstructionOperand* source,
 
 
 void CodeGenerator::AddNopForSmiCodeInlining() {
-  // On 32-bit ARM we do not insert nops for inlined Smi code. plind, what about MIPS?
-  UNREACHABLE();
+  // On 32-bit ARM we do not insert nops for inlined Smi code.
+  // TODO(plind): Understand the calling sequence and fix if needed.
+  // UNREACHABLE();
+  __ nop();  // Maybe PROPERTY_ACCESS_INLINED?
 }
 
 #undef __
