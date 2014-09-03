@@ -39,22 +39,21 @@ class LoadICStubShim : public HydrogenCodeStub {
     i::compiler::GetInterfaceDescriptor(isolate, this);
   }
 
-  virtual Handle<Code> GenerateCode() V8_OVERRIDE {
+  virtual Handle<Code> GenerateCode() OVERRIDE {
     ExtraICState extra_state = LoadIC::ComputeExtraICState(contextual_mode_);
     return LoadIC::initialize_stub(isolate(), extra_state);
   }
 
   virtual void InitializeInterfaceDescriptor(
-      CodeStubInterfaceDescriptor* descriptor) V8_OVERRIDE {
+      CodeStubInterfaceDescriptor* descriptor) OVERRIDE {
     CallInterfaceDescriptor* call_descriptor =
         isolate()->call_descriptor(CallDescriptorKey::LoadICCall);
     descriptor->Initialize(MajorKey(), call_descriptor);
   }
 
  private:
-  virtual Major MajorKey() const V8_OVERRIDE { return NoCache; }
-  virtual int NotMissMinorKey() const V8_OVERRIDE { return 0; }
-  virtual bool UseSpecialCache() V8_OVERRIDE { return true; }
+  virtual Major MajorKey() const OVERRIDE { return NoCache; }
+  virtual bool UseSpecialCache() OVERRIDE { return true; }
 
   ContextualMode contextual_mode_;
 };
@@ -69,21 +68,20 @@ class KeyedLoadICStubShim : public HydrogenCodeStub {
     i::compiler::GetInterfaceDescriptor(isolate, this);
   }
 
-  virtual Handle<Code> GenerateCode() V8_OVERRIDE {
+  virtual Handle<Code> GenerateCode() OVERRIDE {
     return isolate()->builtins()->KeyedLoadIC_Initialize();
   }
 
   virtual void InitializeInterfaceDescriptor(
-      CodeStubInterfaceDescriptor* descriptor) V8_OVERRIDE {
+      CodeStubInterfaceDescriptor* descriptor) OVERRIDE {
     CallInterfaceDescriptor* call_descriptor =
         isolate()->call_descriptor(CallDescriptorKey::LoadICCall);
     descriptor->Initialize(MajorKey(), call_descriptor);
   }
 
  private:
-  virtual Major MajorKey() const V8_OVERRIDE { return NoCache; }
-  virtual int NotMissMinorKey() const V8_OVERRIDE { return 0; }
-  virtual bool UseSpecialCache() V8_OVERRIDE { return true; }
+  virtual Major MajorKey() const OVERRIDE { return NoCache; }
+  virtual bool UseSpecialCache() OVERRIDE { return true; }
 };
 
 
@@ -97,21 +95,20 @@ class StoreICStubShim : public HydrogenCodeStub {
     i::compiler::GetInterfaceDescriptor(isolate, this);
   }
 
-  virtual Handle<Code> GenerateCode() V8_OVERRIDE {
+  virtual Handle<Code> GenerateCode() OVERRIDE {
     return StoreIC::initialize_stub(isolate(), strict_mode_);
   }
 
   virtual void InitializeInterfaceDescriptor(
-      CodeStubInterfaceDescriptor* descriptor) V8_OVERRIDE {
+      CodeStubInterfaceDescriptor* descriptor) OVERRIDE {
     CallInterfaceDescriptor* call_descriptor =
         isolate()->call_descriptor(CallDescriptorKey::StoreICCall);
     descriptor->Initialize(MajorKey(), call_descriptor);
   }
 
  private:
-  virtual Major MajorKey() const V8_OVERRIDE { return NoCache; }
-  virtual int NotMissMinorKey() const V8_OVERRIDE { return 0; }
-  virtual bool UseSpecialCache() V8_OVERRIDE { return true; }
+  virtual Major MajorKey() const OVERRIDE { return NoCache; }
+  virtual bool UseSpecialCache() OVERRIDE { return true; }
 
   StrictMode strict_mode_;
 };
@@ -127,23 +124,22 @@ class KeyedStoreICStubShim : public HydrogenCodeStub {
     i::compiler::GetInterfaceDescriptor(isolate, this);
   }
 
-  virtual Handle<Code> GenerateCode() V8_OVERRIDE {
+  virtual Handle<Code> GenerateCode() OVERRIDE {
     return strict_mode_ == SLOPPY
                ? isolate()->builtins()->KeyedStoreIC_Initialize()
                : isolate()->builtins()->KeyedStoreIC_Initialize_Strict();
   }
 
   virtual void InitializeInterfaceDescriptor(
-      CodeStubInterfaceDescriptor* descriptor) V8_OVERRIDE {
+      CodeStubInterfaceDescriptor* descriptor) OVERRIDE {
     CallInterfaceDescriptor* call_descriptor =
         isolate()->call_descriptor(CallDescriptorKey::StoreICCall);
     descriptor->Initialize(MajorKey(), call_descriptor);
   }
 
  private:
-  virtual Major MajorKey() const V8_OVERRIDE { return NoCache; }
-  virtual int NotMissMinorKey() const V8_OVERRIDE { return 0; }
-  virtual bool UseSpecialCache() V8_OVERRIDE { return true; }
+  virtual Major MajorKey() const OVERRIDE { return NoCache; }
+  virtual bool UseSpecialCache() OVERRIDE { return true; }
 
   StrictMode strict_mode_;
 };
@@ -299,28 +295,49 @@ void JSGenericLowering::ReplaceWithCompareIC(Node* node, Token::Value token,
                                              bool pure) {
   BinaryOpICStub stub(isolate(), Token::ADD);  // TODO(mstarzinger): Hack.
   CodeStubInterfaceDescriptor* d = stub.GetInterfaceDescriptor();
+  bool has_frame_state = OperatorProperties::HasFrameStateInput(node->op());
   CallDescriptor* desc_compare = linkage()->GetStubCallDescriptor(
-      d, 0, CallDescriptor::kPatchableCallSiteWithNop);
+      d, 0, CallDescriptor::kPatchableCallSiteWithNop | FlagsForNode(node));
   Handle<Code> ic = CompareIC::GetUninitialized(isolate(), token);
-  Node* compare;
+  NodeVector inputs(zone());
+  inputs.reserve(node->InputCount() + 1);
+  inputs.push_back(CodeConstant(ic));
+  inputs.push_back(NodeProperties::GetValueInput(node, 0));
+  inputs.push_back(NodeProperties::GetValueInput(node, 1));
+  inputs.push_back(NodeProperties::GetContextInput(node));
   if (pure) {
-    // A pure (strict) comparison doesn't have an effect or control.
-    // But for the graph, we need to add these inputs.
-    compare = graph()->NewNode(common()->Call(desc_compare), CodeConstant(ic),
-                               NodeProperties::GetValueInput(node, 0),
-                               NodeProperties::GetValueInput(node, 1),
-                               NodeProperties::GetContextInput(node),
-                               graph()->start(), graph()->start());
+    // A pure (strict) comparison doesn't have an effect, control or frame
+    // state.  But for the graph, we need to add control and effect inputs.
+    DCHECK(!has_frame_state);
+    inputs.push_back(graph()->start());
+    inputs.push_back(graph()->start());
   } else {
-    compare = graph()->NewNode(common()->Call(desc_compare), CodeConstant(ic),
-                               NodeProperties::GetValueInput(node, 0),
-                               NodeProperties::GetValueInput(node, 1),
-                               NodeProperties::GetContextInput(node),
-                               NodeProperties::GetEffectInput(node),
-                               NodeProperties::GetControlInput(node));
+    DCHECK(has_frame_state == FLAG_turbo_deoptimization);
+    if (FLAG_turbo_deoptimization) {
+      inputs.push_back(NodeProperties::GetFrameStateInput(node));
+    }
+    inputs.push_back(NodeProperties::GetEffectInput(node));
+    inputs.push_back(NodeProperties::GetControlInput(node));
   }
+  Node* compare =
+      graph()->NewNode(common()->Call(desc_compare),
+                       static_cast<int>(inputs.size()), &inputs.front());
+
   node->ReplaceInput(0, compare);
   node->ReplaceInput(1, SmiConstant(token));
+
+  if (has_frame_state) {
+    // Remove the frame state from inputs.
+    // TODO(jarin) This should use Node::RemoveInput (which does not exist yet).
+    int dest = NodeProperties::FirstFrameStateIndex(node);
+    for (int i = NodeProperties::PastFrameStateIndex(node);
+         i < node->InputCount(); i++) {
+      node->ReplaceInput(dest, node->InputAt(i));
+      dest++;
+    }
+    node->TrimInputCount(dest);
+  }
+
   ReplaceWithRuntimeCall(node, Runtime::kBooleanize);
 }
 
@@ -357,11 +374,11 @@ void JSGenericLowering::ReplaceWithBuiltinCall(Node* node,
 void JSGenericLowering::ReplaceWithRuntimeCall(Node* node,
                                                Runtime::FunctionId f,
                                                int nargs_override) {
-  Operator::Property props = node->op()->properties();
+  Operator::Properties properties = node->op()->properties();
   const Runtime::Function* fun = Runtime::FunctionForId(f);
   int nargs = (nargs_override < 0) ? fun->nargs : nargs_override;
   CallDescriptor* desc =
-      linkage()->GetRuntimeCallDescriptor(f, nargs, props, FlagsForNode(node));
+      linkage()->GetRuntimeCallDescriptor(f, nargs, properties);
   Node* ref = ExternalConstant(ExternalReference(f, isolate()));
   Node* arity = Int32Constant(nargs);
   if (!centrystub_constant_.is_set()) {
