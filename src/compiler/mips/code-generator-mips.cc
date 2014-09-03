@@ -149,8 +149,6 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
         __ Call(at);
       }
       AddSafepointAndDeopt(instr);
-      // Meaningless instruction for ICs to overwrite.
-      AddNopForSmiCodeInlining();  // TODO(plind): Use this, or not ? ..........................
       break;
     }
     case kArchCallJSFunction: {
@@ -711,13 +709,14 @@ void CodeGenerator::AssembleSwap(InstructionOperand* source,
 
 
 void CodeGenerator::AddNopForSmiCodeInlining() {
-  // On 32-bit ARM we do not insert nops for inlined Smi code.
-  // TODO(plind): Understand the calling sequence and fix if needed.
-  // UNREACHABLE();
+  // Unused on 32-bit ARM. Still exists on 64-bit arm.
+  // TODO(plind): Unclear when this is called now. Understand, fix if needed.
   __ nop();  // Maybe PROPERTY_ACCESS_INLINED?
 }
 
 #undef __
-}
-}
-}  // namespace v8::internal::compiler
+
+}  // namespace compiler
+}  // namespace internal
+}  // namespace v8
+
