@@ -645,7 +645,10 @@ void Isolate::ReportFailedAccessCheck(Handle<JSObject> receiver,
                                       v8::AccessType type) {
   if (!thread_local_top()->failed_access_check_callback_) {
     Handle<String> message = factory()->InternalizeUtf8String("no access");
-    ScheduleThrow(*factory()->NewTypeError(message));
+    Handle<Object> error;
+    ASSIGN_RETURN_ON_EXCEPTION_VALUE(
+        this, error, factory()->NewTypeError(message), /* void */);
+    ScheduleThrow(*error);
     return;
   }
 
@@ -859,12 +862,6 @@ Object* Isolate::ReThrow(Object* exception) {
 Object* Isolate::ThrowIllegalOperation() {
   if (FLAG_stack_trace_on_illegal) PrintStack(stdout);
   return Throw(heap_.illegal_access_string());
-}
-
-
-Object* Isolate::ThrowInvalidStringLength() {
-  return Throw(*factory()->NewRangeError(
-      "invalid_string_length", HandleVector<Object>(NULL, 0)));
 }
 
 
@@ -1920,6 +1917,8 @@ bool Isolate::Init(Deserializer* des) {
 
   deoptimizer_data_ = new DeoptimizerData(memory_allocator_);
 
+  CallDescriptors::InitializeForIsolate(this);
+
   const bool create_heap_objects = (des == NULL);
   if (create_heap_objects && !heap_.CreateHeapObjects()) {
     V8::FatalProcessOutOfMemory("heap object creation");
@@ -2056,8 +2055,6 @@ bool Isolate::Init(Deserializer* des) {
     StoreFieldStub::InstallDescriptors(this);
     LoadFastElementStub::InstallDescriptors(this);
   }
-
-  CallDescriptors::InitializeForIsolate(this);
 
   initialized_from_snapshot_ = (des != NULL);
 
@@ -2242,9 +2239,8 @@ CodeStubInterfaceDescriptor*
 }
 
 
-CallInterfaceDescriptor*
-    Isolate::call_descriptor(CallDescriptorKey index) {
-  DCHECK(0 <= index && index < NUMBER_OF_CALL_DESCRIPTORS);
+CallInterfaceDescriptor* Isolate::call_descriptor(int index) {
+  DCHECK(0 <= index && index < CallDescriptorKey::NUMBER_OF_CALL_DESCRIPTORS);
   return &call_descriptors_[index];
 }
 
@@ -2362,14 +2358,13 @@ void Isolate::RunMicrotasks() {
             Handle<JSFunction>::cast(microtask);
         SaveContext save(this);
         set_context(microtask_function->context()->native_context());
-        Handle<Object> exception;
-        MaybeHandle<Object> result = Execution::TryCall(
-            microtask_function, factory()->undefined_value(),
-            0, NULL, &exception);
+        MaybeHandle<Object> maybe_exception;
+        MaybeHandle<Object> result =
+            Execution::TryCall(microtask_function, factory()->undefined_value(),
+                               0, NULL, &maybe_exception);
         // If execution is terminating, just bail out.
-        if (result.is_null() &&
-            !exception.is_null() &&
-            *exception == heap()->termination_exception()) {
+        Handle<Object> exception;
+        if (result.is_null() && maybe_exception.is_null()) {
           // Clear out any remaining callbacks in the queue.
           heap()->set_microtask_queue(heap()->empty_fixed_array());
           set_pending_microtask_count(0);

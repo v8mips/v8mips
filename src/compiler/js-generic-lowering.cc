@@ -46,10 +46,9 @@ class LoadICStubShim : public HydrogenCodeStub {
 
   virtual void InitializeInterfaceDescriptor(
       CodeStubInterfaceDescriptor* descriptor) V8_OVERRIDE {
-    Register registers[] = {InterfaceDescriptor::ContextRegister(),
-                            LoadConvention::ReceiverRegister(),
-                            LoadConvention::NameRegister()};
-    descriptor->Initialize(MajorKey(), arraysize(registers), registers);
+    CallInterfaceDescriptor* call_descriptor =
+        isolate()->call_descriptor(CallDescriptorKey::LoadICCall);
+    descriptor->Initialize(MajorKey(), call_descriptor);
   }
 
  private:
@@ -76,10 +75,9 @@ class KeyedLoadICStubShim : public HydrogenCodeStub {
 
   virtual void InitializeInterfaceDescriptor(
       CodeStubInterfaceDescriptor* descriptor) V8_OVERRIDE {
-    Register registers[] = {InterfaceDescriptor::ContextRegister(),
-                            LoadConvention::ReceiverRegister(),
-                            LoadConvention::NameRegister()};
-    descriptor->Initialize(MajorKey(), arraysize(registers), registers);
+    CallInterfaceDescriptor* call_descriptor =
+        isolate()->call_descriptor(CallDescriptorKey::LoadICCall);
+    descriptor->Initialize(MajorKey(), call_descriptor);
   }
 
  private:
@@ -105,11 +103,9 @@ class StoreICStubShim : public HydrogenCodeStub {
 
   virtual void InitializeInterfaceDescriptor(
       CodeStubInterfaceDescriptor* descriptor) V8_OVERRIDE {
-    Register registers[] = {InterfaceDescriptor::ContextRegister(),
-                            StoreConvention::ReceiverRegister(),
-                            StoreConvention::NameRegister(),
-                            StoreConvention::ValueRegister()};
-    descriptor->Initialize(MajorKey(), arraysize(registers), registers);
+    CallInterfaceDescriptor* call_descriptor =
+        isolate()->call_descriptor(CallDescriptorKey::StoreICCall);
+    descriptor->Initialize(MajorKey(), call_descriptor);
   }
 
  private:
@@ -139,11 +135,9 @@ class KeyedStoreICStubShim : public HydrogenCodeStub {
 
   virtual void InitializeInterfaceDescriptor(
       CodeStubInterfaceDescriptor* descriptor) V8_OVERRIDE {
-    Register registers[] = {InterfaceDescriptor::ContextRegister(),
-                            StoreConvention::ReceiverRegister(),
-                            StoreConvention::NameRegister(),
-                            StoreConvention::ValueRegister()};
-    descriptor->Initialize(MajorKey(), arraysize(registers), registers);
+    CallInterfaceDescriptor* call_descriptor =
+        isolate()->call_descriptor(CallDescriptorKey::StoreICCall);
+    descriptor->Initialize(MajorKey(), call_descriptor);
   }
 
  private:
@@ -286,7 +280,6 @@ REPLACE_RUNTIME_CALL(JSCreateGlobalContext, Runtime::kAbort)
     UNIMPLEMENTED();                               \
     return node;                                   \
   }
-REPLACE_UNIMPLEMENTED(JSToString)
 REPLACE_UNIMPLEMENTED(JSToName)
 REPLACE_UNIMPLEMENTED(JSYield)
 REPLACE_UNIMPLEMENTED(JSDebugger)
@@ -295,9 +288,6 @@ REPLACE_UNIMPLEMENTED(JSDebugger)
 
 static CallDescriptor::Flags FlagsForNode(Node* node) {
   CallDescriptor::Flags result = CallDescriptor::kNoFlags;
-  if (OperatorProperties::CanLazilyDeoptimize(node->op())) {
-    result |= CallDescriptor::kLazyDeoptimization;
-  }
   if (OperatorProperties::HasFrameStateInput(node->op())) {
     result |= CallDescriptor::kNeedsFrameState;
   }
@@ -385,9 +375,14 @@ void JSGenericLowering::ReplaceWithRuntimeCall(Node* node,
 
 
 Node* JSGenericLowering::LowerBranch(Node* node) {
-  Node* test = graph()->NewNode(machine()->WordEqual(), node->InputAt(0),
-                                jsgraph()->TrueConstant());
-  node->ReplaceInput(0, test);
+  if (!info()->is_typing_enabled()) {
+    // TODO(mstarzinger): If typing is enabled then simplified lowering will
+    // have inserted the correct ChangeBoolToBit, otherwise we need to perform
+    // poor-man's representation inference here and insert manual change.
+    Node* test = graph()->NewNode(machine()->WordEqual(), node->InputAt(0),
+                                  jsgraph()->TrueConstant());
+    node->ReplaceInput(0, test);
+  }
   return node;
 }
 
@@ -402,6 +397,12 @@ Node* JSGenericLowering::LowerJSUnaryNot(Node* node) {
 Node* JSGenericLowering::LowerJSToBoolean(Node* node) {
   ToBooleanStub stub(isolate(), ToBooleanStub::RESULT_AS_ODDBALL);
   ReplaceWithStubCall(node, &stub, CallDescriptor::kPatchableCallSite);
+  return node;
+}
+
+
+Node* JSGenericLowering::LowerJSToString(Node* node) {
+  ReplaceWithBuiltinCall(node, Builtins::TO_STRING, 1);
   return node;
 }
 

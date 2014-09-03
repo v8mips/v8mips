@@ -11,6 +11,7 @@
 #include "src/globals.h"
 #include "src/ic/ic.h"
 #include "src/ic/ic-conventions.h"
+#include "src/interface-descriptors.h"
 #include "src/macro-assembler.h"
 #include "src/ostreams.h"
 
@@ -280,92 +281,19 @@ enum StubFunctionMode { NOT_JS_FUNCTION_STUB_MODE, JS_FUNCTION_STUB_MODE };
 enum HandlerArgumentsMode { DONT_PASS_ARGUMENTS, PASS_ARGUMENTS };
 
 
-class PlatformInterfaceDescriptor;
-
-
-class InterfaceDescriptor {
- public:
-  bool IsInitialized() const { return register_param_count_ >= 0; }
-
-  int GetEnvironmentLength() const { return register_param_count_; }
-
-  int GetRegisterParameterCount() const { return register_param_count_; }
-
-  Register GetParameterRegister(int index) const {
-    return register_params_[index];
-  }
-
-  Representation GetParameterRepresentation(int index) const {
-    DCHECK(index < register_param_count_);
-    if (register_param_representations_.get() == NULL) {
-      return Representation::Tagged();
-    }
-
-    return register_param_representations_[index];
-  }
-
-  // "Environment" versions of parameter functions. The first register
-  // parameter (context) is not included.
-  int GetEnvironmentParameterCount() const {
-    return GetEnvironmentLength() - 1;
-  }
-
-  Register GetEnvironmentParameterRegister(int index) const {
-    return GetParameterRegister(index + 1);
-  }
-
-  Representation GetEnvironmentParameterRepresentation(int index) const {
-    return GetParameterRepresentation(index + 1);
-  }
-
-  // Some platforms have extra information to associate with the descriptor.
-  PlatformInterfaceDescriptor* platform_specific_descriptor() const {
-    return platform_specific_descriptor_;
-  }
-
-  static const Register ContextRegister();
-
- protected:
-  InterfaceDescriptor();
-  virtual ~InterfaceDescriptor() {}
-
-  void Initialize(int register_parameter_count, Register* registers,
-                  Representation* register_param_representations,
-                  PlatformInterfaceDescriptor* platform_descriptor = NULL);
-
- private:
-  int register_param_count_;
-
-  // The Register params are allocated dynamically by the
-  // InterfaceDescriptor, and freed on destruction. This is because static
-  // arrays of Registers cause creation of runtime static initializers
-  // which we don't want.
-  SmartArrayPointer<Register> register_params_;
-  // Specifies Representations for the stub's parameter. Points to an array of
-  // Representations of the same length of the numbers of parameters to the
-  // stub, or if NULL (the default value), Representation of each parameter
-  // assumed to be Tagged().
-  SmartArrayPointer<Representation> register_param_representations_;
-
-  PlatformInterfaceDescriptor* platform_specific_descriptor_;
-
-  DISALLOW_COPY_AND_ASSIGN(InterfaceDescriptor);
-};
-
-
-class CodeStubInterfaceDescriptor: public InterfaceDescriptor {
+class CodeStubInterfaceDescriptor {
  public:
   CodeStubInterfaceDescriptor();
 
-  void Initialize(CodeStub::Major major, int register_parameter_count,
-                  Register* registers, Address deoptimization_handler = NULL,
-                  Representation* register_param_representations = NULL,
+  void Initialize(CodeStub::Major major,
+                  CallInterfaceDescriptor* call_descriptor,
+                  Address deoptimization_handler = NULL,
                   int hint_stack_parameter_count = -1,
                   StubFunctionMode function_mode = NOT_JS_FUNCTION_STUB_MODE);
-  void Initialize(CodeStub::Major major, int register_parameter_count,
-                  Register* registers, Register stack_parameter_count,
+  void Initialize(CodeStub::Major major,
+                  CallInterfaceDescriptor* call_descriptor,
+                  Register stack_parameter_count,
                   Address deoptimization_handler = NULL,
-                  Representation* register_param_representations = NULL,
                   int hint_stack_parameter_count = -1,
                   StubFunctionMode function_mode = NOT_JS_FUNCTION_STUB_MODE,
                   HandlerArgumentsMode handler_mode = DONT_PASS_ARGUMENTS);
@@ -378,6 +306,38 @@ class CodeStubInterfaceDescriptor: public InterfaceDescriptor {
     DCHECK(!stack_parameter_count_.is_valid());
   }
 
+  bool IsInitialized() const { return call_descriptor_ != NULL; }
+
+  CallInterfaceDescriptor* call_descriptor() const { return call_descriptor_; }
+
+  int GetEnvironmentLength() const {
+    return call_descriptor()->GetEnvironmentLength();
+  }
+
+  int GetRegisterParameterCount() const {
+    return call_descriptor()->GetRegisterParameterCount();
+  }
+
+  Register GetParameterRegister(int index) const {
+    return call_descriptor()->GetParameterRegister(index);
+  }
+
+  Representation GetParameterRepresentation(int index) const {
+    return call_descriptor()->GetParameterRepresentation(index);
+  }
+
+  int GetEnvironmentParameterCount() const {
+    return call_descriptor()->GetEnvironmentParameterCount();
+  }
+
+  Register GetEnvironmentParameterRegister(int index) const {
+    return call_descriptor()->GetEnvironmentParameterRegister(index);
+  }
+
+  Representation GetEnvironmentParameterRepresentation(int index) const {
+    return call_descriptor()->GetEnvironmentParameterRepresentation(index);
+  }
+
   ExternalReference miss_handler() const {
     DCHECK(has_miss_handler_);
     return miss_handler_;
@@ -388,11 +348,12 @@ class CodeStubInterfaceDescriptor: public InterfaceDescriptor {
   }
 
   bool IsEnvironmentParameterCountRegister(int index) const {
-    return GetEnvironmentParameterRegister(index).is(stack_parameter_count_);
+    return call_descriptor()->GetEnvironmentParameterRegister(index).is(
+        stack_parameter_count_);
   }
 
   int GetHandlerParameterCount() const {
-    int params = GetEnvironmentParameterCount();
+    int params = call_descriptor()->GetEnvironmentParameterCount();
     if (handler_arguments_mode_ == PASS_ARGUMENTS) {
       params += 1;
     }
@@ -406,6 +367,7 @@ class CodeStubInterfaceDescriptor: public InterfaceDescriptor {
   CodeStub::Major MajorKey() const { return major_; }
 
  private:
+  CallInterfaceDescriptor* call_descriptor_;
   Register stack_parameter_count_;
   // If hint_stack_parameter_count_ > 0, the code stub can optimize the
   // return sequence. Default value is -1, which means it is ignored.
@@ -418,23 +380,6 @@ class CodeStubInterfaceDescriptor: public InterfaceDescriptor {
   ExternalReference miss_handler_;
   bool has_miss_handler_;
   CodeStub::Major major_;
-};
-
-
-class CallInterfaceDescriptor: public InterfaceDescriptor {
- public:
-  CallInterfaceDescriptor() { }
-
-  // A copy of the passed in registers and param_representations is made
-  // and owned by the CallInterfaceDescriptor.
-
-  // TODO(mvstanton): Instead of taking parallel arrays register and
-  // param_representations, how about a struct that puts the representation
-  // and register side by side (eg, RegRep(r1, Representation::Tagged()).
-  // The same should go for the CodeStubInterfaceDescriptor class.
-  void Initialize(int register_parameter_count, Register* registers,
-                  Representation* param_representations,
-                  PlatformInterfaceDescriptor* platform_descriptor = NULL);
 };
 
 
@@ -493,8 +438,9 @@ class HydrogenCodeStub : public CodeStub {
 
   static const int kSubMinorKeyBits = kStubMinorKeyBits - 1;
 
- private:
   class SubMinorKeyBits : public BitField<int, 0, kSubMinorKeyBits> {};
+
+ private:
   class IsMissBits : public BitField<bool, kSubMinorKeyBits, 1> {};
 
   void GenerateLightweightMiss(MacroAssembler* masm);
@@ -760,8 +706,8 @@ class InstanceofStub: public PlatformCodeStub {
 
   void Generate(MacroAssembler* masm);
 
-  static Register left();
-  static Register right();
+  static Register left() { return InstanceofConvention::left(); }
+  static Register right() { return InstanceofConvention::right(); }
 
   virtual void InitializeInterfaceDescriptor(
       CodeStubInterfaceDescriptor* descriptor);
@@ -952,25 +898,27 @@ class HandlerStub : public HydrogenCodeStub {
       CodeStubInterfaceDescriptor* descriptor) V8_OVERRIDE;
 
  protected:
-  explicit HandlerStub(Isolate* isolate)
-      : HydrogenCodeStub(isolate), bit_field_(0) {}
-  virtual int NotMissMinorKey() const { return bit_field_; }
+  explicit HandlerStub(Isolate* isolate) : HydrogenCodeStub(isolate) {}
   virtual Code::Kind kind() const = 0;
-  int bit_field_;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(HandlerStub);
 };
 
 
 class LoadFieldStub: public HandlerStub {
  public:
-  LoadFieldStub(Isolate* isolate, FieldIndex index)
-    : HandlerStub(isolate), index_(index) {
-    int property_index_key = index_.GetFieldAccessStubKey();
-    bit_field_ = EncodedLoadFieldByIndexBits::encode(property_index_key);
+  LoadFieldStub(Isolate* isolate, FieldIndex index) : HandlerStub(isolate) {
+    int property_index_key = index.GetFieldAccessStubKey();
+    set_sub_minor_key(LoadFieldByIndexBits::encode(property_index_key));
   }
 
   virtual Handle<Code> GenerateCode() V8_OVERRIDE;
 
-  FieldIndex index() const { return index_; }
+  FieldIndex index() const {
+    int property_index_key = LoadFieldByIndexBits::decode(sub_minor_key());
+    return FieldIndex::FromFieldAccessStubKey(property_index_key);
+  }
 
  protected:
   explicit LoadFieldStub(Isolate* isolate);
@@ -978,21 +926,26 @@ class LoadFieldStub: public HandlerStub {
   virtual Code::StubType GetStubType() { return Code::FAST; }
 
  private:
-  class EncodedLoadFieldByIndexBits : public BitField<int, 0, 13> {};
   virtual Major MajorKey() const V8_OVERRIDE { return LoadField; }
-  FieldIndex index_;
+
+  class LoadFieldByIndexBits : public BitField<int, 0, 13> {};
+
+  DISALLOW_COPY_AND_ASSIGN(LoadFieldStub);
 };
 
 
 class LoadConstantStub : public HandlerStub {
  public:
-  LoadConstantStub(Isolate* isolate, int descriptor) : HandlerStub(isolate) {
-    bit_field_ = descriptor;
+  LoadConstantStub(Isolate* isolate, int constant_index)
+      : HandlerStub(isolate) {
+    set_sub_minor_key(ConstantIndexBits::encode(constant_index));
   }
 
   virtual Handle<Code> GenerateCode() V8_OVERRIDE;
 
-  int descriptor() const { return bit_field_; }
+  int constant_index() const {
+    return ConstantIndexBits::decode(sub_minor_key());
+  }
 
  protected:
   explicit LoadConstantStub(Isolate* isolate);
@@ -1001,6 +954,10 @@ class LoadConstantStub : public HandlerStub {
 
  private:
   virtual Major MajorKey() const V8_OVERRIDE { return LoadConstant; }
+
+  class ConstantIndexBits : public BitField<int, 0, kSubMinorKeyBits> {};
+
+  DISALLOW_COPY_AND_ASSIGN(LoadConstantStub);
 };
 
 
@@ -1015,6 +972,8 @@ class StringLengthStub: public HandlerStub {
 
  private:
   virtual Major MajorKey() const V8_OVERRIDE { return StringLength; }
+
+  DISALLOW_COPY_AND_ASSIGN(StringLengthStub);
 };
 
 
@@ -1022,17 +981,25 @@ class StoreFieldStub : public HandlerStub {
  public:
   StoreFieldStub(Isolate* isolate, FieldIndex index,
                  Representation representation)
-      : HandlerStub(isolate), index_(index), representation_(representation) {
-    int property_index_key = index_.GetFieldAccessStubKey();
-    bit_field_ = EncodedStoreFieldByIndexBits::encode(property_index_key) |
-                 RepresentationBits::encode(
-                     PropertyDetails::EncodeRepresentation(representation));
+      : HandlerStub(isolate) {
+    int property_index_key = index.GetFieldAccessStubKey();
+    uint8_t repr = PropertyDetails::EncodeRepresentation(representation);
+    set_sub_minor_key(StoreFieldByIndexBits::encode(property_index_key) |
+                      RepresentationBits::encode(repr));
   }
 
   virtual Handle<Code> GenerateCode() V8_OVERRIDE;
 
-  FieldIndex index() const { return index_; }
-  Representation representation() { return representation_; }
+  FieldIndex index() const {
+    int property_index_key = StoreFieldByIndexBits::decode(sub_minor_key());
+    return FieldIndex::FromFieldAccessStubKey(property_index_key);
+  }
+
+  Representation representation() {
+    uint8_t repr = RepresentationBits::decode(sub_minor_key());
+    return PropertyDetails::DecodeRepresentation(repr);
+  }
+
   static void InstallDescriptors(Isolate* isolate);
 
  protected:
@@ -1041,11 +1008,12 @@ class StoreFieldStub : public HandlerStub {
   virtual Code::StubType GetStubType() { return Code::FAST; }
 
  private:
-  class EncodedStoreFieldByIndexBits : public BitField<int, 0, 13> {};
-  class RepresentationBits : public BitField<int, 13, 4> {};
   virtual Major MajorKey() const V8_OVERRIDE { return StoreField; }
-  FieldIndex index_;
-  Representation representation_;
+
+  class StoreFieldByIndexBits : public BitField<int, 0, 13> {};
+  class RepresentationBits : public BitField<uint8_t, 13, 4> {};
+
+  DISALLOW_COPY_AND_ASSIGN(StoreFieldStub);
 };
 
 
@@ -1053,8 +1021,8 @@ class StoreGlobalStub : public HandlerStub {
  public:
   StoreGlobalStub(Isolate* isolate, bool is_constant, bool check_global)
       : HandlerStub(isolate) {
-    bit_field_ = IsConstantBits::encode(is_constant) |
-        CheckGlobalBits::encode(check_global);
+    set_sub_minor_key(IsConstantBits::encode(is_constant) |
+                      CheckGlobalBits::encode(check_global));
   }
 
   static Handle<HeapObject> global_placeholder(Isolate* isolate) {
@@ -1080,21 +1048,21 @@ class StoreGlobalStub : public HandlerStub {
 
   virtual Handle<Code> GenerateCode() V8_OVERRIDE;
 
-  bool is_constant() const {
-    return IsConstantBits::decode(bit_field_);
-  }
-  bool check_global() const {
-    return CheckGlobalBits::decode(bit_field_);
-  }
+  bool is_constant() const { return IsConstantBits::decode(sub_minor_key()); }
+
+  bool check_global() const { return CheckGlobalBits::decode(sub_minor_key()); }
+
   void set_is_constant(bool value) {
-    bit_field_ = IsConstantBits::update(bit_field_, value);
+    set_sub_minor_key(IsConstantBits::update(sub_minor_key(), value));
   }
 
   Representation representation() {
-    return Representation::FromKind(RepresentationBits::decode(bit_field_));
+    return Representation::FromKind(
+        RepresentationBits::decode(sub_minor_key()));
   }
+
   void set_representation(Representation r) {
-    bit_field_ = RepresentationBits::update(bit_field_, r.kind());
+    set_sub_minor_key(RepresentationBits::update(sub_minor_key(), r.kind()));
   }
 
  private:
@@ -2659,11 +2627,6 @@ class ProfileEntryHookStub : public PlatformCodeStub {
   DISALLOW_COPY_AND_ASSIGN(ProfileEntryHookStub);
 };
 
-
-class CallDescriptors {
- public:
-  static void InitializeForIsolate(Isolate* isolate);
-};
 
 } }  // namespace v8::internal
 

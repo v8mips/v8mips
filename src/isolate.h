@@ -134,6 +134,22 @@ typedef ZoneList<Handle<Object> > ZoneObjectList;
 #define ASSIGN_RETURN_ON_EXCEPTION(isolate, dst, call, T)  \
   ASSIGN_RETURN_ON_EXCEPTION_VALUE(isolate, dst, call, MaybeHandle<T>())
 
+#define THROW_NEW_ERROR(isolate, call, T)                                    \
+  do {                                                                       \
+    Handle<Object> __error__;                                                \
+    ASSIGN_RETURN_ON_EXCEPTION(isolate, __error__, isolate->factory()->call, \
+                               T);                                           \
+    return isolate->Throw<T>(__error__);                                     \
+  } while (false)
+
+#define THROW_NEW_ERROR_RETURN_FAILURE(isolate, call)             \
+  do {                                                            \
+    Handle<Object> __error__;                                     \
+    ASSIGN_RETURN_FAILURE_ON_EXCEPTION(isolate, __error__,        \
+                                       isolate->factory()->call); \
+    return isolate->Throw(*__error__);                            \
+  } while (false)
+
 #define RETURN_ON_EXCEPTION_VALUE(isolate, call, value)            \
   do {                                                             \
     if ((call).is_null()) {                                        \
@@ -762,7 +778,6 @@ class Isolate {
   // Return pending location if any or unfilled structure.
   MessageLocation GetMessageLocation();
   Object* ThrowIllegalOperation();
-  Object* ThrowInvalidStringLength();
 
   // Promote a scheduled exception to pending. Asserts has_scheduled_exception.
   Object* PromoteScheduledException();
@@ -1022,16 +1037,7 @@ class Isolate {
   CodeStubInterfaceDescriptor*
       code_stub_interface_descriptor(int index);
 
-  enum CallDescriptorKey {
-    KeyedCall,
-    NamedCall,
-    CallHandler,
-    ArgumentAdaptorCall,
-    ApiFunctionCall,
-    NUMBER_OF_CALL_DESCRIPTORS
-  };
-
-  CallInterfaceDescriptor* call_descriptor(CallDescriptorKey index);
+  CallInterfaceDescriptor* call_descriptor(int index);
 
   void IterateDeferredHandles(ObjectVisitor* visitor);
   void LinkDeferredHandles(DeferredHandles* deferred_handles);
