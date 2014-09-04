@@ -420,54 +420,16 @@ void InstructionSelector::VisitCall(Node* call, BasicBlock* continuation,
 }
 
 
-// TODO(plind): Refactor VisitBinop() to include this usage, and/or simplify
-//    VisitBinop() to remove branching usage on other binops, which are not
-//    supported for MIPS.
-static void VisitBinopOverflow(InstructionSelector* selector, Node* node,
-                               InstructionCode opcode,
-                               FlagsContinuation* cont) {
-  MipsOperandGenerator g(selector);
-  Int32BinopMatcher m(node);
-  InstructionOperand* inputs[5];
-  size_t input_count = 0;
-  InstructionOperand* outputs[2];
-  size_t output_count = 0;
-
-  inputs[input_count++] = g.UseRegister(m.left().node());
-  inputs[input_count++] = g.UseRegister(m.right().node());
-  // inputs[input_count++] = g.TempRegister();
-
-  if (cont->IsBranch()) {
-    inputs[input_count++] = g.Label(cont->true_block());
-    inputs[input_count++] = g.Label(cont->false_block());
-  }
-
-  outputs[output_count++] = g.DefineAsRegister(node);
-  if (cont->IsSet()) {
-    outputs[output_count++] = g.DefineAsRegister(cont->result());
-  }
-
-  DCHECK_NE(0, input_count);
-  DCHECK_NE(0, output_count);
-  DCHECK_GE(arraysize(inputs), input_count);
-  DCHECK_GE(arraysize(outputs), output_count);
-
-  Instruction* instr = selector->Emit(cont->Encode(opcode), output_count,
-                                      outputs, input_count, inputs);
-  if (cont->IsBranch()) instr->MarkAsControl();
-}
-
-
 void InstructionSelector::VisitInt32AddWithOverflow(Node* node,
                                                     FlagsContinuation* cont) {
 
-  VisitBinopOverflow(this, node, kMipsAddOvf, cont);
+  VisitBinop(this, node, kMipsAddOvf, cont);
 }
 
 
 void InstructionSelector::VisitInt32SubWithOverflow(Node* node,
                                                     FlagsContinuation* cont) {
-  VisitBinopOverflow(this, node, kMipsSubOvf, cont);
+  VisitBinop(this, node, kMipsSubOvf, cont);
 }
 
 
