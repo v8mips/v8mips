@@ -18,9 +18,13 @@ namespace compiler {
 #define __ masm()->
 
 
-// TODO(plind): Verify this is EXCLUDED from reg alloc - Likley should NOT use these lithium names.
+// TODO(plind): Should NOT use these lithium names, change within assembler.
 #define kScratchReg kLithiumScratchReg
+#define kCompareReg kLithiumScratchReg2
 #define kScratchDoubleReg kLithiumScratchDouble
+
+// Use carefully, in areas that won't conflict with Branch & Booleans.
+#define kScratchReg2 kCompareReg
 
 
 
@@ -183,14 +187,14 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       break;
     case kMipsAddOvf:
       __ AdduAndCheckForOverflow(i.OutputRegister(), i.InputRegister(0),
-                                 i.InputRegister(1), at, t8);
+                                 i.InputRegister(1), kCompareReg, kScratchReg);
       break;
     case kMipsSub:
       __ Subu(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
     case kMipsSubOvf:
       __ SubuAndCheckForOverflow(i.OutputRegister(), i.InputRegister(0),
-                                 i.InputRegister(1), at, t8);
+                                 i.InputRegister(1), kCompareReg, kScratchReg);
       break;
     case kMipsMul:
       __ Mul(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
@@ -218,7 +222,7 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       break;
     case kMipsTst:
       // Psuedo-instruction used for tst/branch.
-      __ And(at, i.InputRegister(0), i.InputOperand(1));
+      __ And(kCompareReg, i.InputRegister(0), i.InputOperand(1));
       break;
     case kMipsCmp:
       // Psuedo-instruction used for cmp/branch. No opcode emitted here.
@@ -366,13 +370,13 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
   // TODO(plind): Add CHECK() to ensure that test/cmp and this branch were
   //    not separated by other instructions.
   if (instr->arch_opcode() == kMipsTst) {
-    // The kMipsTst psuedo-instruction emits And to 'at' register.
+    // The kMipsTst psuedo-instruction emits And to 'kCompareReg' register.
     switch (condition) {
       case kNotEqual:
-        __ Branch(tlabel, ne, at, Operand(zero_reg));
+        __ Branch(tlabel, ne, kCompareReg, Operand(zero_reg));
         break;
       case kEqual:
-        __ Branch(tlabel, eq, at, Operand(zero_reg));
+        __ Branch(tlabel, eq, kCompareReg, Operand(zero_reg));
         break;
       default:
         // TODO(plind): Find debug printing support for text condition codes.
@@ -382,13 +386,13 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
     }
   } else if (instr->arch_opcode() == kMipsAddOvf ||
              instr->arch_opcode() == kMipsSubOvf) {
-    // The kMipsAddOvf, SubOvf emits negative result to 'at' on overflow.
+    // kMipsAddOvf, SubOvf emits negative result to 'kCompareReg' on overflow.
     switch (condition) {
       case kOverflow:
-        __ Branch(tlabel, lt, at, Operand(zero_reg));
+        __ Branch(tlabel, lt, kCompareReg, Operand(zero_reg));
         break;
       case kNotOverflow:
-        __ Branch(tlabel, ge, at, Operand(zero_reg));
+        __ Branch(tlabel, ge, kCompareReg, Operand(zero_reg));
         break;
       default:
         // TODO(plind): Find debug printing support for text condition codes.
