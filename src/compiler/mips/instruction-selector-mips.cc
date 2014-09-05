@@ -154,12 +154,9 @@ void InstructionSelector::VisitLoad(Node* node) {
     Emit(opcode | AddressingModeField::encode(kMode_MRI),
          g.DefineAsRegister(node), g.UseRegister(base), g.UseImmediate(index));
   } else {
-    // TODO(plind): This could be done via assembler, saving a reg alloc.
     InstructionOperand* addr_reg = g.TempRegister();
-    Emit(kMipsMov | AddressingModeField::encode(kMode_MRI), addr_reg,
-         g.UseImmediate(index));
     Emit(kMipsAdd | AddressingModeField::encode(kMode_None), addr_reg,
-         addr_reg, g.UseRegister(base));
+         g.UseRegister(index), g.UseRegister(base));
     // Emit desired load opcode, using temp addr_reg.
     Emit(opcode | AddressingModeField::encode(kMode_MRI),
          g.DefineAsRegister(node), addr_reg, g.TempImmediate(0));
@@ -216,12 +213,9 @@ void InstructionSelector::VisitStore(Node* node) {
     Emit(opcode | AddressingModeField::encode(kMode_MRI), NULL,
          g.UseRegister(base), g.UseImmediate(index), g.UseRegister(value));
   } else {
-    // TODO(plind): This could be done via assembler, saving a reg alloc.
     InstructionOperand* addr_reg = g.TempRegister();
-    Emit(kMipsMov | AddressingModeField::encode(kMode_MRI), addr_reg,
-         g.UseImmediate(index));
     Emit(kMipsAdd | AddressingModeField::encode(kMode_None), addr_reg,
-         addr_reg, g.UseRegister(base));
+         g.UseRegister(index), g.UseRegister(base));
     // Emit desired store opcode, using temp addr_reg.
     Emit(opcode | AddressingModeField::encode(kMode_MRI), NULL,
          addr_reg, g.TempImmediate(0), g.UseRegister(value));
@@ -278,7 +272,44 @@ void InstructionSelector::VisitInt32Sub(Node* node) {
 
 
 void InstructionSelector::VisitInt32Mul(Node* node) {
-  TRACE_UNIMPL();
+  MipsOperandGenerator g(this);
+  Int32BinopMatcher m(node);
+  if (m.right().HasValue() && m.right().Value() > 0) {
+    int32_t value = m.right().Value();
+    if (base::bits::IsPowerOfTwo32(value)) {
+      Emit(kMipsShl | AddressingModeField::encode(kMode_None),
+          g.DefineAsRegister(node),
+          g.UseRegister(m.left().node()),
+          g.TempImmediate(WhichPowerOf2(value)));
+      return;
+    }
+    if (base::bits::IsPowerOfTwo32(value - 1)) {
+      InstructionOperand* temp = g.TempRegister();
+      Emit(kMipsShl | AddressingModeField::encode(kMode_None),
+          temp,
+          g.UseRegister(m.left().node()),
+          g.TempImmediate(WhichPowerOf2(value - 1)));
+      Emit(kMipsAdd | AddressingModeField::encode(kMode_None),
+          g.DefineAsRegister(node),
+          g.UseRegister(m.left().node()),
+          temp);
+      return;
+    }
+    if (base::bits::IsPowerOfTwo32(value + 1)) {
+      InstructionOperand* temp = g.TempRegister();
+      Emit(kMipsShl | AddressingModeField::encode(kMode_None),
+          temp,
+          g.UseRegister(m.left().node()),
+          g.TempImmediate(WhichPowerOf2(value + 1)));
+      Emit(kMipsSub | AddressingModeField::encode(kMode_None),
+          g.DefineAsRegister(node),
+          temp,
+          g.UseRegister(m.left().node()));
+      return;
+    }
+  }
+  Emit(kMipsMul, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
+    g.UseRegister(m.right().node()));
 }
 
 
