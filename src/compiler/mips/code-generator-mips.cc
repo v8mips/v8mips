@@ -491,6 +491,7 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
         nan = flabel;
       // Fall through.
       case kUnsignedLessThan:
+        // TODO(plind): This is BROKEN: we have no unsigned compare for doubles.
         __ BranchF(tlabel, nan, lo,
                    i.InputDoubleRegister(0), i.InputDoubleRegister(1));
         break;
@@ -498,6 +499,7 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
         nan = tlabel;
       // Fall through.
       case kUnsignedGreaterThanOrEqual:
+        // TODO(plind): This is BROKEN: we have no unsigned compare for doubles.
         __ BranchF(tlabel, nan, hs,
                    i.InputDoubleRegister(0), i.InputDoubleRegister(1));
         break;
@@ -505,12 +507,14 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
         nan = flabel;
       // Fall through.
       case kUnsignedLessThanOrEqual:
+        // TODO(plind): This is BROKEN: we have no unsigned compare for doubles.
         __ BranchF(tlabel, nan, ls,
                    i.InputDoubleRegister(0), i.InputDoubleRegister(1));
         break;
       case kUnorderedGreaterThan:
       // Fall through.
       case kUnsignedGreaterThan:
+        // TODO(plind): This is BROKEN: we have no unsigned compare for doubles.
         __ BranchF(tlabel, nan, hi,
                    i.InputDoubleRegister(0), i.InputDoubleRegister(1));
         break;
@@ -537,7 +541,202 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
 // Assembles boolean materializations after an instruction.
 void CodeGenerator::AssembleArchBoolean(Instruction* instr,
                                         FlagsCondition condition) {
-  TRACE_UNIMPL();
+  MipsOperandConverter i(this, instr);
+  Label done;
+
+  // Materialize a full 32-bit 1 or 0 value. The result register is always the
+  // last output of the instruction.
+  Label set_false;
+  DCHECK_NE(0, instr->OutputCount());
+  Register result = i.OutputRegister(instr->OutputCount() - 1);
+  // Condition cc = kNoCondition;  // TODO(plind): Optimize this routine using cc, make the code read simpler.
+
+  // MIPS does not have condition code flags, so compare and branch are
+  // implemented differently than on the other arch's. The compare operations
+  // emit mips psuedo-instructions, which are checked and handled here.
+
+  // For materializations, we use delay slot to set the result true, and
+  // in the false case, where we fall thru the branch, we reset the result
+  // false.
+
+  // TODO(plind): Add CHECK() to ensure that test/cmp and this branch were
+  //    not separated by other instructions.
+  if (instr->arch_opcode() == kMipsTst) {
+    // The kMipsTst psuedo-instruction emits And to 'kCompareReg' register.
+    switch (condition) {
+      case kNotEqual:
+        __ Branch(USE_DELAY_SLOT, &done, ne, kCompareReg, Operand(zero_reg));
+        __ li(result, Operand(1));  // In delay slot.
+        break;
+      case kEqual:
+        __ Branch(USE_DELAY_SLOT, &done, eq, kCompareReg, Operand(zero_reg));
+        __ li(result, Operand(1));  // In delay slot.
+        break;
+      default:
+        // TODO(plind): Find debug printing support for text condition codes.
+        PrintF("Unsupported kMipsTst condition: %d\n", condition);
+        UNIMPLEMENTED();
+        break;
+    }
+  } else if (instr->arch_opcode() == kMipsAddOvf ||
+             instr->arch_opcode() == kMipsSubOvf) {
+    // kMipsAddOvf, SubOvf emits negative result to 'kCompareReg' on overflow.
+    switch (condition) {
+      case kOverflow:
+        __ Branch(USE_DELAY_SLOT, &done, lt, kCompareReg, Operand(zero_reg));
+        __ li(result, Operand(1));  // In delay slot.
+        break;
+      case kNotOverflow:
+        __ Branch(USE_DELAY_SLOT, &done, ge, kCompareReg, Operand(zero_reg));
+        __ li(result, Operand(1));  // In delay slot.
+        break;
+      default:
+        // TODO(plind): Find debug printing support for text condition codes.
+        PrintF("Unsupported kMipsAdd/SubOvf condition: %d\n", condition);
+        UNIMPLEMENTED();
+        break;
+    }
+  } else if (instr->arch_opcode() == kMipsCmp) {
+    Register left = i.InputRegister(0);
+    Operand right = i.InputOperand(1);
+    switch (condition) {
+      // TODO(plind): this can be totally cleaned up to a single branch to 'cc' ......
+      case kEqual:
+        __ Branch(USE_DELAY_SLOT, &done, eq, left, right);
+        __ li(result, Operand(1));  // In delay slot.
+        break;
+      case kNotEqual:
+        __ Branch(USE_DELAY_SLOT, &done, ne, left, right);
+        __ li(result, Operand(1));  // In delay slot.
+        break;
+      case kSignedLessThan:
+        __ Branch(USE_DELAY_SLOT, &done, lt, left, right);
+        __ li(result, Operand(1));  // In delay slot.
+        break;
+      case kSignedGreaterThanOrEqual:
+        __ Branch(USE_DELAY_SLOT, &done, ge, left, right);
+        __ li(result, Operand(1));  // In delay slot.
+        break;
+      case kSignedLessThanOrEqual:
+        __ Branch(USE_DELAY_SLOT, &done, le, left, right);
+        __ li(result, Operand(1));  // In delay slot.
+        break;
+      case kSignedGreaterThan:
+        __ Branch(USE_DELAY_SLOT, &done, gt, left, right);
+        __ li(result, Operand(1));  // In delay slot.
+        break;
+      case kUnsignedLessThan:
+        __ Branch(USE_DELAY_SLOT, &done, lo, left, right);
+        __ li(result, Operand(1));  // In delay slot.
+        break;
+      case kUnsignedGreaterThanOrEqual:
+        __ Branch(USE_DELAY_SLOT, &done, hs, left, right);
+        __ li(result, Operand(1));  // In delay slot.
+        break;
+      case kUnsignedLessThanOrEqual:
+        __ Branch(USE_DELAY_SLOT, &done, ls, left, right);
+        __ li(result, Operand(1));  // In delay slot.
+        break;
+      case kUnsignedGreaterThan:
+        __ Branch(USE_DELAY_SLOT, &done, hi, left, right);
+        __ li(result, Operand(1));  // In delay slot.
+        break;
+      case kOverflow:
+      case kNotOverflow:
+        TRACE_MSG("Under/Overflow not implemented on integer compare.\n");
+        UNIMPLEMENTED();
+        break;
+      case kUnorderedEqual:
+      case kUnorderedNotEqual:
+      case kUnorderedLessThan:
+      case kUnorderedGreaterThanOrEqual:
+      case kUnorderedLessThanOrEqual:
+      case kUnorderedGreaterThan:
+        TRACE_MSG("Unordered tests not implemented on integer compare.\n");
+        UNIMPLEMENTED();
+        break;
+    }
+  } else if (instr->arch_opcode() == kMipsFloat64Cmp) {
+    FPURegister left = i.InputDoubleRegister(0);
+    FPURegister right = i.InputDoubleRegister(1);
+    switch (condition) {
+      case kUnorderedEqual:
+      // TODO(plind):  HANDLE the NaN junk - not handled now.
+      // Fall through.
+      case kEqual:
+        __ BranchF(USE_DELAY_SLOT, &done, NULL, eq, left, right);
+        __ li(result, Operand(1));  // In delay slot.
+        break;
+      case kUnorderedNotEqual:
+      // TODO(plind):  HANDLE the NaN junk - not handled now.
+      // Fall through.
+      case kNotEqual:
+        __ BranchF(USE_DELAY_SLOT, &done, NULL, ne, left, right);
+        __ li(result, Operand(1));  // In delay slot.
+        break;
+      case kSignedLessThan:
+        __ BranchF(USE_DELAY_SLOT, &done, NULL, lt, left, right);
+        __ li(result, Operand(1));  // In delay slot.
+        break;
+      case kSignedGreaterThanOrEqual:
+        __ BranchF(USE_DELAY_SLOT, &done, NULL, ge, left, right);
+        __ li(result, Operand(1));  // In delay slot.
+        break;
+      case kSignedLessThanOrEqual:
+        __ BranchF(USE_DELAY_SLOT, &done, NULL, le, left, right);
+        __ li(result, Operand(1));  // In delay slot.
+        break;
+      case kSignedGreaterThan:
+        __ BranchF(USE_DELAY_SLOT, &done, NULL, gt, left, right);
+        __ li(result, Operand(1));  // In delay slot.
+        break;
+      case kUnorderedLessThan:
+      // TODO(plind):  HANDLE the NaN junk - not handled now.
+      // Fall through.
+      case kUnsignedLessThan:
+        // TODO(plind): This is BROKEN: we have no unsigned compare for doubles.
+        __ BranchF(USE_DELAY_SLOT, &done, NULL, lo, left, right);
+        __ li(result, Operand(1));  // In delay slot.
+        break;
+      case kUnorderedGreaterThanOrEqual:
+      // TODO(plind):  HANDLE the NaN junk - not handled now.
+      // Fall through.
+      case kUnsignedGreaterThanOrEqual:
+        // TODO(plind): This is BROKEN: we have no unsigned compare for doubles.
+        __ BranchF(USE_DELAY_SLOT, &done, NULL, hs, left, right);
+        __ li(result, Operand(1));  // In delay slot.
+        break;
+      case kUnorderedLessThanOrEqual:
+      // TODO(plind):  HANDLE the NaN junk - not handled now.
+      // Fall through.
+      case kUnsignedLessThanOrEqual:
+        // TODO(plind): This is BROKEN: we have no unsigned compare for doubles.
+        __ BranchF(USE_DELAY_SLOT, &done, NULL, ls, left, right);
+        __ li(result, Operand(1));  // In delay slot.
+        break;
+      case kUnorderedGreaterThan:
+      // Fall through.
+      case kUnsignedGreaterThan:
+        // TODO(plind): This is BROKEN: we have no unsigned compare for doubles.
+        __ BranchF(USE_DELAY_SLOT, &done, NULL, hi, left, right);
+        __ li(result, Operand(1));  // In delay slot.
+        break;
+      case kOverflow:
+      case kNotOverflow:
+        TRACE_MSG("Under/Overflow not implemented on FP compare.\n");
+        UNIMPLEMENTED();
+        break;
+    }
+  } else {
+    PrintF("AssembleArchBranch Unimplemented arch_opcode is : %d\n",
+           instr->arch_opcode());
+    TRACE_UNIMPL();
+    UNIMPLEMENTED();
+  }
+  // Fallthru case is the false materialization.
+  __ li(result, Operand(0));
+  __ bind(&done);
+
 }
 
 
