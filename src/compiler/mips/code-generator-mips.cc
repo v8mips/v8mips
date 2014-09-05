@@ -263,8 +263,16 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
               i.InputDoubleRegister(1));
       break;
     case kMipsFloat64Mod: {
-      TRACE_UNIMPL();
-      UNIMPLEMENTED();
+      // TODO(bmeurer): We should really get rid of this special instruction,
+      // and generate a CallAddress instruction instead.
+      FrameScope scope(masm(), StackFrame::MANUAL);
+      __ PrepareCallCFunction(0, 2, kScratchReg);
+      __ MovToFloatParameters(i.InputDoubleRegister(0),
+                              i.InputDoubleRegister(1));
+      __ CallCFunction(ExternalReference::mod_two_doubles_operation(isolate()),
+                       0, 2);
+      // Move the result in the double result register.
+      __ MovFromFloatResult(i.OutputDoubleRegister());
       break;
     }
     case kMipsInt32ToFloat64: {

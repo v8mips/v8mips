@@ -351,7 +351,10 @@ void InstructionSelector::VisitFloat64Div(Node* node) {
 
 
 void InstructionSelector::VisitFloat64Mod(Node* node) {
-  TRACE_UNIMPL();
+  MipsOperandGenerator g(this);
+  Emit(kMipsFloat64Mod, g.DefineAsFixed(node, f0),
+      g.UseFixed(node->InputAt(0), f12),
+      g.UseFixed(node->InputAt(1), f14))->MarkAsCall();
 }
 
 
