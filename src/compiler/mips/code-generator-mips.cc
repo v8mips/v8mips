@@ -203,6 +203,18 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
     case kMipsMul:
       __ Mul(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
+    case kMipsDiv:
+      __ Div(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
+      break;
+    case kMipsDivU:
+      __ Divu(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
+      break;
+    case kMipsMod:
+      __ Mod(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
+      break;
+    case kMipsModU:
+      __ Modu(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
+      break;
     case kMipsAnd:
       __ And(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;

@@ -314,22 +314,34 @@ void InstructionSelector::VisitInt32Mul(Node* node) {
 
 
 void InstructionSelector::VisitInt32Div(Node* node) {
-  TRACE_UNIMPL();
+  MipsOperandGenerator g(this);
+  Int32BinopMatcher m(node);
+  Emit(kMipsDiv, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
+    g.UseRegister(m.right().node()));
 }
 
 
 void InstructionSelector::VisitInt32UDiv(Node* node) {
-  TRACE_UNIMPL();
+  MipsOperandGenerator g(this);
+  Int32BinopMatcher m(node);
+  Emit(kMipsDivU, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
+    g.UseRegister(m.right().node()));
 }
 
 
 void InstructionSelector::VisitInt32Mod(Node* node) {
-  TRACE_UNIMPL();
+  MipsOperandGenerator g(this);
+  Int32BinopMatcher m(node);
+  Emit(kMipsMod, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
+      g.UseRegister(m.right().node()));
 }
 
 
 void InstructionSelector::VisitInt32UMod(Node* node) {
-  TRACE_UNIMPL();
+  MipsOperandGenerator g(this);
+  Int32BinopMatcher m(node);
+  Emit(kMipsModU, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
+    g.UseRegister(m.right().node()));
 }
 
 
