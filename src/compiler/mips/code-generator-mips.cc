@@ -835,11 +835,11 @@ void CodeGenerator::AssembleReturn() {
       }
     }
     __ mov(sp, fp);
-    __ Pop(fp, ra);
+    __ Pop(ra, fp);
     __ Ret();
   } else {
     __ mov(sp, fp);
-    __ Pop(fp, ra);
+    __ Pop(ra, fp);
     int pop_count = descriptor->IsJSFunctionCall()
                         ? static_cast<int>(descriptor->JSParameterCount())
                         : 0;

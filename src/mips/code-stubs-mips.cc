@@ -1121,22 +1121,18 @@ void CEntryStub::GenerateAheadOfTime(Isolate* isolate) {
 
 void CEntryStub::Generate(MacroAssembler* masm) {
   // Called from JavaScript; parameters are on stack as if calling JS function
-  // s0: number of arguments including receiver
-  // s1: size of arguments excluding receiver
-  // s2: pointer to builtin function
+  // a0: number of arguments including receiver
+  // a1: pointer to builtin function
   // fp: frame pointer    (restored after C call)
   // sp: stack pointer    (restored as callee's sp after C call)
   // cp: current context  (C callee-saved)
 
   ProfileEntryHookStub::MaybeCallEntryHook(masm);
 
-  // NOTE: s0-s2 hold the arguments of this function instead of a0-a2.
-  // The reason for this is that these arguments would need to be saved anyway
-  // so it's faster to set them up directly.
-  // See MacroAssembler::PrepareCEntryArgs and PrepareCEntryFunction.
-
   // Compute the argv pointer in a callee-saved register.
+  __ sll(s1, a0, kPointerSizeLog2);
   __ Addu(s1, sp, s1);
+  __ Subu(s1, s1, kPointerSize);
 
   // Enter the exit frame that transitions from JavaScript to C++.
   FrameScope scope(masm, StackFrame::MANUAL);
@@ -1148,7 +1144,8 @@ void CEntryStub::Generate(MacroAssembler* masm) {
 
   // Prepare arguments for C routine.
   // a0 = argc
-  __ mov(a0, s0);
+  __ mov(s0, a0);
+  __ mov(s2, a1);
   // a1 = argv (set in the delay slot after find_ra below).
 
   // We are calling compiled C/C++ code. a0 and a1 hold our two arguments. We

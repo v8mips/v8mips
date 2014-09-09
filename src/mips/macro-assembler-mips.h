@@ -1183,12 +1183,11 @@ class MacroAssembler: public Assembler {
 
   // See comments at the beginning of CEntryStub::Generate.
   inline void PrepareCEntryArgs(int num_args) {
-    li(s0, num_args);
-    li(s1, (num_args - 1) * kPointerSize);
+    li(a0, num_args);
   }
 
   inline void PrepareCEntryFunction(const ExternalReference& ref) {
-    li(s2, Operand(ref));
+    li(a1, Operand(ref));
   }
 
 #define COND_ARGS Condition cond = al, Register rs = zero_reg, \
