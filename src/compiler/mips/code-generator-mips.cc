@@ -511,31 +511,28 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
         nan = flabel;
       // Fall through.
       case kUnsignedLessThan:
-        // TODO(plind): This is BROKEN: we have no unsigned compare for doubles.
-        __ BranchF(tlabel, nan, lo,
+        // TODO(plind): Experimental: Use signed FP compare in the next 4 ops.
+        __ BranchF(tlabel, nan, lt,
                    i.InputDoubleRegister(0), i.InputDoubleRegister(1));
         break;
       case kUnorderedGreaterThanOrEqual:
         nan = tlabel;
       // Fall through.
       case kUnsignedGreaterThanOrEqual:
-        // TODO(plind): This is BROKEN: we have no unsigned compare for doubles.
-        __ BranchF(tlabel, nan, hs,
+        __ BranchF(tlabel, nan, ge,
                    i.InputDoubleRegister(0), i.InputDoubleRegister(1));
         break;
       case kUnorderedLessThanOrEqual:
         nan = flabel;
       // Fall through.
       case kUnsignedLessThanOrEqual:
-        // TODO(plind): This is BROKEN: we have no unsigned compare for doubles.
-        __ BranchF(tlabel, nan, ls,
+        __ BranchF(tlabel, nan, le,
                    i.InputDoubleRegister(0), i.InputDoubleRegister(1));
         break;
       case kUnorderedGreaterThan:
       // Fall through.
       case kUnsignedGreaterThan:
-        // TODO(plind): This is BROKEN: we have no unsigned compare for doubles.
-        __ BranchF(tlabel, nan, hi,
+        __ BranchF(tlabel, nan, gt,
                    i.InputDoubleRegister(0), i.InputDoubleRegister(1));
         break;
       case kOverflow:
@@ -566,7 +563,7 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
 
   // Materialize a full 32-bit 1 or 0 value. The result register is always the
   // last output of the instruction.
-  Label set_false;
+  Label false_value;
   DCHECK_NE(0, instr->OutputCount());
   Register result = i.OutputRegister(instr->OutputCount() - 1);
   // Condition cc = kNoCondition;  // TODO(plind): Optimize this routine using cc, make the code read simpler.
@@ -679,16 +676,23 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
   } else if (instr->arch_opcode() == kMipsFloat64Cmp) {
     FPURegister left = i.InputDoubleRegister(0);
     FPURegister right = i.InputDoubleRegister(1);
+    // TODO(plind): Provide NaN-testing macro-asm function without need for BranchF.
+    FPURegister dummy1 = f0;
+    FPURegister dummy2 = f2;
     switch (condition) {
       case kUnorderedEqual:
-      // TODO(plind):  HANDLE the NaN junk - not handled now.
-      // Fall through.
+        // TODO(plind):  HANDLE the NaN junk - better than this ugliness:
+        __ BranchF(NULL, &false_value, cc_default, dummy1, dummy2);
+        // Fall through.
       case kEqual:
         __ BranchF(USE_DELAY_SLOT, &done, NULL, eq, left, right);
         __ li(result, Operand(1));  // In delay slot.
         break;
       case kUnorderedNotEqual:
-      // TODO(plind):  HANDLE the NaN junk - not handled now.
+        // TODO(plind):  HANDLE the NaN junk - better than this ugliness:
+        // TODO(plind): this confusing bit of code returns 1 on NaN.
+        __ BranchF(USE_DELAY_SLOT, NULL, &done, cc_default, dummy1, dummy2);
+        __ li(result, Operand(1));  // In delay slot.
       // Fall through.
       case kNotEqual:
         __ BranchF(USE_DELAY_SLOT, &done, NULL, ne, left, right);
@@ -711,34 +715,38 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
         __ li(result, Operand(1));  // In delay slot.
         break;
       case kUnorderedLessThan:
-      // TODO(plind):  HANDLE the NaN junk - not handled now.
-      // Fall through.
+        // TODO(plind):  HANDLE the NaN junk - better than this ugliness:
+        __ BranchF(NULL, &false_value, cc_default, dummy1, dummy2);
+        // Fall through.
       case kUnsignedLessThan:
-        // TODO(plind): This is BROKEN: we have no unsigned compare for doubles.
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, lo, left, right);
+        // TODO(plind): Experimental: use FP signed compare in these 4 cases.
+        __ BranchF(USE_DELAY_SLOT, &done, NULL, lt, left, right);
         __ li(result, Operand(1));  // In delay slot.
         break;
       case kUnorderedGreaterThanOrEqual:
-      // TODO(plind):  HANDLE the NaN junk - not handled now.
-      // Fall through.
+        // TODO(plind):  HANDLE the NaN junk - better than this ugliness:
+        // TODO(plind): this confusing bit of code returns 1 on NaN.
+        __ BranchF(USE_DELAY_SLOT, NULL, &done, cc_default, dummy1, dummy2);
+        __ li(result, Operand(1));  // In delay slot.
       case kUnsignedGreaterThanOrEqual:
-        // TODO(plind): This is BROKEN: we have no unsigned compare for doubles.
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, hs, left, right);
+        __ BranchF(USE_DELAY_SLOT, &done, NULL, ge, left, right);
         __ li(result, Operand(1));  // In delay slot.
         break;
       case kUnorderedLessThanOrEqual:
-      // TODO(plind):  HANDLE the NaN junk - not handled now.
-      // Fall through.
+        // TODO(plind):  HANDLE the NaN junk - better than this ugliness:
+        __ BranchF(NULL, &false_value, cc_default, dummy1, dummy2);
+        // Fall through.
       case kUnsignedLessThanOrEqual:
-        // TODO(plind): This is BROKEN: we have no unsigned compare for doubles.
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, ls, left, right);
+        __ BranchF(USE_DELAY_SLOT, &done, NULL, le, left, right);
         __ li(result, Operand(1));  // In delay slot.
         break;
       case kUnorderedGreaterThan:
-      // Fall through.
+        // TODO(plind):  HANDLE the NaN junk - better than this ugliness:
+        // TODO(plind): this confusing bit of code returns 1 on NaN.
+        __ BranchF(USE_DELAY_SLOT, NULL, &done, cc_default, dummy1, dummy2);
+        __ li(result, Operand(1));  // In delay slot.
       case kUnsignedGreaterThan:
-        // TODO(plind): This is BROKEN: we have no unsigned compare for doubles.
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, hi, left, right);
+        __ BranchF(USE_DELAY_SLOT, &done, NULL, gt, left, right);
         __ li(result, Operand(1));  // In delay slot.
         break;
       case kOverflow:
@@ -754,6 +762,7 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
     UNIMPLEMENTED();
   }
   // Fallthru case is the false materialization.
+  __ bind(&false_value);
   __ li(result, Operand(0));
   __ bind(&done);
 
