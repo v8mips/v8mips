@@ -931,7 +931,68 @@ void CodeGenerator::AssembleMove(InstructionOperand* source,
 
 void CodeGenerator::AssembleSwap(InstructionOperand* source,
                                  InstructionOperand* destination) {
-  TRACE_UNIMPL();
+  MipsOperandConverter g(this, NULL);
+  // Dispatch on the source and destination operand kinds.  Not all
+  // combinations are possible.
+  if (source->IsRegister()) {
+    // Register-register.
+    Register temp = kScratchReg;
+    Register src = g.ToRegister(source);
+    if (destination->IsRegister()) {
+      Register dst = g.ToRegister(destination);
+      __ Move(temp, src);
+      __ Move(src, dst);
+      __ Move(dst, temp);
+    } else {
+      DCHECK(destination->IsStackSlot());
+      MemOperand dst = g.ToMemOperand(destination);
+      __ mov(temp, src);
+      __ lw(src, dst);
+      __ sw(temp, dst);
+    }
+  } else if (source->IsStackSlot()) {
+    DCHECK(destination->IsStackSlot());
+    Register temp_0 = kScratchReg;
+    Register temp_1 = kCompareReg;
+    MemOperand src = g.ToMemOperand(source);
+    MemOperand dst = g.ToMemOperand(destination);
+    __ lw(temp_0, src);
+    __ lw(temp_1, dst);
+    __ sw(temp_0, dst);
+    __ sw(temp_1, src);
+  } else if (source->IsDoubleRegister()) {
+    FPURegister temp = kScratchDoubleReg;
+    FPURegister src = g.ToDoubleRegister(source);
+    if (destination->IsDoubleRegister()) {
+      FPURegister dst = g.ToDoubleRegister(destination);
+      __ Move(temp, src);
+      __ Move(src, dst);
+      __ Move(src, temp);
+    } else {
+      DCHECK(destination->IsDoubleStackSlot());
+      MemOperand dst = g.ToMemOperand(destination);
+      __ Move(temp, src);
+      __ ldc1(src, dst);
+      __ sdc1(temp, dst);
+    }
+  } else if (source->IsDoubleStackSlot()) {
+    DCHECK(destination->IsDoubleStackSlot());
+    Register temp_0 = kScratchReg;
+    FPURegister temp_1 = kScratchDoubleReg;
+    MemOperand src0 = g.ToMemOperand(source);
+    MemOperand src1(src0.rm(), src0.offset() + kPointerSize);
+    MemOperand dst0 = g.ToMemOperand(destination);
+    MemOperand dst1(dst0.rm(), dst0.offset() + kPointerSize);
+    __ ldc1(temp_1, dst0);  // Save destination in temp_1.
+    __ lw(temp_0, src0);   // Then use temp_0 to copy source to destination.
+    __ sw(temp_0, dst0);
+    __ lw(temp_0, src1);
+    __ sw(temp_0, dst1);
+    __ sdc1(temp_1, src0);
+  } else {
+    // No other combinations are possible.
+    UNREACHABLE();
+  }
 }
 
 
