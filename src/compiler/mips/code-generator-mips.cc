@@ -770,7 +770,7 @@ void CodeGenerator::AssembleDeoptimizerCall(int deoptimization_id) {
 void CodeGenerator::AssemblePrologue() {
   CallDescriptor* descriptor = linkage()->GetIncomingDescriptor();
   if (descriptor->kind() == CallDescriptor::kCallAddress) {
-    __ Push(fp, ra);
+    __ Push(ra, fp);
     __ mov(fp, sp);
     const RegList saves = descriptor->CalleeSavedRegisters();
     if (saves != 0) {  // Save callee-saved registers.
