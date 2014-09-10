@@ -1152,9 +1152,21 @@ class MacroAssembler: public Assembler {
                                Register overflow_dst,
                                Register scratch = at);
 
+  void AdduAndCheckForOverflow(Register dst,
+                               Register left,
+                               const Operand& right,
+                               Register overflow_dst,
+                               Register scratch = at);
+
   void SubuAndCheckForOverflow(Register dst,
                                Register left,
                                Register right,
+                               Register overflow_dst,
+                               Register scratch = at);
+
+  void SubuAndCheckForOverflow(Register dst,
+                               Register left,
+                               const Operand& right,
                                Register overflow_dst,
                                Register scratch = at);
 

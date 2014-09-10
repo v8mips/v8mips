@@ -191,14 +191,14 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       break;
     case kMipsAddOvf:
       __ AdduAndCheckForOverflow(i.OutputRegister(), i.InputRegister(0),
-                                 i.InputRegister(1), kCompareReg, kScratchReg);
+                                 i.InputOperand(1), kCompareReg, kScratchReg);
       break;
     case kMipsSub:
       __ Subu(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
     case kMipsSubOvf:
       __ SubuAndCheckForOverflow(i.OutputRegister(), i.InputRegister(0),
-                                 i.InputRegister(1), kCompareReg, kScratchReg);
+                                 i.InputOperand(1), kCompareReg, kScratchReg);
       break;
     case kMipsMul:
       __ Mul(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));

@@ -4554,6 +4554,34 @@ void MacroAssembler::SmiToDoubleFPURegister(Register smi,
 
 void MacroAssembler::AdduAndCheckForOverflow(Register dst,
                                              Register left,
+                                             const Operand& right,
+                                             Register overflow_dst,
+                                             Register scratch) {
+  if (right.is_reg()) {
+    AdduAndCheckForOverflow(dst, left, right.rm(), overflow_dst, scratch);
+  } else {
+    if (dst.is(left)) {
+      mov(scratch, left);  // Preserve left.
+      addiu(dst, left, right.immediate());  // Left is overwritten.
+      xor_(scratch, dst, scratch);  // Original left.
+      // Load right since xori takes uint16 as immediate.
+      addiu(t9, zero_reg, right.immediate());
+      xor_(overflow_dst, dst, t9);
+      and_(overflow_dst, overflow_dst, scratch);
+    } else {
+      addiu(dst, left, right.immediate());
+      xor_(overflow_dst, dst, left);
+      // Load right since xori takes uint16 as immediate.
+      addiu(t9, zero_reg, right.immediate());
+      xor_(scratch, dst, t9);
+      and_(overflow_dst, scratch, overflow_dst);
+    }
+  }
+}
+
+
+void MacroAssembler::AdduAndCheckForOverflow(Register dst,
+                                             Register left,
                                              Register right,
                                              Register overflow_dst,
                                              Register scratch) {
@@ -4590,6 +4618,34 @@ void MacroAssembler::AdduAndCheckForOverflow(Register dst,
     xor_(overflow_dst, dst, left);
     xor_(scratch, dst, right);
     and_(overflow_dst, scratch, overflow_dst);
+  }
+}
+
+
+void MacroAssembler::SubuAndCheckForOverflow(Register dst,
+                                             Register left,
+                                             const Operand& right,
+                                             Register overflow_dst,
+                                             Register scratch) {
+  if (right.is_reg()) {
+    SubuAndCheckForOverflow(dst, left, right.rm(), overflow_dst, scratch);
+  } else {
+  if (dst.is(left)) {
+    mov(scratch, left);  // Preserve left.
+    addiu(dst, left, -(right.immediate()));  // Left is overwritten.
+    xor_(overflow_dst, dst, scratch);  // scratch is original left.
+    // Load right since xori takes uint16 as immediate.
+    addiu(t9, zero_reg, right.immediate());
+    xor_(scratch, scratch, t9);  // scratch is original left.
+    and_(overflow_dst, scratch, overflow_dst);
+  } else {
+    addiu(dst, left, -(right.immediate()));
+    xor_(overflow_dst, dst, left);
+    // Load right since xori takes uint16 as immediate.
+    addiu(t9, zero_reg, right.immediate());
+    xor_(scratch, left, t9);
+    and_(overflow_dst, scratch, overflow_dst);
+  }
   }
 }
 
