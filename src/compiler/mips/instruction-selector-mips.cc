@@ -23,8 +23,8 @@ class MipsOperandGenerator FINAL : public OperandGenerator {
   explicit MipsOperandGenerator(InstructionSelector* selector)
       : OperandGenerator(selector) {}
 
-  InstructionOperand* UseOperand(Node* node) {
-    if (CanBeImmediate(node)) {
+  InstructionOperand* UseOperand(Node* node, InstructionCode opcode) {
+    if (CanBeImmediate(node, opcode)) {
       return UseImmediate(node);
     }
     return UseRegister(node);
@@ -39,20 +39,25 @@ class MipsOperandGenerator FINAL : public OperandGenerator {
   }
 
 
-  bool CanBeImmediate(Node* node) {
+  bool CanBeImmediate(Node* node, InstructionCode opcode) {
     int32_t value;
     switch (node->opcode()) {
       // TODO(plind): SMI number constants as immediates ??? .......................................
       case IrOpcode::kInt32Constant:
         value = ValueOf<int32_t>(node->op());
-        if (is_int16_special(value)) {
-          return true;
-        }
+        break;
       default:
         return false;
     }
-  }
-
+   switch (ArchOpcodeField::decode(opcode)) {
+     case kMipsShl:
+     case kMipsSar:
+     case kMipsShr:
+       return is_uint5(value);
+     default:
+       return is_int16_special(value);
+   }
+}
  private:
   bool ImmediateFitsAddrMode1Instruction(int32_t imm) const {
     TRACE_UNIMPL();
@@ -75,7 +80,7 @@ static void VisitRRO(InstructionSelector* selector, ArchOpcode opcode, Node* nod
   MipsOperandGenerator g(selector);
   selector->Emit(opcode, g.DefineAsRegister(node),
                  g.UseRegister(node->InputAt(0)),
-                 g.UseOperand(node->InputAt(1)));
+                 g.UseOperand(node->InputAt(1), opcode));
 }
 
 
@@ -89,7 +94,7 @@ static void VisitBinop(InstructionSelector* selector, Node* node,
   size_t output_count = 0;
 
   inputs[input_count++] = g.UseRegister(m.left().node());
-  inputs[input_count++] = g.UseOperand(m.right().node());
+  inputs[input_count++] = g.UseOperand(m.right().node(), opcode);
 
   if (cont->IsBranch()) {
     inputs[input_count++] = g.Label(cont->true_block());
@@ -150,7 +155,7 @@ void InstructionSelector::VisitLoad(Node* node) {
       return;
   }
 
-  if (g.CanBeImmediate(index)) {
+  if (g.CanBeImmediate(index, opcode)) {
     Emit(opcode | AddressingModeField::encode(kMode_MRI),
          g.DefineAsRegister(node), g.UseRegister(base), g.UseImmediate(index));
   } else {
@@ -209,7 +214,7 @@ void InstructionSelector::VisitStore(Node* node) {
       return;
   }
 
-  if (g.CanBeImmediate(index)) {
+  if (g.CanBeImmediate(index, opcode)) {
     Emit(opcode | AddressingModeField::encode(kMode_MRI), NULL,
          g.UseRegister(base), g.UseImmediate(index), g.UseRegister(value));
   } else {
@@ -505,10 +510,10 @@ static void VisitWordCompare(InstructionSelector* selector, Node* node,
   Node* right = node->InputAt(1);
 
   // Match immediates on left or right side of comparison.
-  if (g.CanBeImmediate(right)) {
+  if (g.CanBeImmediate(right, opcode)) {
     VisitCompare(selector, opcode, g.UseRegister(left), g.UseImmediate(right),
                  cont);
-  } else if (g.CanBeImmediate(left)) {
+  } else if (g.CanBeImmediate(left, opcode)) {
     if (!commutative) cont->Commute();
     VisitCompare(selector, opcode, g.UseRegister(right), g.UseImmediate(left),
                  cont);
