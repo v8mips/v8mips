@@ -1436,8 +1436,6 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
 void InstanceofStub::Generate(MacroAssembler* masm) {
   // Call site inlining and patching implies arguments in registers.
   DCHECK(HasArgsInRegisters() || !HasCallSiteInlineCheck());
-  // ReturnTrueFalse is only implemented for inlined call sites.
-  DCHECK(!ReturnTrueFalseObject() || HasCallSiteInlineCheck());
 
   // Fixed register usage throughout the stub:
   const Register object = a0;  // Object (lhs).
@@ -1521,6 +1519,9 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   if (!HasCallSiteInlineCheck()) {
     __ mov(v0, zero_reg);
     __ StoreRoot(v0, Heap::kInstanceofCacheAnswerRootIndex);
+    if (ReturnTrueFalseObject()) {
+      __ LoadRoot(v0, Heap::kTrueValueRootIndex);
+    }
   } else {
     // Patch the call site to return true.
     __ LoadRoot(v0, Heap::kTrueValueRootIndex);
@@ -1539,6 +1540,9 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   if (!HasCallSiteInlineCheck()) {
     __ li(v0, Operand(Smi::FromInt(1)));
     __ StoreRoot(v0, Heap::kInstanceofCacheAnswerRootIndex);
+    if (ReturnTrueFalseObject()) {
+      __ LoadRoot(v0, Heap::kFalseValueRootIndex);
+    }
   } else {
     // Patch the call site to return false.
     __ LoadRoot(v0, Heap::kFalseValueRootIndex);
@@ -1566,19 +1570,31 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
             ne,
             scratch,
             Operand(isolate()->factory()->null_value()));
-  __ li(v0, Operand(Smi::FromInt(1)));
+  if (ReturnTrueFalseObject()) {
+    __ LoadRoot(v0, Heap::kFalseValueRootIndex);
+  } else {
+    __ li(v0, Operand(Smi::FromInt(1)));
+  }
   __ DropAndRet(HasArgsInRegisters() ? 0 : 2);
 
   __ bind(&object_not_null);
   // Smi values are not instances of anything.
   __ JumpIfNotSmi(object, &object_not_null_or_smi);
-  __ li(v0, Operand(Smi::FromInt(1)));
+  if (ReturnTrueFalseObject()) {
+    __ LoadRoot(v0, Heap::kFalseValueRootIndex);
+  } else {
+    __ li(v0, Operand(Smi::FromInt(1)));
+  }
   __ DropAndRet(HasArgsInRegisters() ? 0 : 2);
 
   __ bind(&object_not_null_or_smi);
   // String values are not instances of anything.
   __ IsObjectJSStringType(object, scratch, &slow);
-  __ li(v0, Operand(Smi::FromInt(1)));
+  if (ReturnTrueFalseObject()) {
+    __ LoadRoot(v0, Heap::kFalseValueRootIndex);
+  } else {
+    __ li(v0, Operand(Smi::FromInt(1)));
+  }
   __ DropAndRet(HasArgsInRegisters() ? 0 : 2);
 
   // Slow-case.  Tail call builtin.
