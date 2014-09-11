@@ -300,7 +300,8 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
     }
     case kMipsFloat64ToInt32: {
       FPURegister scratch = kScratchDoubleReg;
-      __ cvt_w_d(scratch, i.InputDoubleRegister(0));
+      // Other arches use round to zero here, so we follow.
+      __ trunc_w_d(scratch, i.InputDoubleRegister(0));
       __ mfc1(i.OutputRegister(), scratch);
       break;
     }
