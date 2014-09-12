@@ -340,15 +340,15 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
     case kMipsLwc1: {
       FPURegister scratch = kScratchDoubleReg;
       __ lwc1(scratch, i.MemoryOperand());
-      __ cvt_d_w(i.OutputDoubleRegister(), scratch);
+      __ cvt_d_s(i.OutputDoubleRegister(), scratch);
       break;
     }
     case kMipsSwc1: {
       int index = 0;
       FPURegister scratch = kScratchDoubleReg;
       MemOperand operand = i.MemoryOperand(&index);
-      __ cvt_w_d(scratch, i.InputDoubleRegister(index));
-      __ sdc1(scratch, operand);
+      __ cvt_s_d(scratch, i.InputDoubleRegister(index));
+      __ swc1(scratch, operand);
       break;
     }
     case kMipsLdc1:
