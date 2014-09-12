@@ -479,65 +479,48 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
     Label *nan = NULL;
     switch (condition) {
       case kUnorderedEqual:
+        // TODO optimize unordered checks to use less instructions
+        // even if we have to unfold BranchF macro.
         nan = flabel;
-      // Fall through.
-      case kEqual:
         __ BranchF(tlabel, nan, eq,
                    i.InputDoubleRegister(0), i.InputDoubleRegister(1));
         break;
       case kUnorderedNotEqual:
         nan = tlabel;
-      // Fall through.
-      case kNotEqual:
         __ BranchF(tlabel, nan, ne,
-                   i.InputDoubleRegister(0), i.InputDoubleRegister(1));
-        break;
-      case kSignedLessThan:
-        __ BranchF(tlabel, nan, lt,
-                   i.InputDoubleRegister(0), i.InputDoubleRegister(1));
-        break;
-      case kSignedGreaterThanOrEqual:
-        __ BranchF(tlabel, nan, ge,
-                   i.InputDoubleRegister(0), i.InputDoubleRegister(1));
-        break;
-      case kSignedLessThanOrEqual:
-        __ BranchF(tlabel, nan, le,
-                   i.InputDoubleRegister(0), i.InputDoubleRegister(1));
-        break;
-      case kSignedGreaterThan:
-        __ BranchF(tlabel, nan, gt,
                    i.InputDoubleRegister(0), i.InputDoubleRegister(1));
         break;
       case kUnorderedLessThan:
         nan = flabel;
-      // Fall through.
-      case kUnsignedLessThan:
-        // TODO(plind): Experimental: Use signed FP compare in the next 4 ops.
         __ BranchF(tlabel, nan, lt,
                    i.InputDoubleRegister(0), i.InputDoubleRegister(1));
         break;
       case kUnorderedGreaterThanOrEqual:
         nan = tlabel;
-      // Fall through.
-      case kUnsignedGreaterThanOrEqual:
         __ BranchF(tlabel, nan, ge,
                    i.InputDoubleRegister(0), i.InputDoubleRegister(1));
         break;
       case kUnorderedLessThanOrEqual:
         nan = flabel;
-      // Fall through.
-      case kUnsignedLessThanOrEqual:
         __ BranchF(tlabel, nan, le,
                    i.InputDoubleRegister(0), i.InputDoubleRegister(1));
         break;
       case kUnorderedGreaterThan:
-      // Fall through.
-      case kUnsignedGreaterThan:
         __ BranchF(tlabel, nan, gt,
                    i.InputDoubleRegister(0), i.InputDoubleRegister(1));
         break;
       case kOverflow:
       case kNotOverflow:
+      case kEqual:
+      case kNotEqual:
+      case kSignedLessThan:
+      case kSignedGreaterThanOrEqual:
+      case kSignedLessThanOrEqual:
+      case kSignedGreaterThan:
+      case kUnsignedLessThan:
+      case kUnsignedGreaterThanOrEqual:
+      case kUnsignedLessThanOrEqual:
+      case kUnsignedGreaterThan:
         TRACE_MSG("Under/Overflow not implemented on FP compare.\n");
         UNIMPLEMENTED();
         break;
@@ -684,8 +667,6 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
       case kUnorderedEqual:
         // TODO(plind):  HANDLE the NaN junk - better than this ugliness:
         __ BranchF(NULL, &false_value, cc_default, dummy1, dummy2);
-        // Fall through.
-      case kEqual:
         __ BranchF(USE_DELAY_SLOT, &done, NULL, eq, left, right);
         __ li(result, Operand(1));  // In delay slot.
         break;
@@ -694,32 +675,12 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
         // TODO(plind): this confusing bit of code returns 1 on NaN.
         __ BranchF(USE_DELAY_SLOT, NULL, &done, cc_default, dummy1, dummy2);
         __ li(result, Operand(1));  // In delay slot.
-      // Fall through.
-      case kNotEqual:
         __ BranchF(USE_DELAY_SLOT, &done, NULL, ne, left, right);
-        __ li(result, Operand(1));  // In delay slot.
-        break;
-      case kSignedLessThan:
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, lt, left, right);
-        __ li(result, Operand(1));  // In delay slot.
-        break;
-      case kSignedGreaterThanOrEqual:
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, ge, left, right);
-        __ li(result, Operand(1));  // In delay slot.
-        break;
-      case kSignedLessThanOrEqual:
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, le, left, right);
-        __ li(result, Operand(1));  // In delay slot.
-        break;
-      case kSignedGreaterThan:
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, gt, left, right);
         __ li(result, Operand(1));  // In delay slot.
         break;
       case kUnorderedLessThan:
         // TODO(plind):  HANDLE the NaN junk - better than this ugliness:
         __ BranchF(NULL, &false_value, cc_default, dummy1, dummy2);
-        // Fall through.
-      case kUnsignedLessThan:
         // TODO(plind): Experimental: use FP signed compare in these 4 cases.
         __ BranchF(USE_DELAY_SLOT, &done, NULL, lt, left, right);
         __ li(result, Operand(1));  // In delay slot.
@@ -729,15 +690,12 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
         // TODO(plind): this confusing bit of code returns 1 on NaN.
         __ BranchF(USE_DELAY_SLOT, NULL, &done, cc_default, dummy1, dummy2);
         __ li(result, Operand(1));  // In delay slot.
-      case kUnsignedGreaterThanOrEqual:
         __ BranchF(USE_DELAY_SLOT, &done, NULL, ge, left, right);
         __ li(result, Operand(1));  // In delay slot.
         break;
       case kUnorderedLessThanOrEqual:
         // TODO(plind):  HANDLE the NaN junk - better than this ugliness:
         __ BranchF(NULL, &false_value, cc_default, dummy1, dummy2);
-        // Fall through.
-      case kUnsignedLessThanOrEqual:
         __ BranchF(USE_DELAY_SLOT, &done, NULL, le, left, right);
         __ li(result, Operand(1));  // In delay slot.
         break;
@@ -746,12 +704,21 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
         // TODO(plind): this confusing bit of code returns 1 on NaN.
         __ BranchF(USE_DELAY_SLOT, NULL, &done, cc_default, dummy1, dummy2);
         __ li(result, Operand(1));  // In delay slot.
-      case kUnsignedGreaterThan:
         __ BranchF(USE_DELAY_SLOT, &done, NULL, gt, left, right);
         __ li(result, Operand(1));  // In delay slot.
         break;
       case kOverflow:
       case kNotOverflow:
+      case kEqual:
+      case kNotEqual:
+      case kSignedLessThan:
+      case kSignedGreaterThanOrEqual:
+      case kSignedLessThanOrEqual:
+      case kSignedGreaterThan:
+      case kUnsignedLessThan:
+      case kUnsignedGreaterThanOrEqual:
+      case kUnsignedLessThanOrEqual:
+      case kUnsignedGreaterThan:
         TRACE_MSG("Under/Overflow not implemented on FP compare.\n");
         UNIMPLEMENTED();
         break;

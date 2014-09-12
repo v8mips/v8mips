@@ -1438,11 +1438,11 @@ void MacroAssembler::BranchF(Label* target,
           bc1t(target);
           break;
         case gt:
-          c(ULE, D, cmp1, cmp2);
+          c(OLE, D, cmp1, cmp2);
           bc1f(target);
           break;
         case ge:
-          c(ULT, D, cmp1, cmp2);
+          c(OLT, D, cmp1, cmp2);
           bc1f(target);
           break;
         case le:
@@ -1483,11 +1483,11 @@ void MacroAssembler::BranchF(Label* target,
           bc1nez(target, kDoubleCompareReg);
           break;
         case gt:
-          cmp(ULE, L, kDoubleCompareReg, cmp1, cmp2);
+          cmp(OLE, L, kDoubleCompareReg, cmp1, cmp2);
           bc1eqz(target, kDoubleCompareReg);
           break;
         case ge:
-          cmp(ULT, L, kDoubleCompareReg, cmp1, cmp2);
+          cmp(OLT, L, kDoubleCompareReg, cmp1, cmp2);
           bc1eqz(target, kDoubleCompareReg);
           break;
         case le:
