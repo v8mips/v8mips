@@ -533,6 +533,7 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
       case kUnorderedGreaterThan:
       // Fall through.
       case kUnsignedGreaterThan:
+        nan = tlabel;
         __ BranchF(tlabel, nan, gt,
                    i.InputDoubleRegister(0), i.InputDoubleRegister(1));
         break;
