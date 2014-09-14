@@ -23,10 +23,6 @@ namespace compiler {
 #define kCompareReg kLithiumScratchReg2
 #define kScratchDoubleReg kLithiumScratchDouble
 
-// Use carefully, in areas that won't conflict with Branch & Booleans.
-#define kScratchReg2 kCompareReg
-
-
 
 // TODO(plind): remove these debug lines.
 
@@ -375,6 +371,12 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
 }
 
 
+#define UNSUPPORTED_COND(opcode, condition)       \
+    OFStream out(stdout);                         \
+    out << "Unsupported " << #opcode              \
+        << " condition: \"" << condition << "\""; \
+    UNIMPLEMENTED();
+
 // Assembles branches after an instruction.
 void CodeGenerator::AssembleArchBranch(Instruction* instr,
                                        FlagsCondition condition) {
@@ -388,172 +390,79 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
   bool fallthru = IsNextInAssemblyOrder(fblock);
   Label* tlabel = code()->GetLabel(tblock);
   Label* flabel = fallthru ? &done : code()->GetLabel(fblock);
+  Condition cc = kNoCondition;
 
   // MIPS does not have condition code flags, so compare and branch are
   // implemented differently than on the other arch's. The compare operations
-  // emit mips psuedo-instructions, which are checked and handled here.
+  // emit mips psuedo-instructions, which are handled here by branch
+  // instructions that do the actual comparison. Essential that the input
+  // registers to compare psuedo-op are not modified before this branch op, as
+  // they are tested here.
   // TODO(plind): Add CHECK() to ensure that test/cmp and this branch were
   //    not separated by other instructions.
+
   if (instr->arch_opcode() == kMipsTst) {
     // The kMipsTst psuedo-instruction emits And to 'kCompareReg' register.
     switch (condition) {
-      case kNotEqual:
-        __ Branch(tlabel, ne, kCompareReg, Operand(zero_reg));
-        break;
-      case kEqual:
-        __ Branch(tlabel, eq, kCompareReg, Operand(zero_reg));
-        break;
-      default:
-        // TODO(plind): Find debug printing support for text condition codes.
-        PrintF("Unsupported kMipsTst condition: %d\n", condition);
-        UNIMPLEMENTED();
-        break;
+      case kNotEqual: cc = ne; break;
+      case kEqual:    cc = eq; break;
+      default: UNSUPPORTED_COND(kMipsTst, condition); break;
     }
+    __ Branch(tlabel, cc, kCompareReg, Operand(zero_reg));
+
   } else if (instr->arch_opcode() == kMipsAddOvf ||
              instr->arch_opcode() == kMipsSubOvf) {
-    // kMipsAddOvf, SubOvf emits negative result to 'kCompareReg' on overflow.
+    // kMipsAddOvf, SubOvf emit negative result to 'kCompareReg' on overflow.
     switch (condition) {
-      case kOverflow:
-        __ Branch(tlabel, lt, kCompareReg, Operand(zero_reg));
-        break;
-      case kNotOverflow:
-        __ Branch(tlabel, ge, kCompareReg, Operand(zero_reg));
-        break;
-      default:
-        // TODO(plind): Find debug printing support for text condition codes.
-        PrintF("Unsupported kMipsAdd/SubOvf condition: %d\n", condition);
-        UNIMPLEMENTED();
-        break;
+      case kOverflow:    cc = lt; break;
+      case kNotOverflow: cc = ge; break;
+      default: UNSUPPORTED_COND(kMipsAddOvf, condition); break;
     }
+    __ Branch(tlabel, cc, kCompareReg, Operand(zero_reg));
+
   } else if (instr->arch_opcode() == kMipsCmp) {
     switch (condition) {
-      case kEqual:
-        __ Branch(tlabel, eq, i.InputRegister(0), i.InputOperand(1));
-        break;
-      case kNotEqual:
-        __ Branch(tlabel, ne, i.InputRegister(0), i.InputOperand(1));
-        break;
-      case kSignedLessThan:
-        __ Branch(tlabel, lt, i.InputRegister(0), i.InputOperand(1));
-        break;
-      case kSignedGreaterThanOrEqual:
-        __ Branch(tlabel, ge, i.InputRegister(0), i.InputOperand(1));
-        break;
-      case kSignedLessThanOrEqual:
-        __ Branch(tlabel, le, i.InputRegister(0), i.InputOperand(1));
-        break;
-      case kSignedGreaterThan:
-        __ Branch(tlabel, gt, i.InputRegister(0), i.InputOperand(1));
-        break;
-      case kUnsignedLessThan:
-        __ Branch(tlabel, lo, i.InputRegister(0), i.InputOperand(1));
-        break;
-      case kUnsignedGreaterThanOrEqual:
-        __ Branch(tlabel, hs, i.InputRegister(0), i.InputOperand(1));
-        break;
-      case kUnsignedLessThanOrEqual:
-        __ Branch(tlabel, ls, i.InputRegister(0), i.InputOperand(1));
-        break;
-      case kUnsignedGreaterThan:
-        __ Branch(tlabel, hi, i.InputRegister(0), i.InputOperand(1));
-        break;
-      case kOverflow:
-      case kNotOverflow:
-        TRACE_MSG("Under/Overflow not implemented on integer compare.\n");
-        UNIMPLEMENTED();
-        break;
-      case kUnorderedEqual:
-      case kUnorderedNotEqual:
-      case kUnorderedLessThan:
-      case kUnorderedGreaterThanOrEqual:
-      case kUnorderedLessThanOrEqual:
-      case kUnorderedGreaterThan:
-        TRACE_MSG("Unordered tests not implemented on integer compare.\n");
-        UNIMPLEMENTED();
-        break;
+      case kEqual:                      cc = eq; break;
+      case kNotEqual:                   cc = ne; break;
+      case kSignedLessThan:             cc = lt; break;
+      case kSignedGreaterThanOrEqual:   cc = ge; break;
+      case kSignedLessThanOrEqual:      cc = le; break;
+      case kSignedGreaterThan:          cc = gt; break;
+      case kUnsignedLessThan:           cc = lo; break;
+      case kUnsignedGreaterThanOrEqual: cc = hs; break;
+      case kUnsignedLessThanOrEqual:    cc = ls; break;
+      case kUnsignedGreaterThan:        cc = hi; break;
+      default: UNSUPPORTED_COND(kMipsCmp, condition); break;
     }
+    __ Branch(tlabel, cc, i.InputRegister(0), i.InputOperand(1));
+
     if (!fallthru) __ Branch(flabel);  // no fallthru to flabel.
     __ bind(&done);
 
   } else if (instr->arch_opcode() == kMipsFloat64Cmp) {
-    Label *nan = NULL;
+    // TODO(dusmil) optimize unordered checks to use less instructions
+    // even if we have to unfold BranchF macro.
+    Label *nan = flabel;
     switch (condition) {
-      case kUnorderedEqual:
-        nan = flabel;
-      // Fall through.
-      case kEqual:
-        __ BranchF(tlabel, nan, eq,
-                   i.InputDoubleRegister(0), i.InputDoubleRegister(1));
-        break;
-      case kUnorderedNotEqual:
-        nan = tlabel;
-      // Fall through.
-      case kNotEqual:
-        __ BranchF(tlabel, nan, ne,
-                   i.InputDoubleRegister(0), i.InputDoubleRegister(1));
-        break;
-      case kSignedLessThan:
-        __ BranchF(tlabel, nan, lt,
-                   i.InputDoubleRegister(0), i.InputDoubleRegister(1));
-        break;
-      case kSignedGreaterThanOrEqual:
-        __ BranchF(tlabel, nan, ge,
-                   i.InputDoubleRegister(0), i.InputDoubleRegister(1));
-        break;
-      case kSignedLessThanOrEqual:
-        __ BranchF(tlabel, nan, le,
-                   i.InputDoubleRegister(0), i.InputDoubleRegister(1));
-        break;
-      case kSignedGreaterThan:
-        __ BranchF(tlabel, nan, gt,
-                   i.InputDoubleRegister(0), i.InputDoubleRegister(1));
-        break;
-      case kUnorderedLessThan:
-        nan = flabel;
-      // Fall through.
-      case kUnsignedLessThan:
-        // TODO(plind): Experimental: Use signed FP compare in the next 4 ops.
-        __ BranchF(tlabel, nan, lt,
-                   i.InputDoubleRegister(0), i.InputDoubleRegister(1));
-        break;
-      case kUnorderedGreaterThanOrEqual:
-        nan = tlabel;
-      // Fall through.
-      case kUnsignedGreaterThanOrEqual:
-        __ BranchF(tlabel, nan, ge,
-                   i.InputDoubleRegister(0), i.InputDoubleRegister(1));
-        break;
-      case kUnorderedLessThanOrEqual:
-        nan = flabel;
-      // Fall through.
-      case kUnsignedLessThanOrEqual:
-        __ BranchF(tlabel, nan, le,
-                   i.InputDoubleRegister(0), i.InputDoubleRegister(1));
-        break;
-      case kUnorderedGreaterThan:
-      // Fall through.
-      case kUnsignedGreaterThan:
-        nan = tlabel;
-        __ BranchF(tlabel, nan, gt,
-                   i.InputDoubleRegister(0), i.InputDoubleRegister(1));
-        break;
-      case kOverflow:
-      case kNotOverflow:
-        TRACE_MSG("Under/Overflow not implemented on FP compare.\n");
-        UNIMPLEMENTED();
-        break;
+      case kUnorderedEqual:              cc = eq;               break;
+      case kUnorderedNotEqual:           cc = ne; nan = tlabel; break;
+      case kUnorderedLessThan:           cc = lt;               break;
+      case kUnorderedGreaterThanOrEqual: cc = ge; nan = tlabel; break;
+      case kUnorderedLessThanOrEqual:    cc = le;               break;
+      case kUnorderedGreaterThan:        cc = gt; nan = tlabel; break;
+      default: UNSUPPORTED_COND(kMipsFloat64Cmp, condition);    break;
     }
+    __ BranchF(tlabel, nan, cc,
+               i.InputDoubleRegister(0), i.InputDoubleRegister(1));
+
     if (!fallthru) __ Branch(flabel);  // no fallthru to flabel.
     __ bind(&done);
 
   } else {
-    PrintF("AssembleArchBranch Unimplemented arch_opcode is : %d\n",
+    PrintF("AssembleArchBranch Unimplemented arch_opcode: %d\n",
            instr->arch_opcode());
-    TRACE_UNIMPL();
     UNIMPLEMENTED();
   }
-
-
 }
 
 
