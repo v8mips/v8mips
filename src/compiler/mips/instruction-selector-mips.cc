@@ -40,15 +40,9 @@ class MipsOperandGenerator FINAL : public OperandGenerator {
 
 
   bool CanBeImmediate(Node* node, InstructionCode opcode) {
-    int32_t value;
-    switch (node->opcode()) {
-      // TODO(plind): SMI number constants as immediates ??? .......................................
-      case IrOpcode::kInt32Constant:
-        value = ValueOf<int32_t>(node->op());
-        break;
-      default:
-        return false;
-    }
+    Int32Matcher m(node);
+    if (!m.HasValue()) return false;
+    int32_t value = m.Value();
     switch (ArchOpcodeField::decode(opcode)) {
       case kMipsShl:
       case kMipsSar:
