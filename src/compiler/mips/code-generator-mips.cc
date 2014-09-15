@@ -371,11 +371,10 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
 }
 
 
-#define UNSUPPORTED_COND(opcode, condition)       \
-    OFStream out(stdout);                         \
-    out << "Unsupported " << #opcode              \
-        << " condition: \"" << condition << "\""; \
-    UNIMPLEMENTED();
+#define UNSUPPORTED_COND(opcode, condition)                                  \
+  OFStream out(stdout);                                                      \
+  out << "Unsupported " << #opcode << " condition: \"" << condition << "\""; \
+  UNIMPLEMENTED();
 
 // Assembles branches after an instruction.
 void CodeGenerator::AssembleArchBranch(Instruction* instr,
@@ -587,14 +586,15 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
   } else if (instr->arch_opcode() == kMipsFloat64Cmp) {
     FPURegister left = i.InputDoubleRegister(0);
     FPURegister right = i.InputDoubleRegister(1);
-    // TODO(plind): Provide NaN-testing macro-asm function without need for BranchF.
+    // TODO(plind): Provide NaN-testing macro-asm function without need for
+    // BranchF.
     FPURegister dummy1 = f0;
     FPURegister dummy2 = f2;
     switch (condition) {
       case kUnorderedEqual:
         // TODO(plind):  HANDLE the NaN junk - better than this ugliness:
         __ BranchF(NULL, &false_value, cc_default, dummy1, dummy2);
-        // Fall through.
+      // Fall through.
       case kEqual:
         __ BranchF(USE_DELAY_SLOT, &done, NULL, eq, left, right);
         __ li(result, Operand(1));  // In delay slot.
@@ -628,7 +628,7 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
       case kUnorderedLessThan:
         // TODO(plind):  HANDLE the NaN junk - better than this ugliness:
         __ BranchF(NULL, &false_value, cc_default, dummy1, dummy2);
-        // Fall through.
+      // Fall through.
       case kUnsignedLessThan:
         // TODO(plind): Experimental: use FP signed compare in these 4 cases.
         __ BranchF(USE_DELAY_SLOT, &done, NULL, lt, left, right);
@@ -646,7 +646,7 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
       case kUnorderedLessThanOrEqual:
         // TODO(plind):  HANDLE the NaN junk - better than this ugliness:
         __ BranchF(NULL, &false_value, cc_default, dummy1, dummy2);
-        // Fall through.
+      // Fall through.
       case kUnsignedLessThanOrEqual:
         __ BranchF(USE_DELAY_SLOT, &done, NULL, le, left, right);
         __ li(result, Operand(1));  // In delay slot.
@@ -904,7 +904,7 @@ void CodeGenerator::AssembleSwap(InstructionOperand* source,
     MemOperand dst0 = g.ToMemOperand(destination);
     MemOperand dst1(dst0.rm(), dst0.offset() + kPointerSize);
     __ ldc1(temp_1, dst0);  // Save destination in temp_1.
-    __ lw(temp_0, src0);   // Then use temp_0 to copy source to destination.
+    __ lw(temp_0, src0);    // Then use temp_0 to copy source to destination.
     __ sw(temp_0, dst0);
     __ lw(temp_0, src1);
     __ sw(temp_0, dst1);

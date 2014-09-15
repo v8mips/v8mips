@@ -4561,9 +4561,9 @@ void MacroAssembler::AdduAndCheckForOverflow(Register dst,
     AdduAndCheckForOverflow(dst, left, right.rm(), overflow_dst, scratch);
   } else {
     if (dst.is(left)) {
-      mov(scratch, left);  // Preserve left.
+      mov(scratch, left);                   // Preserve left.
       addiu(dst, left, right.immediate());  // Left is overwritten.
-      xor_(scratch, dst, scratch);  // Original left.
+      xor_(scratch, dst, scratch);          // Original left.
       // Load right since xori takes uint16 as immediate.
       addiu(t9, zero_reg, right.immediate());
       xor_(overflow_dst, dst, t9);
@@ -4622,36 +4622,34 @@ void MacroAssembler::AdduAndCheckForOverflow(Register dst,
 }
 
 
-void MacroAssembler::SubuAndCheckForOverflow(Register dst,
-                                             Register left,
+void MacroAssembler::SubuAndCheckForOverflow(Register dst, Register left,
                                              const Operand& right,
                                              Register overflow_dst,
                                              Register scratch) {
   if (right.is_reg()) {
     SubuAndCheckForOverflow(dst, left, right.rm(), overflow_dst, scratch);
   } else {
-  if (dst.is(left)) {
-    mov(scratch, left);  // Preserve left.
-    addiu(dst, left, -(right.immediate()));  // Left is overwritten.
-    xor_(overflow_dst, dst, scratch);  // scratch is original left.
-    // Load right since xori takes uint16 as immediate.
-    addiu(t9, zero_reg, right.immediate());
-    xor_(scratch, scratch, t9);  // scratch is original left.
-    and_(overflow_dst, scratch, overflow_dst);
-  } else {
-    addiu(dst, left, -(right.immediate()));
-    xor_(overflow_dst, dst, left);
-    // Load right since xori takes uint16 as immediate.
-    addiu(t9, zero_reg, right.immediate());
-    xor_(scratch, left, t9);
-    and_(overflow_dst, scratch, overflow_dst);
-  }
+    if (dst.is(left)) {
+      mov(scratch, left);                      // Preserve left.
+      addiu(dst, left, -(right.immediate()));  // Left is overwritten.
+      xor_(overflow_dst, dst, scratch);        // scratch is original left.
+      // Load right since xori takes uint16 as immediate.
+      addiu(t9, zero_reg, right.immediate());
+      xor_(scratch, scratch, t9);  // scratch is original left.
+      and_(overflow_dst, scratch, overflow_dst);
+    } else {
+      addiu(dst, left, -(right.immediate()));
+      xor_(overflow_dst, dst, left);
+      // Load right since xori takes uint16 as immediate.
+      addiu(t9, zero_reg, right.immediate());
+      xor_(scratch, left, t9);
+      and_(overflow_dst, scratch, overflow_dst);
+    }
   }
 }
 
 
-void MacroAssembler::SubuAndCheckForOverflow(Register dst,
-                                             Register left,
+void MacroAssembler::SubuAndCheckForOverflow(Register dst, Register left,
                                              Register right,
                                              Register overflow_dst,
                                              Register scratch) {

@@ -49,15 +49,16 @@ class MipsOperandGenerator FINAL : public OperandGenerator {
       default:
         return false;
     }
-   switch (ArchOpcodeField::decode(opcode)) {
-     case kMipsShl:
-     case kMipsSar:
-     case kMipsShr:
-       return is_uint5(value);
-     default:
-       return is_int16_special(value);
-   }
-}
+    switch (ArchOpcodeField::decode(opcode)) {
+      case kMipsShl:
+      case kMipsSar:
+      case kMipsShr:
+        return is_uint5(value);
+      default:
+        return is_int16_special(value);
+    }
+  }
+
  private:
   bool ImmediateFitsAddrMode1Instruction(int32_t imm) const {
     TRACE_UNIMPL();
@@ -283,38 +284,31 @@ void InstructionSelector::VisitInt32Mul(Node* node) {
     int32_t value = m.right().Value();
     if (base::bits::IsPowerOfTwo32(value)) {
       Emit(kMipsShl | AddressingModeField::encode(kMode_None),
-          g.DefineAsRegister(node),
-          g.UseRegister(m.left().node()),
-          g.TempImmediate(WhichPowerOf2(value)));
+           g.DefineAsRegister(node), g.UseRegister(m.left().node()),
+           g.TempImmediate(WhichPowerOf2(value)));
       return;
     }
     if (base::bits::IsPowerOfTwo32(value - 1)) {
       InstructionOperand* temp = g.TempRegister();
-      Emit(kMipsShl | AddressingModeField::encode(kMode_None),
-          temp,
-          g.UseRegister(m.left().node()),
-          g.TempImmediate(WhichPowerOf2(value - 1)));
+      Emit(kMipsShl | AddressingModeField::encode(kMode_None), temp,
+           g.UseRegister(m.left().node()),
+           g.TempImmediate(WhichPowerOf2(value - 1)));
       Emit(kMipsAdd | AddressingModeField::encode(kMode_None),
-          g.DefineAsRegister(node),
-          g.UseRegister(m.left().node()),
-          temp);
+           g.DefineAsRegister(node), g.UseRegister(m.left().node()), temp);
       return;
     }
     if (base::bits::IsPowerOfTwo32(value + 1)) {
       InstructionOperand* temp = g.TempRegister();
-      Emit(kMipsShl | AddressingModeField::encode(kMode_None),
-          temp,
-          g.UseRegister(m.left().node()),
-          g.TempImmediate(WhichPowerOf2(value + 1)));
+      Emit(kMipsShl | AddressingModeField::encode(kMode_None), temp,
+           g.UseRegister(m.left().node()),
+           g.TempImmediate(WhichPowerOf2(value + 1)));
       Emit(kMipsSub | AddressingModeField::encode(kMode_None),
-          g.DefineAsRegister(node),
-          temp,
-          g.UseRegister(m.left().node()));
+           g.DefineAsRegister(node), temp, g.UseRegister(m.left().node()));
       return;
     }
   }
   Emit(kMipsMul, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
-    g.UseRegister(m.right().node()));
+       g.UseRegister(m.right().node()));
 }
 
 
@@ -322,7 +316,7 @@ void InstructionSelector::VisitInt32Div(Node* node) {
   MipsOperandGenerator g(this);
   Int32BinopMatcher m(node);
   Emit(kMipsDiv, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
-    g.UseRegister(m.right().node()));
+       g.UseRegister(m.right().node()));
 }
 
 
@@ -330,7 +324,7 @@ void InstructionSelector::VisitInt32UDiv(Node* node) {
   MipsOperandGenerator g(this);
   Int32BinopMatcher m(node);
   Emit(kMipsDivU, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
-    g.UseRegister(m.right().node()));
+       g.UseRegister(m.right().node()));
 }
 
 
@@ -338,7 +332,7 @@ void InstructionSelector::VisitInt32Mod(Node* node) {
   MipsOperandGenerator g(this);
   Int32BinopMatcher m(node);
   Emit(kMipsMod, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
-      g.UseRegister(m.right().node()));
+       g.UseRegister(m.right().node()));
 }
 
 
@@ -346,7 +340,7 @@ void InstructionSelector::VisitInt32UMod(Node* node) {
   MipsOperandGenerator g(this);
   Int32BinopMatcher m(node);
   Emit(kMipsModU, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
-    g.UseRegister(m.right().node()));
+       g.UseRegister(m.right().node()));
 }
 
 
