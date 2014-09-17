@@ -1340,7 +1340,7 @@ void Simulator::TraceRegWr(int32_t value) {
 // TODO(plind): consider making icount_ printing a flag option.
 void Simulator::TraceMemRd(int32_t addr, int32_t value) {
   if (::v8::internal::FLAG_trace_sim) {
-    SNPrintF(trace_buf_, "%08x <-- [%08x]    (%d)", value, addr, icount_);
+    SNPrintF(trace_buf_, "%08x <-- [%08x]    (%ld)", value, addr, icount_);
   }
 }
 
@@ -1805,7 +1805,7 @@ bool Simulator::IsWatchpoint(uint32_t code) {
 void Simulator::PrintWatchpoint(uint32_t code) {
   MipsDebugger dbg(this);
   ++break_count_;
-  PrintF("\n---- break %d marker: %3d  (instr count: %8d) ----------"
+  PrintF("\n---- break %d marker: %3d  (instr count: %8ld) ----------"
          "----------------------------------",
          code, break_count_, icount_);
   dbg.PrintAllRegs();  // Print registers and continue running.
@@ -3151,6 +3151,9 @@ void Simulator::Execute() {
     while (program_counter != end_sim_pc) {
       Instruction* instr = reinterpret_cast<Instruction*>(program_counter);
       icount_++;
+      if (icount_ == static_cast<int64_t>(::v8::internal::FLAG_trace_sim_at)) {
+        ::v8::internal::FLAG_trace_sim = true;
+      }
       InstructionDecode(instr);
       program_counter = get_pc();
     }
@@ -3160,6 +3163,9 @@ void Simulator::Execute() {
     while (program_counter != end_sim_pc) {
       Instruction* instr = reinterpret_cast<Instruction*>(program_counter);
       icount_++;
+      if (icount_ == static_cast<int64_t>(::v8::internal::FLAG_trace_sim_at)) {
+        ::v8::internal::FLAG_trace_sim = true;
+      }
       if (icount_ == ::v8::internal::FLAG_stop_sim_at) {
         MipsDebugger dbg(this);
         dbg.Debug();
@@ -3197,7 +3203,7 @@ void Simulator::CallInternal(byte* entry) {
 
   // Set up the callee-saved registers with a known value. To be able to check
   // that they are preserved properly across JS execution.
-  int32_t callee_saved_value = icount_;
+  int32_t callee_saved_value = static_cast<int32_t>(icount_);
   set_register(s0, callee_saved_value);
   set_register(s1, callee_saved_value);
   set_register(s2, callee_saved_value);
