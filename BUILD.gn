@@ -189,6 +189,7 @@ action("js2c") {
     "src/regexp.js",
     "src/arraybuffer.js",
     "src/typedarray.js",
+    "src/generator.js",
     "src/object-observe.js",
     "src/collection.js",
     "src/weak-collection.js",
@@ -730,6 +731,8 @@ source_set("v8_base") {
     "src/ic/handler-compiler.cc",
     "src/ic/handler-compiler.h",
     "src/ic/ic-inl.h",
+    "src/ic/ic-state.cc",
+    "src/ic/ic-state.h",
     "src/ic/ic.cc",
     "src/ic/ic.h",
     "src/ic/ic-compiler.cc",
@@ -1129,6 +1132,11 @@ source_set("v8_base") {
   configs += [ "//build/config/compiler:no_chromium_code" ]
   configs += [ ":internal_config", ":features", ":toolchain" ]
 
+  if (!is_debug) {
+    configs -= [ "//build/config/compiler:optimize" ]
+    configs += [ "//build/config/compiler:optimize_max" ]
+  }
+
   defines = []
   deps = [ ":v8_libbase" ]
 
@@ -1214,6 +1222,11 @@ source_set("v8_libbase") {
   configs += [ "//build/config/compiler:no_chromium_code" ]
   configs += [ ":internal_config_base", ":features", ":toolchain" ]
 
+  if (!is_debug) {
+    configs -= [ "//build/config/compiler:optimize" ]
+    configs += [ "//build/config/compiler:optimize_max" ]
+  }
+
   defines = []
 
   if (is_posix) {
@@ -1276,6 +1289,11 @@ source_set("v8_libplatform") {
   configs -= [ "//build/config/compiler:chromium_code" ]
   configs += [ "//build/config/compiler:no_chromium_code" ]
   configs += [ ":internal_config_base", ":features", ":toolchain" ]
+
+  if (!is_debug) {
+    configs -= [ "//build/config/compiler:optimize" ]
+    configs += [ "//build/config/compiler:optimize_max" ]
+  }
 
   deps = [
     ":v8_libbase",

@@ -14171,18 +14171,13 @@ void SetFunctionEntryHookTest::RunLoopInNewEnv(v8::Isolate* isolate) {
 
 void SetFunctionEntryHookTest::RunTest() {
   // Work in a new isolate throughout.
-  v8::Isolate* isolate = v8::Isolate::New();
-
-  // Test setting the entry hook on the new isolate.
-  CHECK(v8::V8::SetFunctionEntryHook(isolate, EntryHook));
-
-  // Replacing the hook, once set should fail.
-  CHECK_EQ(false, v8::V8::SetFunctionEntryHook(isolate, EntryHook));
+  v8::Isolate::CreateParams create_params;
+  create_params.entry_hook = EntryHook;
+  create_params.code_event_handler = JitEvent;
+  v8::Isolate* isolate = v8::Isolate::New(create_params);
 
   {
     v8::Isolate::Scope scope(isolate);
-
-    v8::V8::SetJitCodeEventHandler(v8::kJitCodeEventDefault, JitEvent);
 
     RunLoopInNewEnv(isolate);
 
@@ -14211,9 +14206,6 @@ void SetFunctionEntryHookTest::RunTest() {
     // We should record no invocations in this isolate.
     CHECK_EQ(0, static_cast<int>(invocations_.size()));
   }
-  // Since the isolate has been used, we shouldn't be able to set an entry
-  // hook anymore.
-  CHECK_EQ(false, v8::V8::SetFunctionEntryHook(isolate, EntryHook));
 
   isolate->Dispose();
 }
@@ -14407,7 +14399,7 @@ UNINITIALIZED_TEST(SetJitCodeEventHandler) {
     saw_bar = 0;
     move_events = 0;
 
-    V8::SetJitCodeEventHandler(v8::kJitCodeEventDefault, event_handler);
+    isolate->SetJitCodeEventHandler(v8::kJitCodeEventDefault, event_handler);
 
     // Generate new code objects sparsely distributed across several
     // different fragmented code-space pages.
@@ -14431,7 +14423,7 @@ UNINITIALIZED_TEST(SetJitCodeEventHandler) {
     // Force code movement.
     heap->CollectAllAvailableGarbage("TestSetJitCodeEventHandler");
 
-    V8::SetJitCodeEventHandler(v8::kJitCodeEventDefault, NULL);
+    isolate->SetJitCodeEventHandler(v8::kJitCodeEventDefault, NULL);
 
     CHECK_LE(kIterations, saw_bar);
     CHECK_LT(0, move_events);
@@ -14461,8 +14453,9 @@ UNINITIALIZED_TEST(SetJitCodeEventHandler) {
     i::HashMap lineinfo(MatchPointers);
     jitcode_line_info = &lineinfo;
 
-    V8::SetJitCodeEventHandler(v8::kJitCodeEventEnumExisting, event_handler);
-    V8::SetJitCodeEventHandler(v8::kJitCodeEventDefault, NULL);
+    isolate->SetJitCodeEventHandler(v8::kJitCodeEventEnumExisting,
+                                    event_handler);
+    isolate->SetJitCodeEventHandler(v8::kJitCodeEventDefault, NULL);
 
     jitcode_line_info = NULL;
     // We expect that we got some events. Note that if we could get code removal
@@ -17828,14 +17821,13 @@ TEST(IdleNotificationWithLargeHint) {
 
 TEST(Regress2107) {
   const intptr_t MB = 1024 * 1024;
-  const int kShortIdlePauseInMs = 100;
-  const int kLongIdlePauseInMs = 1000;
+  const int kIdlePauseInMs = 1000;
   LocalContext env;
   v8::Isolate* isolate = env->GetIsolate();
   v8::HandleScope scope(env->GetIsolate());
   intptr_t initial_size = CcTest::heap()->SizeOfObjects();
   // Send idle notification to start a round of incremental GCs.
-  env->GetIsolate()->IdleNotification(kShortIdlePauseInMs);
+  env->GetIsolate()->IdleNotification(kIdlePauseInMs);
   // Emulate 7 page reloads.
   for (int i = 0; i < 7; i++) {
     {
@@ -17846,7 +17838,7 @@ TEST(Regress2107) {
       ctx->Exit();
     }
     env->GetIsolate()->ContextDisposedNotification();
-    env->GetIsolate()->IdleNotification(kLongIdlePauseInMs);
+    env->GetIsolate()->IdleNotification(kIdlePauseInMs);
   }
   // Create garbage and check that idle notification still collects it.
   CreateGarbageInOldSpace();
@@ -17854,7 +17846,7 @@ TEST(Regress2107) {
   CHECK_GT(size_with_garbage, initial_size + MB);
   bool finished = false;
   for (int i = 0; i < 200 && !finished; i++) {
-    finished = env->GetIsolate()->IdleNotification(kShortIdlePauseInMs);
+    finished = env->GetIsolate()->IdleNotification(kIdlePauseInMs);
   }
   intptr_t final_size = CcTest::heap()->SizeOfObjects();
   CHECK_LT(final_size, initial_size + 1);
@@ -17895,13 +17887,11 @@ static uint32_t* ComputeStackLimit(uint32_t size) {
 static const int stack_breathing_room = 256 * i::KB;
 
 
-TEST(SetResourceConstraints) {
+TEST(SetStackLimit) {
   uint32_t* set_limit = ComputeStackLimit(stack_breathing_room);
 
   // Set stack limit.
-  v8::ResourceConstraints constraints;
-  constraints.set_stack_limit(set_limit);
-  CHECK(v8::SetResourceConstraints(CcTest::isolate(), &constraints));
+  CcTest::isolate()->SetStackLimit(reinterpret_cast<uintptr_t>(set_limit));
 
   // Execute a script.
   LocalContext env;
@@ -17916,16 +17906,14 @@ TEST(SetResourceConstraints) {
 }
 
 
-TEST(SetResourceConstraintsInThread) {
+TEST(SetStackLimitInThread) {
   uint32_t* set_limit;
   {
     v8::Locker locker(CcTest::isolate());
     set_limit = ComputeStackLimit(stack_breathing_room);
 
     // Set stack limit.
-    v8::ResourceConstraints constraints;
-    constraints.set_stack_limit(set_limit);
-    CHECK(v8::SetResourceConstraints(CcTest::isolate(), &constraints));
+    CcTest::isolate()->SetStackLimit(reinterpret_cast<uintptr_t>(set_limit));
 
     // Execute a script.
     v8::HandleScope scope(CcTest::isolate());
@@ -19586,16 +19574,22 @@ class InitDefaultIsolateThread : public v8::base::Thread {
         result_(false) {}
 
   void Run() {
-    v8::Isolate* isolate = v8::Isolate::New();
-    isolate->Enter();
+    v8::Isolate::CreateParams create_params;
     switch (testCase_) {
       case SetResourceConstraints: {
-        v8::ResourceConstraints constraints;
-        constraints.set_max_semi_space_size(1);
-        constraints.set_max_old_space_size(4);
-        v8::SetResourceConstraints(CcTest::isolate(), &constraints);
+        create_params.constraints.set_max_semi_space_size(1);
+        create_params.constraints.set_max_old_space_size(4);
         break;
       }
+      default:
+        break;
+    }
+    v8::Isolate* isolate = v8::Isolate::New(create_params);
+    isolate->Enter();
+    switch (testCase_) {
+      case SetResourceConstraints:
+        // Already handled in pre-Isolate-creation block.
+        break;
 
       case SetFatalHandler:
         v8::V8::SetFatalErrorHandler(NULL);

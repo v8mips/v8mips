@@ -1016,6 +1016,7 @@ template <class C> inline bool Is(Object* obj);
     "Call to a JavaScript runtime function")                                   \
   V(kCannotTranslatePositionInChangedArea,                                     \
     "Cannot translate position in changed area")                               \
+  V(kClassLiteral, "Class literal")                                            \
   V(kCodeGenerationFailed, "Code generation failed")                           \
   V(kCodeObjectNotProperlyPatched, "Code object not properly patched")         \
   V(kCompoundAssignmentToLookupSlot, "Compound assignment to lookup slot")     \
@@ -9172,22 +9173,33 @@ class String: public Name {
   static inline int NonAsciiStart(const char* chars, int length) {
     const char* start = chars;
     const char* limit = chars + length;
-#ifdef V8_HOST_CAN_READ_UNALIGNED
-    DCHECK(unibrow::Utf8::kMaxOneByteChar == 0x7F);
-    const uintptr_t non_one_byte_mask = kUintptrAllBitsSet / 0xFF * 0x80;
-    while (chars + sizeof(uintptr_t) <= limit) {
-      if (*reinterpret_cast<const uintptr_t*>(chars) & non_one_byte_mask) {
-        return static_cast<int>(chars - start);
+
+    if (length >= kIntptrSize) {
+      // Check unaligned bytes.
+      while (!IsAligned(reinterpret_cast<intptr_t>(chars), sizeof(uintptr_t))) {
+        if (static_cast<uint8_t>(*chars) > unibrow::Utf8::kMaxOneByteChar) {
+          return static_cast<int>(chars - start);
+        }
+        ++chars;
       }
-      chars += sizeof(uintptr_t);
+      // Check aligned words.
+      DCHECK(unibrow::Utf8::kMaxOneByteChar == 0x7F);
+      const uintptr_t non_one_byte_mask = kUintptrAllBitsSet / 0xFF * 0x80;
+      while (chars + sizeof(uintptr_t) <= limit) {
+        if (*reinterpret_cast<const uintptr_t*>(chars) & non_one_byte_mask) {
+          return static_cast<int>(chars - start);
+        }
+        chars += sizeof(uintptr_t);
+      }
     }
-#endif
+    // Check remaining unaligned bytes.
     while (chars < limit) {
       if (static_cast<uint8_t>(*chars) > unibrow::Utf8::kMaxOneByteChar) {
         return static_cast<int>(chars - start);
       }
       ++chars;
     }
+
     return static_cast<int>(chars - start);
   }
 

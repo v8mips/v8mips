@@ -25,7 +25,7 @@ class SimplifiedOperatorReducerTest : public GraphTest {
     MachineOperatorBuilder machine;
     JSOperatorBuilder javascript(zone());
     JSGraph jsgraph(graph(), common(), &javascript, &typer, &machine);
-    SimplifiedOperatorReducer reducer(&jsgraph, &machine);
+    SimplifiedOperatorReducer reducer(&jsgraph);
     return reducer.Reduce(node);
   }
 
@@ -129,7 +129,7 @@ MATCHER(IsNaN, std::string(negation ? "isn't" : "is") + " NaN") {
 namespace {
 
 struct UnaryOperator {
-  const Operator* (SimplifiedOperatorBuilder::*constructor)() const;
+  const Operator* (SimplifiedOperatorBuilder::*constructor)();
   const char* constructor_name;
 };
 

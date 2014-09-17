@@ -40,12 +40,12 @@ namespace internal {
 // Nodes of the abstract syntax tree. Only concrete classes are
 // enumerated here.
 
-#define DECLARATION_NODE_LIST(V)                \
-  V(VariableDeclaration)                        \
-  V(FunctionDeclaration)                        \
-  V(ModuleDeclaration)                          \
-  V(ImportDeclaration)                          \
-  V(ExportDeclaration)                          \
+#define DECLARATION_NODE_LIST(V) \
+  V(VariableDeclaration)         \
+  V(FunctionDeclaration)         \
+  V(ModuleDeclaration)           \
+  V(ImportDeclaration)           \
+  V(ExportDeclaration)
 
 #define MODULE_NODE_LIST(V)                     \
   V(ModuleLiteral)                              \
@@ -73,28 +73,29 @@ namespace internal {
   V(TryFinallyStatement)                        \
   V(DebuggerStatement)
 
-#define EXPRESSION_NODE_LIST(V)                 \
-  V(FunctionLiteral)                            \
-  V(NativeFunctionLiteral)                      \
-  V(Conditional)                                \
-  V(VariableProxy)                              \
-  V(Literal)                                    \
-  V(RegExpLiteral)                              \
-  V(ObjectLiteral)                              \
-  V(ArrayLiteral)                               \
-  V(Assignment)                                 \
-  V(Yield)                                      \
-  V(Throw)                                      \
-  V(Property)                                   \
-  V(Call)                                       \
-  V(CallNew)                                    \
-  V(CallRuntime)                                \
-  V(UnaryOperation)                             \
-  V(CountOperation)                             \
-  V(BinaryOperation)                            \
-  V(CompareOperation)                           \
-  V(ThisFunction)                               \
-  V(SuperReference)                             \
+#define EXPRESSION_NODE_LIST(V) \
+  V(FunctionLiteral)            \
+  V(ClassLiteral)               \
+  V(NativeFunctionLiteral)      \
+  V(Conditional)                \
+  V(VariableProxy)              \
+  V(Literal)                    \
+  V(RegExpLiteral)              \
+  V(ObjectLiteral)              \
+  V(ArrayLiteral)               \
+  V(Assignment)                 \
+  V(Yield)                      \
+  V(Throw)                      \
+  V(Property)                   \
+  V(Call)                       \
+  V(CallNew)                    \
+  V(CallRuntime)                \
+  V(UnaryOperation)             \
+  V(CountOperation)             \
+  V(BinaryOperation)            \
+  V(CompareOperation)           \
+  V(ThisFunction)               \
+  V(SuperReference)             \
   V(CaseClause)
 
 #define AST_NODE_LIST(V)                        \
@@ -1459,7 +1460,7 @@ class ObjectLiteralProperty FINAL : public ZoneObject {
   };
 
   ObjectLiteralProperty(Zone* zone, AstValueFactory* ast_value_factory,
-                        Literal* key, Expression* value);
+                        Literal* key, Expression* value, bool is_static);
 
   Literal* key() { return key_; }
   Expression* value() { return value_; }
@@ -1478,7 +1479,8 @@ class ObjectLiteralProperty FINAL : public ZoneObject {
  protected:
   template<class> friend class AstNodeFactory;
 
-  ObjectLiteralProperty(Zone* zone, bool is_getter, FunctionLiteral* value);
+  ObjectLiteralProperty(Zone* zone, bool is_getter, FunctionLiteral* value,
+                        bool is_static);
   void set_key(Literal* key) { key_ = key; }
 
  private:
@@ -1486,6 +1488,7 @@ class ObjectLiteralProperty FINAL : public ZoneObject {
   Expression* value_;
   Kind kind_;
   bool emit_store_;
+  bool is_static_;
   Handle<Map> receiver_type_;
 };
 
@@ -2498,6 +2501,40 @@ class FunctionLiteral FINAL : public Expression {
 };
 
 
+class ClassLiteral FINAL : public Expression {
+ public:
+  typedef ObjectLiteralProperty Property;
+
+  DECLARE_NODE_TYPE(ClassLiteral)
+
+  Handle<String> name() const { return raw_name_->string(); }
+  const AstRawString* raw_name() const { return raw_name_; }
+  Expression* extends() const { return extends_; }
+  FunctionLiteral* constructor() const { return constructor_; }
+  ZoneList<Property*>* properties() const { return properties_; }
+
+ protected:
+  ClassLiteral(Zone* zone, const AstRawString* name, Expression* extends,
+               FunctionLiteral* constructor, ZoneList<Property*>* properties,
+               AstValueFactory* ast_value_factory, int position, IdGen* id_gen)
+      : Expression(zone, position, id_gen),
+        raw_name_(name),
+        raw_inferred_name_(ast_value_factory->empty_string()),
+        extends_(extends),
+        constructor_(constructor),
+        properties_(properties) {}
+
+ private:
+  const AstRawString* raw_name_;
+  Handle<String> name_;
+  const AstString* raw_inferred_name_;
+  Handle<String> inferred_name_;
+  Expression* extends_;
+  FunctionLiteral* constructor_;
+  ZoneList<Property*>* properties_;
+};
+
+
 class NativeFunctionLiteral FINAL : public Expression {
  public:
   DECLARE_NODE_TYPE(NativeFunctionLiteral)
@@ -2973,10 +3010,17 @@ private:                                                            \
 
 class AstConstructionVisitor BASE_EMBEDDED {
  public:
-  AstConstructionVisitor() : dont_optimize_reason_(kNoReason) { }
+  AstConstructionVisitor()
+      : dont_crankshaft_reason_(kNoReason), dont_turbofan_reason_(kNoReason) {}
 
   AstProperties* ast_properties() { return &properties_; }
-  BailoutReason dont_optimize_reason() { return dont_optimize_reason_; }
+  BailoutReason dont_optimize_reason() {
+    if (dont_turbofan_reason_ != kNoReason) {
+      return dont_turbofan_reason_;
+    } else {
+      return dont_crankshaft_reason_;
+    }
+  }
 
  private:
   template<class> friend class AstNodeFactory;
@@ -2989,8 +3033,11 @@ class AstConstructionVisitor BASE_EMBEDDED {
 
   void increase_node_count() { properties_.add_node_count(1); }
   void add_flag(AstPropertiesFlag flag) { properties_.flags()->Add(flag); }
-  void set_dont_optimize_reason(BailoutReason reason) {
-      dont_optimize_reason_ = reason;
+  void set_dont_crankshaft_reason(BailoutReason reason) {
+    dont_crankshaft_reason_ = reason;
+  }
+  void set_dont_turbofan_reason(BailoutReason reason) {
+    dont_turbofan_reason_ = reason;
   }
 
   void add_slot_node(FeedbackSlotInterface* slot_node) {
@@ -3002,7 +3049,8 @@ class AstConstructionVisitor BASE_EMBEDDED {
   }
 
   AstProperties properties_;
-  BailoutReason dont_optimize_reason_;
+  BailoutReason dont_crankshaft_reason_;
+  BailoutReason dont_turbofan_reason_;
 };
 
 
@@ -3289,16 +3337,17 @@ class AstNodeFactory FINAL BASE_EMBEDDED {
   }
 
   ObjectLiteral::Property* NewObjectLiteralProperty(Literal* key,
-                                                    Expression* value) {
-    return new (zone_)
-        ObjectLiteral::Property(zone_, ast_value_factory_, key, value);
+                                                    Expression* value,
+                                                    bool is_static) {
+    return new (zone_) ObjectLiteral::Property(zone_, ast_value_factory_, key,
+                                               value, is_static);
   }
 
   ObjectLiteral::Property* NewObjectLiteralProperty(bool is_getter,
                                                     FunctionLiteral* value,
-                                                    int pos) {
+                                                    int pos, bool is_static) {
     ObjectLiteral::Property* prop =
-        new(zone_) ObjectLiteral::Property(zone_, is_getter, value);
+        new (zone_) ObjectLiteral::Property(zone_, is_getter, value, is_static);
     prop->set_key(NewStringLiteral(value->raw_name(), pos));
     return prop;  // Not an AST node, will not be visited.
   }
@@ -3452,6 +3501,17 @@ class AstNodeFactory FINAL BASE_EMBEDDED {
       visitor_.VisitFunctionLiteral(lit);
     }
     return lit;
+  }
+
+  ClassLiteral* NewClassLiteral(const AstRawString* name, Expression* extends,
+                                FunctionLiteral* constructor,
+                                ZoneList<ObjectLiteral::Property*>* properties,
+                                AstValueFactory* ast_value_factory,
+                                int position) {
+    ClassLiteral* lit =
+        new (zone_) ClassLiteral(zone_, name, extends, constructor, properties,
+                                 ast_value_factory, position, id_gen_);
+    VISIT_AND_RETURN(ClassLiteral, lit)
   }
 
   NativeFunctionLiteral* NewNativeFunctionLiteral(const AstRawString* name,

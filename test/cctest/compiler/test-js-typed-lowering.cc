@@ -48,6 +48,24 @@ class JSTypedLoweringTester : public HandleAndZoneScope {
     return n;
   }
 
+  Node* UndefinedConstant() {
+    Unique<Object> unique =
+        Unique<Object>::CreateImmovable(isolate->factory()->undefined_value());
+    return graph.NewNode(common.HeapConstant(unique));
+  }
+
+  Node* EmptyFrameState(Node* context) {
+    Node* parameters = graph.NewNode(common.StateValues(0));
+    Node* locals = graph.NewNode(common.StateValues(0));
+    Node* stack = graph.NewNode(common.StateValues(0));
+
+    Node* state_node =
+        graph.NewNode(common.FrameState(BailoutId(0), kIgnoreOutput),
+                      parameters, locals, stack, context, UndefinedConstant());
+
+    return state_node;
+  }
+
   Node* reduce(Node* node) {
     JSGraph jsgraph(&graph, &common, &javascript, &typer, &machine);
     JSTypedLowering reducer(&jsgraph);
@@ -168,6 +186,8 @@ static IrOpcode::Value NumberToI32(bool is_signed) {
 }
 
 
+// TODO(turbofan): Lowering of StringAdd is disabled for now.
+#if 0
 TEST(StringBinops) {
   JSTypedLoweringTester R;
 
@@ -186,6 +206,7 @@ TEST(StringBinops) {
     }
   }
 }
+#endif
 
 
 TEST(AddNumber1) {
@@ -663,12 +684,14 @@ TEST(NumberComparison) {
 
   for (size_t i = 0; i < arraysize(kJSTypes); i++) {
     Type* t0 = kJSTypes[i];
-    if (t0->Is(Type::String())) continue;  // skip Type::String
+    // Skip Type::String and Type::Receiver which might coerce into a string.
+    if (t0->Is(Type::String()) || t0->Is(Type::Receiver())) continue;
     Node* p0 = R.Parameter(t0, 0);
 
     for (size_t j = 0; j < arraysize(kJSTypes); j++) {
       Type* t1 = kJSTypes[j];
-      if (t1->Is(Type::String())) continue;  // skip Type::String
+      // Skip Type::String and Type::Receiver which might coerce into a string.
+      if (t1->Is(Type::String()) || t0->Is(Type::Receiver())) continue;
       Node* p1 = R.Parameter(t1, 1);
 
       for (size_t k = 0; k < arraysize(ops); k += 2) {
@@ -725,7 +748,7 @@ TEST(MixedComparison1) {
 TEST(ObjectComparison) {
   JSTypedLoweringTester R;
 
-  Node* p0 = R.Parameter(Type::Object(), 0);
+  Node* p0 = R.Parameter(Type::Number(), 0);
   Node* p1 = R.Parameter(Type::Object(), 1);
 
   Node* cmp = R.Binop(R.javascript.LessThan(), p0, p1);
@@ -741,14 +764,13 @@ TEST(ObjectComparison) {
   Node* i0 = r->InputAt(0);
   Node* i1 = r->InputAt(1);
 
-  CHECK_NE(p0, i0);
+  CHECK_EQ(p0, i0);
   CHECK_NE(p1, i1);
-  CHECK_EQ(IrOpcode::kJSToNumber, i0->opcode());
+  CHECK_EQ(IrOpcode::kParameter, i0->opcode());
   CHECK_EQ(IrOpcode::kJSToNumber, i1->opcode());
 
   // Check effect chain is correct.
-  R.CheckEffectInput(R.start(), i0);
-  R.CheckEffectInput(i0, i1);
+  R.CheckEffectInput(R.start(), i1);
   R.CheckEffectInput(i1, effect_use);
 }
 
@@ -775,12 +797,15 @@ TEST(UnaryNot) {
 
 
 TEST(RemoveToNumberEffects) {
+  FLAG_turbo_deoptimization = true;
+
   JSTypedLoweringTester R;
 
   Node* effect_use = NULL;
   for (int i = 0; i < 10; i++) {
     Node* p0 = R.Parameter(Type::Number());
     Node* ton = R.Unop(R.javascript.ToNumber(), p0);
+    Node* frame_state = R.EmptyFrameState(R.context());
     effect_use = NULL;
 
     switch (i) {
@@ -796,11 +821,11 @@ TEST(RemoveToNumberEffects) {
         effect_use = R.graph.NewNode(R.common.EffectPhi(1), ton, R.start());
       case 3:
         effect_use = R.graph.NewNode(R.javascript.Add(), ton, ton, R.context(),
-                                     ton, R.start());
+                                     frame_state, ton, R.start());
         break;
       case 4:
         effect_use = R.graph.NewNode(R.javascript.Add(), p0, p0, R.context(),
-                                     ton, R.start());
+                                     frame_state, ton, R.start());
         break;
       case 5:
         effect_use = R.graph.NewNode(R.common.Return(), p0, ton, R.start());
@@ -1060,7 +1085,7 @@ TEST(OrderCompareEffects) {
   };
 
   for (size_t j = 0; j < arraysize(ops); j += 2) {
-    BinopEffectsTester B(ops[j], Type::Object(), Type::String());
+    BinopEffectsTester B(ops[j], Type::Boolean(), Type::String());
     CHECK_EQ(ops[j + 1]->opcode(), B.result->op()->opcode());
 
     Node* i0 = B.CheckConvertedInput(IrOpcode::kJSToNumber, 0, true);
@@ -1075,7 +1100,7 @@ TEST(OrderCompareEffects) {
   }
 
   for (size_t j = 0; j < arraysize(ops); j += 2) {
-    BinopEffectsTester B(ops[j], Type::Number(), Type::Object());
+    BinopEffectsTester B(ops[j], Type::Number(), Type::Boolean());
 
     Node* i0 = B.CheckConvertedInput(IrOpcode::kJSToNumber, 0, true);
     Node* i1 = B.result->InputAt(1);
@@ -1088,7 +1113,7 @@ TEST(OrderCompareEffects) {
   }
 
   for (size_t j = 0; j < arraysize(ops); j += 2) {
-    BinopEffectsTester B(ops[j], Type::Object(), Type::Number());
+    BinopEffectsTester B(ops[j], Type::Boolean(), Type::Number());
 
     Node* i0 = B.result->InputAt(0);
     Node* i1 = B.CheckConvertedInput(IrOpcode::kJSToNumber, 1, true);

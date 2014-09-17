@@ -366,6 +366,16 @@ bool ParserTraits::IsEvalOrArguments(const AstRawString* identifier) const {
 }
 
 
+bool ParserTraits::IsPrototype(const AstRawString* identifier) const {
+  return identifier == parser_->ast_value_factory()->prototype_string();
+}
+
+
+bool ParserTraits::IsConstructor(const AstRawString* identifier) const {
+  return identifier == parser_->ast_value_factory()->constructor_string();
+}
+
+
 bool ParserTraits::IsThisProperty(Expression* expression) {
   DCHECK(expression != NULL);
   Property* property = expression->AsProperty();
@@ -755,7 +765,6 @@ Parser::Parser(CompilationInfo* info, ParseInfo* parse_info)
   set_allow_modules(!info->is_native() && FLAG_harmony_modules);
   set_allow_natives_syntax(FLAG_allow_natives_syntax || info->is_native());
   set_allow_lazy(false);  // Must be explicitly enabled.
-  set_allow_generators(FLAG_harmony_generators);
   set_allow_arrow_functions(FLAG_harmony_arrow_functions);
   set_allow_harmony_numeric_literals(FLAG_harmony_numeric_literals);
   set_allow_classes(FLAG_harmony_classes);
@@ -1137,6 +1146,8 @@ Statement* Parser::ParseModuleElement(ZoneList<const AstRawString*>* labels,
   switch (peek()) {
     case Token::FUNCTION:
       return ParseFunctionDeclaration(NULL, ok);
+    case Token::CLASS:
+      return ParseClassDeclaration(NULL, ok);
     case Token::IMPORT:
       return ParseImportDeclaration(ok);
     case Token::EXPORT:
@@ -1476,6 +1487,10 @@ Statement* Parser::ParseExportDeclaration(bool* ok) {
       result = ParseFunctionDeclaration(&names, CHECK_OK);
       break;
 
+    case Token::CLASS:
+      result = ParseClassDeclaration(&names, CHECK_OK);
+      break;
+
     case Token::VAR:
     case Token::LET:
     case Token::CONST:
@@ -1538,10 +1553,13 @@ Statement* Parser::ParseBlockElement(ZoneList<const AstRawString*>* labels,
   //    LetDeclaration
   //    ConstDeclaration
   //    GeneratorDeclaration
+  //    ClassDeclaration
 
   switch (peek()) {
     case Token::FUNCTION:
       return ParseFunctionDeclaration(NULL, ok);
+    case Token::CLASS:
+      return ParseClassDeclaration(NULL, ok);
     case Token::CONST:
       return ParseVariableStatement(kModuleElement, NULL, ok);
     case Token::LET:
@@ -1652,6 +1670,9 @@ Statement* Parser::ParseStatement(ZoneList<const AstRawString*>* labels,
       }
       return ParseFunctionDeclaration(NULL, ok);
     }
+
+    case Token::CLASS:
+      return ParseClassDeclaration(NULL, ok);
 
     case Token::DEBUGGER:
       return ParseDebuggerStatement(ok);
@@ -1893,7 +1914,7 @@ Statement* Parser::ParseFunctionDeclaration(
   //      '{' FunctionBody '}'
   Expect(Token::FUNCTION, CHECK_OK);
   int pos = position();
-  bool is_generator = allow_generators() && Check(Token::MUL);
+  bool is_generator = Check(Token::MUL);
   bool is_strict_reserved = false;
   const AstRawString* name = ParseIdentifierOrStrictReservedWord(
       &is_strict_reserved, CHECK_OK);
@@ -1918,6 +1939,47 @@ Statement* Parser::ParseFunctionDeclaration(
   Declare(declaration, true, CHECK_OK);
   if (names) names->Add(name, zone());
   return factory()->NewEmptyStatement(RelocInfo::kNoPosition);
+}
+
+
+Statement* Parser::ParseClassDeclaration(ZoneList<const AstRawString*>* names,
+                                         bool* ok) {
+  // ClassDeclaration ::
+  //   'class' Identifier ('extends' LeftHandExpression)? '{' ClassBody '}'
+  //
+  // A ClassDeclaration
+  //
+  //   class C { ... }
+  //
+  // has the same semantics as:
+  //
+  //   let C = class C { ... };
+  //
+  // so rewrite it as such.
+
+  Expect(Token::CLASS, CHECK_OK);
+  int pos = position();
+  bool is_strict_reserved = false;
+  const AstRawString* name =
+      ParseIdentifierOrStrictReservedWord(&is_strict_reserved, CHECK_OK);
+  ClassLiteral* value = ParseClassLiteral(name, scanner()->location(),
+                                          is_strict_reserved, pos, CHECK_OK);
+
+  Block* block = factory()->NewBlock(NULL, 1, true, pos);
+  VariableMode mode = LET;
+  VariableProxy* proxy = NewUnresolved(name, mode, Interface::NewValue());
+  Declaration* declaration =
+      factory()->NewVariableDeclaration(proxy, mode, scope_, pos);
+  Declare(declaration, true, CHECK_OK);
+
+  Token::Value init_op = Token::INIT_LET;
+  Assignment* assignment = factory()->NewAssignment(init_op, proxy, value, pos);
+  block->AddStatement(
+      factory()->NewExpressionStatement(assignment, RelocInfo::kNoPosition),
+      zone());
+
+  if (names) names->Add(name, zone());
+  return block;
 }
 
 
@@ -3767,7 +3829,6 @@ PreParser::PreParseResult Parser::ParseLazyFunctionBodyWithPreParser(
     reusable_preparser_->set_allow_modules(allow_modules());
     reusable_preparser_->set_allow_natives_syntax(allow_natives_syntax());
     reusable_preparser_->set_allow_lazy(true);
-    reusable_preparser_->set_allow_generators(allow_generators());
     reusable_preparser_->set_allow_arrow_functions(allow_arrow_functions());
     reusable_preparser_->set_allow_harmony_numeric_literals(
         allow_harmony_numeric_literals());

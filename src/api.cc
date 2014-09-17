@@ -6662,9 +6662,20 @@ Isolate* Isolate::GetCurrent() {
 }
 
 
-Isolate* Isolate::New() {
+Isolate* Isolate::New(const Isolate::CreateParams& params) {
   i::Isolate* isolate = new i::Isolate();
-  return reinterpret_cast<Isolate*>(isolate);
+  Isolate* v8_isolate = reinterpret_cast<Isolate*>(isolate);
+  if (params.entry_hook) {
+    isolate->set_function_entry_hook(params.entry_hook);
+  }
+  if (params.code_event_handler) {
+    isolate->InitializeLoggingAndCounters();
+    isolate->logger()->SetCodeEventHandler(kJitCodeEventDefault,
+                                           params.code_event_handler);
+  }
+  SetResourceConstraints(v8_isolate,
+                         const_cast<ResourceConstraints*>(&params.constraints));
+  return v8_isolate;
 }
 
 
@@ -6869,6 +6880,22 @@ void v8::Isolate::LowMemoryNotification() {
 int v8::Isolate::ContextDisposedNotification() {
   i::Isolate* isolate = reinterpret_cast<i::Isolate*>(this);
   return isolate->heap()->NotifyContextDisposed();
+}
+
+
+void v8::Isolate::SetJitCodeEventHandler(JitCodeEventOptions options,
+                                         JitCodeEventHandler event_handler) {
+  i::Isolate* isolate = reinterpret_cast<i::Isolate*>(this);
+  // Ensure that logging is initialized for our isolate.
+  isolate->InitializeLoggingAndCounters();
+  isolate->logger()->SetCodeEventHandler(options, event_handler);
+}
+
+
+void v8::Isolate::SetStackLimit(uintptr_t stack_limit) {
+  i::Isolate* isolate = reinterpret_cast<i::Isolate*>(this);
+  CHECK(stack_limit);
+  isolate->stack_guard()->SetStackLimit(stack_limit);
 }
 
 
