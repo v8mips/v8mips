@@ -1340,7 +1340,7 @@ void Simulator::TraceRegWr(int32_t value) {
 // TODO(plind): consider making icount_ printing a flag option.
 void Simulator::TraceMemRd(int32_t addr, int32_t value) {
   if (::v8::internal::FLAG_trace_sim) {
-    SNPrintF(trace_buf_, "%08x <-- [%08x]    (%ld)", value, addr, icount_);
+    SNPrintF(trace_buf_, "%08x <-- [%08x]    (%lld)", value, addr, icount_);
   }
 }
 
@@ -1805,7 +1805,7 @@ bool Simulator::IsWatchpoint(uint32_t code) {
 void Simulator::PrintWatchpoint(uint32_t code) {
   MipsDebugger dbg(this);
   ++break_count_;
-  PrintF("\n---- break %d marker: %3d  (instr count: %8ld) ----------"
+  PrintF("\n---- break %d marker: %3d  (instr count: %8lld) ----------"
          "----------------------------------",
          code, break_count_, icount_);
   dbg.PrintAllRegs();  // Print registers and continue running.
