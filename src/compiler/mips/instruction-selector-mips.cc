@@ -30,14 +30,6 @@ class MipsOperandGenerator FINAL : public OperandGenerator {
     return UseRegister(node);
   }
 
-  // TODO(plind): this ugliness is due to ldc1/sdc1 being implemented as two
-  //    word ops, 2nd with offset +4 from original. Both require 16-bit offset.
-  //    Maybe this can be used in just load/store rather than everywhere.
-  //    TEST=test-run-machops/RunLoadStoreFloat64Offset
-  static bool is_int16_special(int value) {
-    return is_int16(value + 4);
-  }
-
 
   bool CanBeImmediate(Node* node, InstructionCode opcode) {
     Int32Matcher m(node);
@@ -48,8 +40,13 @@ class MipsOperandGenerator FINAL : public OperandGenerator {
       case kMipsSar:
       case kMipsShr:
         return is_uint5(value);
+      case kMipsXor:
+        return is_uint16(value);
+      case kMipsLdc1:
+      case kMipsSdc1:
+        return is_int16(value + kIntSize);
       default:
-        return is_int16_special(value);
+        return is_int16(value);
     }
   }
 
@@ -70,7 +67,6 @@ static void VisitRRR(InstructionSelector* selector, ArchOpcode opcode,
 }
 
 
-// TODO(plind): Using for Shifts, probably WRONG, need to qualify immediate shift value. See x64 shift.
 static void VisitRRO(InstructionSelector* selector, ArchOpcode opcode, Node* node) {
   MipsOperandGenerator g(selector);
   selector->Emit(opcode, g.DefineAsRegister(node),
