@@ -1076,7 +1076,7 @@ class String : public Primitive {
     NO_OPTIONS = 0,
     HINT_MANY_WRITES_EXPECTED = 1,
     NO_NULL_TERMINATION = 2,
-    PRESERVE_ASCII_NULL = 4
+    PRESERVE_ASCII_NULL = 4,
     REPLACE_INVALID_UTF8 = 8
   };
 
