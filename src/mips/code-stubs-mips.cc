@@ -1438,7 +1438,7 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
 
   // If there is a call site cache don't look in the global cache, but do the
   // real lookup and update the call site cache.
-  if (!HasCallSiteInlineCheck()) {
+  if (!HasCallSiteInlineCheck() && !ReturnTrueFalseObject()) {
     Label miss;
     __ LoadRoot(at, Heap::kInstanceofCacheFunctionRootIndex);
     __ Branch(&miss, ne, function, Operand(at));
