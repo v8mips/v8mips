@@ -1077,6 +1077,7 @@ class String : public Primitive {
     HINT_MANY_WRITES_EXPECTED = 1,
     NO_NULL_TERMINATION = 2,
     PRESERVE_ASCII_NULL = 4
+    REPLACE_INVALID_UTF8 = 8
   };
 
   // 16-bit character codes.
