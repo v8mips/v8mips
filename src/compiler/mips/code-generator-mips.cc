@@ -257,6 +257,10 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       __ add_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0),
               i.InputDoubleRegister(1));
       break;
+    case kMipsFloat64Madd:
+      __ madd_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0),
+              i.InputDoubleRegister(1), i.InputDoubleRegister(2));
+      break;
     case kMipsFloat64Sub:
       __ sub_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0),
               i.InputDoubleRegister(1));

@@ -37,6 +37,7 @@ namespace compiler {
   V(MipsFloat64Mul)                \
   V(MipsFloat64Div)                \
   V(MipsFloat64Mod)                \
+  V(MipsFloat64Madd)               \
   V(MipsFloat64ToInt32)            \
   V(MipsFloat64ToUint32)           \
   V(MipsInt32ToFloat64)            \
