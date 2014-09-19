@@ -3954,7 +3954,7 @@ int String::WriteUtf8(char* buffer,
     char intermediate[unibrow::Utf8::kMaxEncodedSize];
     for (; i < len && pos < capacity; i++) {
       i::uc32 c = write_input_buffer.GetNext();
-      if (unibrow::Utf16::IsSurrogatePair(previous,c)) {
+      if (unibrow::Utf16::IsSurrogatePair(previous, c)) {
         // We can't use the intermediate buffer here because the encoding
         // of surrogate pairs is done under assumption that you can step
         // back and fix the UTF8 stream.  Luckily we only need space for one

@@ -92,7 +92,7 @@ unsigned Utf8::Encode(char* str,
     str[1] = 0x80 | (c & kMask);
     return 2;
   } else if (c <= kMaxThreeByteChar) {
-    if (Utf16::IsSurrogatePair(previous,c)) {
+    if (Utf16::IsSurrogatePair(previous, c)) {
       const int kUnmatchedSize = kSizeOfUnmatchedSurrogate;
       return Encode(str - kUnmatchedSize,
                     Utf16::CombineSurrogatePair(previous, c),

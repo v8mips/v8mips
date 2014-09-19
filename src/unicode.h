@@ -179,7 +179,6 @@ class Utf8 {
   // that match are coded as a 4 byte UTF-8 sequence.
   static const unsigned kBytesSavedByCombiningSurrogates = 2;
   static const unsigned kSizeOfUnmatchedSurrogate = 3;
-  
   // The maximum size a single UTF-16 code unit may take up when encoded as
   // UTF-8.
   static const unsigned kMax16BitCodeUnitSize = 3;
