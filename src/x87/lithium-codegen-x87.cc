@@ -383,9 +383,6 @@ bool LCodeGen::GenerateJumpTable() {
     Deoptimizer::JumpTableEntry* table_entry = &jump_table_[i];
     __ bind(&table_entry->label);
     Address entry = table_entry->address;
-    Deoptimizer::BailoutType type = table_entry->bailout_type;
-    int id = Deoptimizer::GetDeoptimizationId(isolate(), entry, type);
-    DCHECK_NE(Deoptimizer::kNotDeoptimizationEntry, id);
     DeoptComment(table_entry->reason);
     if (table_entry->needs_frame) {
       DCHECK(!info()->saves_caller_doubles());
@@ -1148,20 +1145,19 @@ void LCodeGen::DeoptimizeIf(Condition cc, LInstruction* instr,
     __ bind(&done);
   }
 
-  Deoptimizer::Reason reason(instr->Mnemonic(), detail);
+  Deoptimizer::Reason reason(instr->hydrogen_value()->position().raw(),
+                             instr->Mnemonic(), detail);
   DCHECK(info()->IsStub() || frame_is_built_);
   if (cc == no_condition && frame_is_built_) {
     DeoptComment(reason);
     __ call(entry, RelocInfo::RUNTIME_ENTRY);
   } else {
+    Deoptimizer::JumpTableEntry table_entry(entry, reason, bailout_type,
+                                            !frame_is_built_);
     // We often have several deopts to the same entry, reuse the last
     // jump entry if this is the case.
     if (jump_table_.is_empty() ||
-        jump_table_.last().address != entry ||
-        jump_table_.last().needs_frame != !frame_is_built_ ||
-        jump_table_.last().bailout_type != bailout_type) {
-      Deoptimizer::JumpTableEntry table_entry(entry, reason, bailout_type,
-                                              !frame_is_built_);
+        !table_entry.IsEquivalentTo(jump_table_.last())) {
       jump_table_.Add(table_entry, zone());
     }
     if (cc == no_condition) {
@@ -3974,9 +3970,8 @@ void LCodeGen::DoMathRound(LMathRound* instr) {
   __ fistp_s(MemOperand(esp, 0));
   // Check overflow.
   __ X87CheckIA();
-  __ RecordComment("D2I conversion overflow");
   __ pop(result);
-  DeoptimizeIf(equal, instr);
+  DeoptimizeIf(equal, instr, "conversion overflow");
   __ fnclex();
   // Restore round mode.
   __ X87SetRC(0x0000);
@@ -3993,8 +3988,7 @@ void LCodeGen::DoMathRound(LMathRound* instr) {
     // If the sign is positive, we return +0.
     __ fld(0);
     __ FXamSign();
-    __ RecordComment("Minus zero");
-    DeoptimizeIf(not_zero, instr);
+    DeoptimizeIf(not_zero, instr, "minus zero");
   }
   __ Move(result, Immediate(0));
   __ jmp(&done);
@@ -4010,9 +4004,8 @@ void LCodeGen::DoMathRound(LMathRound* instr) {
   __ fistp_s(MemOperand(esp, 0));
   // Check overflow.
   __ X87CheckIA();
-  __ RecordComment("D2I conversion overflow");
   __ pop(result);
-  DeoptimizeIf(equal, instr);
+  DeoptimizeIf(equal, instr, "conversion overflow");
   __ fnclex();
   // Restore round mode.
   __ X87SetRC(0x0000);
@@ -5185,16 +5178,14 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr, Label* done) {
 
     __ bind(&check_false);
     __ cmp(input_reg, factory()->false_value());
-    __ RecordComment("Deferred TaggedToI: cannot truncate");
-    DeoptimizeIf(not_equal, instr);
+    DeoptimizeIf(not_equal, instr, "cannot truncate");
     __ Move(input_reg, Immediate(0));
   } else {
     // TODO(olivf) Converting a number on the fpu is actually quite slow. We
     // should first try a fast conversion and then bailout to this slow case.
     __ cmp(FieldOperand(input_reg, HeapObject::kMapOffset),
            isolate()->factory()->heap_number_map());
-    __ RecordComment("Deferred TaggedToI: not a heap number");
-    DeoptimizeIf(not_equal, instr);
+    DeoptimizeIf(not_equal, instr, "not a heap number");
 
     __ sub(esp, Immediate(kPointerSize));
     __ fld_d(FieldOperand(input_reg, HeapNumber::kValueOffset));
@@ -5210,14 +5201,12 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr, Label* done) {
 
       __ j(equal, &no_precision_lost, Label::kNear);
       __ fstp(0);
-      __ RecordComment("Deferred TaggedToI: lost precision");
-      DeoptimizeIf(no_condition, instr);
+      DeoptimizeIf(no_condition, instr, "lost precision");
       __ bind(&no_precision_lost);
 
       __ j(parity_odd, &not_nan);
       __ fstp(0);
-      __ RecordComment("Deferred TaggedToI: NaN");
-      DeoptimizeIf(no_condition, instr);
+      DeoptimizeIf(no_condition, instr, "NaN");
       __ bind(&not_nan);
 
       __ test(input_reg, Operand(input_reg));
@@ -5232,17 +5221,14 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr, Label* done) {
       __ fstp_s(Operand(esp, 0));
       __ pop(input_reg);
       __ test(input_reg, Operand(input_reg));
-      __ RecordComment("Deferred TaggedToI: minus zero");
-      DeoptimizeIf(not_zero, instr);
+      DeoptimizeIf(not_zero, instr, "minus zero");
     } else {
       __ fist_s(MemOperand(esp, 0));
       __ fild_s(MemOperand(esp, 0));
       __ FCmp();
       __ pop(input_reg);
-      __ RecordComment("Deferred TaggedToI: lost precision");
-      DeoptimizeIf(not_equal, instr);
-      __ RecordComment("Deferred TaggedToI: NaN");
-      DeoptimizeIf(parity_even, instr);
+      DeoptimizeIf(not_equal, instr, "lost precision");
+      DeoptimizeIf(parity_even, instr, "NaN");
     }
   }
 }
