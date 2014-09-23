@@ -134,12 +134,6 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
   InstructionCode opcode = instr->opcode();
 
   switch (ArchOpcodeField::decode(opcode)) {
-    case kArchCallAddress: {
-      DirectCEntryStub stub(isolate());
-      stub.GenerateCall(masm(), i.InputRegister(0));
-      __ Drop(kCArgSlotCount);  // TODO(plind): speculative - needs to be tested!! ............
-      break;
-    }
     case kArchCallCodeObject: {
       if (instr->InputAt(0)->IsImmediate()) {
         __ Call(Handle<Code>::cast(i.InputHeapObject(0)),
@@ -162,12 +156,6 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       __ lw(at, FieldMemOperand(func, JSFunction::kCodeEntryOffset));
       __ Call(at);
       AddSafepointAndDeopt(instr);
-      break;
-    }
-    case kArchDrop: {
-      int words = MiscField::decode(instr->opcode());
-      __ Drop(words);
-      DCHECK_LT(0, words);
       break;
     }
     case kArchJmp:
