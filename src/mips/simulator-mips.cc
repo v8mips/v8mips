@@ -1330,40 +1330,6 @@ int32_t Simulator::get_pc() const {
 // executed in the simulator.  Since the host is typically IA32 we will not
 // get the correct MIPS-like behaviour on unaligned accesses.
 
-void Simulator::TraceRegWr(int32_t value) {
-  if (::v8::internal::FLAG_trace_sim) {
-    SNPrintF(trace_buf_, "%08x", value);
-  }
-}
-
-
-// TODO(plind): consider making icount_ printing a flag option.
-void Simulator::TraceMemRd(int32_t addr, int32_t value) {
-  if (::v8::internal::FLAG_trace_sim) {
-    SNPrintF(trace_buf_, "%08x <-- [%08x]    (%d)", value, addr, icount_);
-  }
-}
-
-
-void Simulator::TraceMemWr(int32_t addr, int32_t value, TraceType t) {
-  if (::v8::internal::FLAG_trace_sim) {
-    switch (t) {
-      case BYTE:
-        SNPrintF(trace_buf_, "      %02x --> [%08x]",
-                 static_cast<int8_t>(value), addr);
-        break;
-      case HALF:
-        SNPrintF(trace_buf_, "    %04x --> [%08x]",
-                 static_cast<int16_t>(value), addr);
-        break;
-      case WORD:
-        SNPrintF(trace_buf_, "%08x --> [%08x]", value, addr);
-        break;
-    }
-  }
-}
-
-
 int Simulator::ReadW(int32_t addr, Instruction* instr) {
   if (addr >=0 && addr < 0x400) {
     // This has to be a NULL-dereference, drop into debugger.
@@ -1374,7 +1340,6 @@ int Simulator::ReadW(int32_t addr, Instruction* instr) {
   }
   if ((addr & kPointerAlignmentMask) == 0) {
     intptr_t* ptr = reinterpret_cast<intptr_t*>(addr);
-    TraceMemRd(addr, static_cast<int32_t>(*ptr));
     return *ptr;
   }
   PrintF("Unaligned read at 0x%08x, pc=0x%08" V8PRIxPTR "\n",
@@ -1395,7 +1360,6 @@ void Simulator::WriteW(int32_t addr, int value, Instruction* instr) {
     dbg.Debug();
   }
   if ((addr & kPointerAlignmentMask) == 0) {
-    TraceMemWr(addr, value, WORD);
     intptr_t* ptr = reinterpret_cast<intptr_t*>(addr);
     *ptr = value;
     return;
@@ -1437,7 +1401,6 @@ void Simulator::WriteD(int32_t addr, double value, Instruction* instr) {
 uint16_t Simulator::ReadHU(int32_t addr, Instruction* instr) {
   if ((addr & 1) == 0) {
     uint16_t* ptr = reinterpret_cast<uint16_t*>(addr);
-    TraceMemRd(addr, static_cast<int32_t>(*ptr));
     return *ptr;
   }
   PrintF("Unaligned unsigned halfword read at 0x%08x, pc=0x%08" V8PRIxPTR "\n",
@@ -1451,7 +1414,6 @@ uint16_t Simulator::ReadHU(int32_t addr, Instruction* instr) {
 int16_t Simulator::ReadH(int32_t addr, Instruction* instr) {
   if ((addr & 1) == 0) {
     int16_t* ptr = reinterpret_cast<int16_t*>(addr);
-    TraceMemRd(addr, static_cast<int32_t>(*ptr));
     return *ptr;
   }
   PrintF("Unaligned signed halfword read at 0x%08x, pc=0x%08" V8PRIxPTR "\n",
@@ -1477,7 +1439,6 @@ void Simulator::WriteH(int32_t addr, uint16_t value, Instruction* instr) {
 
 void Simulator::WriteH(int32_t addr, int16_t value, Instruction* instr) {
   if ((addr & 1) == 0) {
-    TraceMemWr(addr, value, HALF);
     int16_t* ptr = reinterpret_cast<int16_t*>(addr);
     *ptr = value;
     return;
@@ -1491,14 +1452,12 @@ void Simulator::WriteH(int32_t addr, int16_t value, Instruction* instr) {
 
 uint32_t Simulator::ReadBU(int32_t addr) {
   uint8_t* ptr = reinterpret_cast<uint8_t*>(addr);
-  TraceMemRd(addr, static_cast<int32_t>(*ptr));
   return *ptr & 0xff;
 }
 
 
 int32_t Simulator::ReadB(int32_t addr) {
   int8_t* ptr = reinterpret_cast<int8_t*>(addr);
-  TraceMemRd(addr, static_cast<int32_t>(*ptr));
   return *ptr;
 }
 
@@ -1510,7 +1469,6 @@ void Simulator::WriteB(int32_t addr, uint8_t value) {
 
 
 void Simulator::WriteB(int32_t addr, int8_t value) {
-  TraceMemWr(addr, value, BYTE);
   int8_t* ptr = reinterpret_cast<int8_t*>(addr);
   *ptr = value;
 }
@@ -2661,10 +2619,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           break;
         // Conditional moves.
         case MOVN:
-          if (rt) {
-            set_register(rd_reg, rs);
-            TraceRegWr(rs);
-          }
+          if (rt) set_register(rd_reg, rs);
           break;
         case MOVCI: {
           uint32_t cc = instr->FBccValue();
@@ -2677,21 +2632,16 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           break;
         }
         case MOVZ:
-          if (!rt) {
-            set_register(rd_reg, rs);
-            TraceRegWr(rs);
-          }
+          if (!rt) set_register(rd_reg, rs);
           break;
         default:  // For other special opcodes we do the default operation.
           set_register(rd_reg, alu_out);
-          TraceRegWr(alu_out);
       }
       break;
     case SPECIAL2:
       switch (instr->FunctionFieldRaw()) {
         case MUL:
           set_register(rd_reg, alu_out);
-          TraceRegWr(alu_out);
           // HI and LO are UNPREDICTABLE after the operation.
           set_register(LO, Unpredictable);
           set_register(HI, Unpredictable);
@@ -2705,12 +2655,10 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
         case INS:
           // Ins instr leaves result in Rt, rather than Rd.
           set_register(rt_reg, alu_out);
-          TraceRegWr(alu_out);
           break;
         case EXT:
           // Ext instr leaves result in Rt, rather than Rd.
           set_register(rt_reg, alu_out);
-          TraceRegWr(alu_out);
           break;
         default:
           UNREACHABLE();
@@ -2721,7 +2669,6 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
     // cases.
     default:
       set_register(rd_reg, alu_out);
-      TraceRegWr(alu_out);
   }
 }
 
@@ -3011,7 +2958,6 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
     case XORI:
     case LUI:
       set_register(rt_reg, alu_out);
-      TraceRegWr(alu_out);
       break;
     // ------------- Memory instructions.
     case LB:
@@ -3106,12 +3052,14 @@ void Simulator::InstructionDecode(Instruction* instr) {
     CheckICache(isolate_->simulator_i_cache(), instr);
   }
   pc_modified_ = false;
-  v8::internal::EmbeddedVector<char, 256> buffer;
   if (::v8::internal::FLAG_trace_sim) {
-    SNPrintF(trace_buf_, "%s", "");
     disasm::NameConverter converter;
     disasm::Disassembler dasm(converter);
+    // Use a reasonably large buffer.
+    v8::internal::EmbeddedVector<char, 256> buffer;
     dasm.InstructionDecode(buffer, reinterpret_cast<byte*>(instr));
+    PrintF("  0x%08x  %s\n", reinterpret_cast<intptr_t>(instr),
+        buffer.start());
   }
 
   switch (instr->InstructionType()) {
@@ -3127,12 +3075,6 @@ void Simulator::InstructionDecode(Instruction* instr) {
     default:
       UNSUPPORTED();
   }
-
-  if (::v8::internal::FLAG_trace_sim) {
-    PrintF("  0x%08x  %-44s   %s\n", reinterpret_cast<intptr_t>(instr),
-        buffer.start(), trace_buf_.start());
-  }
-
   if (!pc_modified_) {
     set_register(pc, reinterpret_cast<int32_t>(instr) +
                  Instruction::kInstrSize);
