@@ -20,7 +20,7 @@ struct MipsLinkageHelperTraits {
   static Register JSCallFunctionReg() { return a1; }
   static Register ContextReg() { return cp; }
   static Register RuntimeCallFunctionReg() { return a1; }
-  static Register RuntimeCallArgCountReg() { return a0; }  // plind ??
+  static Register RuntimeCallArgCountReg() { return a0; }
   static RegList CCalleeSaveRegisters() {
     return s0.bit() | s1.bit() | s2.bit() | s3.bit() | s4.bit() | s5.bit() |
            s6.bit() | s7.bit();

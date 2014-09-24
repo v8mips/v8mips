@@ -17,7 +17,7 @@ namespace compiler {
 #define __ masm()->
 
 
-// TODO(plind): Should NOT use these lithium names, change within assembler.
+// TODO(plind): Possibly avoid using these lithium names.
 #define kScratchReg kLithiumScratchReg
 #define kCompareReg kLithiumScratchReg2
 #define kScratchDoubleReg kLithiumScratchDouble
