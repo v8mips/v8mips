@@ -85,6 +85,9 @@ Matcher<Node*> IsCall(const Matcher<CallDescriptor*>& descriptor_matcher,
                       const Matcher<Node*>& effect_matcher,
                       const Matcher<Node*>& control_matcher);
 
+Matcher<Node*> IsNumberLessThan(const Matcher<Node*>& lhs_matcher,
+                                const Matcher<Node*>& rhs_matcher);
+
 Matcher<Node*> IsLoad(const Matcher<LoadRepresentation>& rep_matcher,
                       const Matcher<Node*>& base_matcher,
                       const Matcher<Node*>& index_matcher,
@@ -116,6 +119,8 @@ Matcher<Node*> IsWord64Equal(const Matcher<Node*>& lhs_matcher,
                              const Matcher<Node*>& rhs_matcher);
 Matcher<Node*> IsInt32AddWithOverflow(const Matcher<Node*>& lhs_matcher,
                                       const Matcher<Node*>& rhs_matcher);
+Matcher<Node*> IsInt32Mul(const Matcher<Node*>& lhs_matcher,
+                          const Matcher<Node*>& rhs_matcher);
 Matcher<Node*> IsUint32LessThanOrEqual(const Matcher<Node*>& lhs_matcher,
                                        const Matcher<Node*>& rhs_matcher);
 Matcher<Node*> IsChangeFloat64ToInt32(const Matcher<Node*>& input_matcher);
