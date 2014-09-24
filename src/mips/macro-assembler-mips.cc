@@ -811,6 +811,7 @@ void MacroAssembler::Div(Register res, Register rs, const Operand& rt) {
   }
 }
 
+
 void MacroAssembler::Mod(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     if (!IsMipsArchVariant(kMips32r6)) {
@@ -865,6 +866,7 @@ void MacroAssembler::Divu(Register rs, const Operand& rt) {
     divu(rs, at);
   }
 }
+
 
 void MacroAssembler::Divu(Register res, Register rs, const Operand& rt) {
   if (rt.is_reg()) {

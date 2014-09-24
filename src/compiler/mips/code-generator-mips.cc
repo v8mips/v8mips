@@ -3,12 +3,11 @@
 // found in the LICENSE file.
 
 #include "src/compiler/code-generator.h"
-
-#include "src/mips/macro-assembler-mips.h"
 #include "src/compiler/code-generator-impl.h"
 #include "src/compiler/gap-resolver.h"
 #include "src/compiler/node-matchers.h"
 #include "src/compiler/node-properties-inl.h"
+#include "src/mips/macro-assembler-mips.h"
 #include "src/scopes.h"
 
 namespace v8 {
@@ -24,23 +23,13 @@ namespace compiler {
 #define kScratchDoubleReg kLithiumScratchDouble
 
 
-// TODO(plind): remove these debug lines.
-
-#if 1
-#define TRACE() PrintF("code_gen: %s at line %d\n", \
-    __FUNCTION__, __LINE__)
-
+// TODO(plind): consider renaming these macros.
 #define TRACE_MSG(msg) PrintF("code_gen: \'%s\' in function %s at line %d\n", \
     msg, __FUNCTION__, __LINE__)
 
-#else
-#define TRACE()
-#define TRACE_MSG(msg)
-#endif
-
-#define TRACE_UNIMPL() PrintF("UNIMPLEMENTED code_generator_mips: %s at line %d\n", \
+#define TRACE_UNIMPL() PrintF(                            \
+    "UNIMPLEMENTED code_generator_mips: %s at line %d\n", \
     __FUNCTION__, __LINE__)
-
 
 
 // Adds Mips-specific methods to convert InstructionOperands.
@@ -73,7 +62,7 @@ class MipsOperandConverter : public InstructionOperandConverter {
     if (op->IsRegister()) {
       return Operand(ToRegister(op));
     }
-    return InputImmediate(index);  // TODO(plind): make this InputImmediate name & param more symmetical
+    return InputImmediate(index);
   }
 
   MemOperand MemoryOperand(int* first_index) {
@@ -466,7 +455,7 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
   Label false_value;
   DCHECK_NE(0, instr->OutputCount());
   Register result = i.OutputRegister(instr->OutputCount() - 1);
-  // Condition cc = kNoCondition;  // TODO(plind): Optimize this routine using cc, make the code read simpler.
+  // Condition cc = kNoCondition;  // TODO(plind): Optimize this routine using cc......
 
   // MIPS does not have condition code flags, so compare and branch are
   // implemented differently than on the other arch's. The compare operations
@@ -517,7 +506,7 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
     Register left = i.InputRegister(0);
     Operand right = i.InputOperand(1);
     switch (condition) {
-      // TODO(plind): this can be totally cleaned up to a single branch to 'cc' ......
+      // TODO(plind): this can be cleaned up to a single branch to 'cc'.
       case kEqual:
         __ Branch(USE_DELAY_SLOT, &done, eq, left, right);
         __ li(result, Operand(1));  // In delay slot.
@@ -666,7 +655,6 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
   __ bind(&false_value);
   __ li(result, Operand(0));
   __ bind(&done);
-
 }
 
 
@@ -716,7 +704,6 @@ void CodeGenerator::AssemblePrologue() {
       __ sw(a2, MemOperand(fp, receiver_slot * kPointerSize));
       __ bind(&ok);
     }
-
   } else {
     __ StubPrologue();
     frame()->SetRegisterSaveAreaSize(
@@ -939,4 +926,3 @@ void CodeGenerator::EnsureSpaceForLazyDeopt() {
 }  // namespace compiler
 }  // namespace internal
 }  // namespace v8
-

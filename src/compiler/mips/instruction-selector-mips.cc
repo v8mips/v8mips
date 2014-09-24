@@ -70,17 +70,21 @@ static void VisitRRR(InstructionSelector* selector, ArchOpcode opcode,
 }
 
 
-// TODO(plind): Using for Shifts, probably WRONG, need to qualify immediate shift value. See x64 shift.
-static void VisitRRO(InstructionSelector* selector, ArchOpcode opcode, Node* node) {
+static void VisitRRO(InstructionSelector* selector,
+                     ArchOpcode opcode,
+                     Node* node) {
   MipsOperandGenerator g(selector);
-  selector->Emit(opcode, g.DefineAsRegister(node),
+  selector->Emit(opcode,
+                 g.DefineAsRegister(node),
                  g.UseRegister(node->InputAt(0)),
                  g.UseOperand(node->InputAt(1), opcode));
 }
 
 
-static void VisitBinop(InstructionSelector* selector, Node* node,
-                       InstructionCode opcode, FlagsContinuation* cont) {
+static void VisitBinop(InstructionSelector* selector,
+                       Node* node,
+                       InstructionCode opcode,
+                       FlagsContinuation* cont) {
   MipsOperandGenerator g(selector);
   Int32BinopMatcher m(node);
   InstructionOperand* inputs[4];
@@ -161,8 +165,8 @@ void InstructionSelector::VisitLoad(Node* node) {
     Emit(opcode | AddressingModeField::encode(kMode_MRI),
          g.DefineAsRegister(node), addr_reg, g.TempImmediate(0));
   }
-
 }
+
 
 void InstructionSelector::VisitStore(Node* node) {
   MipsOperandGenerator g(this);
@@ -451,7 +455,6 @@ void InstructionSelector::VisitCall(Node* call, BasicBlock* continuation,
 
 void InstructionSelector::VisitInt32AddWithOverflow(Node* node,
                                                     FlagsContinuation* cont) {
-
   VisitBinop(this, node, kMipsAddOvf, cont);
 }
 
@@ -473,7 +476,7 @@ static void VisitCompare(InstructionSelector* selector, InstructionCode opcode,
                    g.Label(cont->false_block()))->MarkAsControl();
   } else {
     DCHECK(cont->IsSet());
-    // TODO(plind): this clause WONT work for mips right now.
+    // TODO(plind): Revisit and test this path.
     selector->Emit(opcode, g.DefineAsRegister(cont->result()), left, right);
   }
 }
@@ -502,10 +505,11 @@ static void VisitWordCompare(InstructionSelector* selector, Node* node,
 }
 
 
-void InstructionSelector::VisitWord32Test(Node* node, FlagsContinuation* cont) {
+void InstructionSelector::VisitWord32Test(Node* node,
+                                          FlagsContinuation* cont) {
   switch (node->opcode()) {
     case IrOpcode::kWord32And:
-      // TODO(plind): understand the significance of this 'IR and' special case.)
+      // TODO(plind): understand the significance of 'IR and' special case.
       return VisitWordCompare(this, node, kMipsTst, cont, true);
     default:
       break;
@@ -513,7 +517,7 @@ void InstructionSelector::VisitWord32Test(Node* node, FlagsContinuation* cont) {
 
   MipsOperandGenerator g(this);
   // kMipsTst is a pseudo-instruction to do logical 'and' and leave the result
-  // in tmp register at.
+  // in a dedicated tmp register.
   VisitCompare(this, kMipsTst, g.UseRegister(node), g.UseRegister(node),
                cont);
 }
