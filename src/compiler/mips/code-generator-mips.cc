@@ -382,9 +382,15 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
   if (instr->arch_opcode() == kMipsTst) {
     // The kMipsTst psuedo-instruction emits And to 'kCompareReg' register.
     switch (condition) {
-      case kNotEqual: cc = ne; break;
-      case kEqual:    cc = eq; break;
-      default: UNSUPPORTED_COND(kMipsTst, condition); break;
+      case kNotEqual:
+        cc = ne;
+        break;
+      case kEqual:
+        cc = eq;
+        break;
+      default:
+        UNSUPPORTED_COND(kMipsTst, condition);
+        break;
     }
     __ Branch(tlabel, cc, kCompareReg, Operand(zero_reg));
 
@@ -392,48 +398,95 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
              instr->arch_opcode() == kMipsSubOvf) {
     // kMipsAddOvf, SubOvf emit negative result to 'kCompareReg' on overflow.
     switch (condition) {
-      case kOverflow:    cc = lt; break;
-      case kNotOverflow: cc = ge; break;
-      default: UNSUPPORTED_COND(kMipsAddOvf, condition); break;
+      case kOverflow:
+        cc = lt;
+        break;
+      case kNotOverflow:
+        cc = ge;
+        break;
+      default:
+        UNSUPPORTED_COND(kMipsAddOvf, condition);
+        break;
     }
     __ Branch(tlabel, cc, kCompareReg, Operand(zero_reg));
 
   } else if (instr->arch_opcode() == kMipsCmp) {
     switch (condition) {
-      case kEqual:                      cc = eq; break;
-      case kNotEqual:                   cc = ne; break;
-      case kSignedLessThan:             cc = lt; break;
-      case kSignedGreaterThanOrEqual:   cc = ge; break;
-      case kSignedLessThanOrEqual:      cc = le; break;
-      case kSignedGreaterThan:          cc = gt; break;
-      case kUnsignedLessThan:           cc = lo; break;
-      case kUnsignedGreaterThanOrEqual: cc = hs; break;
-      case kUnsignedLessThanOrEqual:    cc = ls; break;
-      case kUnsignedGreaterThan:        cc = hi; break;
-      default: UNSUPPORTED_COND(kMipsCmp, condition); break;
+      case kEqual:
+        cc = eq;
+        break;
+      case kNotEqual:
+        cc = ne;
+        break;
+      case kSignedLessThan:
+        cc = lt;
+        break;
+      case kSignedGreaterThanOrEqual:
+        cc = ge;
+        break;
+      case kSignedLessThanOrEqual:
+        cc = le;
+        break;
+      case kSignedGreaterThan:
+        cc = gt;
+        break;
+      case kUnsignedLessThan:
+        cc = lo;
+        break;
+      case kUnsignedGreaterThanOrEqual:
+        cc = hs;
+        break;
+      case kUnsignedLessThanOrEqual:
+        cc = ls;
+        break;
+      case kUnsignedGreaterThan:
+        cc = hi;
+        break;
+      default:
+        UNSUPPORTED_COND(kMipsCmp, condition);
+        break;
     }
     __ Branch(tlabel, cc, i.InputRegister(0), i.InputOperand(1));
 
-    if (!fallthru) __ Branch(flabel);  // no fallthru to flabel.
+    if (!fallthru)
+      __ Branch(flabel);  // no fallthru to flabel.
     __ bind(&done);
 
   } else if (instr->arch_opcode() == kMipsFloat64Cmp) {
     // TODO(dusmil) optimize unordered checks to use less instructions
     // even if we have to unfold BranchF macro.
-    Label *nan = flabel;
+    Label* nan = flabel;
     switch (condition) {
-      case kUnorderedEqual:              cc = eq;               break;
-      case kUnorderedNotEqual:           cc = ne; nan = tlabel; break;
-      case kUnorderedLessThan:           cc = lt;               break;
-      case kUnorderedGreaterThanOrEqual: cc = ge; nan = tlabel; break;
-      case kUnorderedLessThanOrEqual:    cc = le;               break;
-      case kUnorderedGreaterThan:        cc = gt; nan = tlabel; break;
-      default: UNSUPPORTED_COND(kMipsFloat64Cmp, condition);    break;
+      case kUnorderedEqual:
+        cc = eq;
+        break;
+      case kUnorderedNotEqual:
+        cc = ne;
+        nan = tlabel;
+        break;
+      case kUnorderedLessThan:
+        cc = lt;
+        break;
+      case kUnorderedGreaterThanOrEqual:
+        cc = ge;
+        nan = tlabel;
+        break;
+      case kUnorderedLessThanOrEqual:
+        cc = le;
+        break;
+      case kUnorderedGreaterThan:
+        cc = gt;
+        nan = tlabel;
+        break;
+      default:
+        UNSUPPORTED_COND(kMipsFloat64Cmp, condition);
+        break;
     }
-    __ BranchF(tlabel, nan, cc,
-               i.InputDoubleRegister(0), i.InputDoubleRegister(1));
+    __ BranchF(
+        tlabel, nan, cc, i.InputDoubleRegister(0), i.InputDoubleRegister(1));
 
-    if (!fallthru) __ Branch(flabel);  // no fallthru to flabel.
+    if (!fallthru)
+      __ Branch(flabel);  // no fallthru to flabel.
     __ bind(&done);
 
   } else {
@@ -455,7 +508,7 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
   Label false_value;
   DCHECK_NE(0, instr->OutputCount());
   Register result = i.OutputRegister(instr->OutputCount() - 1);
-  // Condition cc = kNoCondition;  // TODO(plind): Optimize this routine using cc......
+  Condition cc = kNoCondition;
 
   // MIPS does not have condition code flags, so compare and branch are
   // implemented differently than on the other arch's. The compare operations
@@ -471,97 +524,77 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
     // The kMipsTst psuedo-instruction emits And to 'kCompareReg' register.
     switch (condition) {
       case kNotEqual:
-        __ Branch(USE_DELAY_SLOT, &done, ne, kCompareReg, Operand(zero_reg));
-        __ li(result, Operand(1));  // In delay slot.
+        cc = ne;
         break;
       case kEqual:
-        __ Branch(USE_DELAY_SLOT, &done, eq, kCompareReg, Operand(zero_reg));
-        __ li(result, Operand(1));  // In delay slot.
+        cc = eq;
         break;
       default:
-        // TODO(plind): Find debug printing support for text condition codes.
-        PrintF("Unsupported kMipsTst condition: %d\n", condition);
-        UNIMPLEMENTED();
+        UNSUPPORTED_COND(kMipsTst, condition);
         break;
     }
+    __ Branch(USE_DELAY_SLOT, &done, cc, kCompareReg, Operand(zero_reg));
+    __ li(result, Operand(1));  // In delay slot.
+
   } else if (instr->arch_opcode() == kMipsAddOvf ||
              instr->arch_opcode() == kMipsSubOvf) {
     // kMipsAddOvf, SubOvf emits negative result to 'kCompareReg' on overflow.
     switch (condition) {
       case kOverflow:
-        __ Branch(USE_DELAY_SLOT, &done, lt, kCompareReg, Operand(zero_reg));
-        __ li(result, Operand(1));  // In delay slot.
+        cc = lt;
         break;
       case kNotOverflow:
-        __ Branch(USE_DELAY_SLOT, &done, ge, kCompareReg, Operand(zero_reg));
-        __ li(result, Operand(1));  // In delay slot.
+        cc = ge;
         break;
       default:
-        // TODO(plind): Find debug printing support for text condition codes.
-        PrintF("Unsupported kMipsAdd/SubOvf condition: %d\n", condition);
-        UNIMPLEMENTED();
+        UNSUPPORTED_COND(kMipsAddOvf, condition);
         break;
     }
+    __ Branch(USE_DELAY_SLOT, &done, cc, kCompareReg, Operand(zero_reg));
+    __ li(result, Operand(1));  // In delay slot.
+
+
   } else if (instr->arch_opcode() == kMipsCmp) {
     Register left = i.InputRegister(0);
     Operand right = i.InputOperand(1);
     switch (condition) {
-      // TODO(plind): this can be cleaned up to a single branch to 'cc'.
       case kEqual:
-        __ Branch(USE_DELAY_SLOT, &done, eq, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        cc = eq;
         break;
       case kNotEqual:
-        __ Branch(USE_DELAY_SLOT, &done, ne, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        cc = ne;
         break;
       case kSignedLessThan:
-        __ Branch(USE_DELAY_SLOT, &done, lt, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        cc = lt;
         break;
       case kSignedGreaterThanOrEqual:
-        __ Branch(USE_DELAY_SLOT, &done, ge, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        cc = ge;
         break;
       case kSignedLessThanOrEqual:
-        __ Branch(USE_DELAY_SLOT, &done, le, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        cc = le;
         break;
       case kSignedGreaterThan:
-        __ Branch(USE_DELAY_SLOT, &done, gt, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        cc = gt;
         break;
       case kUnsignedLessThan:
-        __ Branch(USE_DELAY_SLOT, &done, lo, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        cc = lo;
         break;
       case kUnsignedGreaterThanOrEqual:
-        __ Branch(USE_DELAY_SLOT, &done, hs, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        cc = hs;
         break;
       case kUnsignedLessThanOrEqual:
-        __ Branch(USE_DELAY_SLOT, &done, ls, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        cc = ls;
         break;
       case kUnsignedGreaterThan:
-        __ Branch(USE_DELAY_SLOT, &done, hi, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        cc = hi;
         break;
-      case kOverflow:
-      case kNotOverflow:
-        TRACE_MSG("Under/Overflow not implemented on integer compare.\n");
-        UNIMPLEMENTED();
-        break;
-      case kUnorderedEqual:
-      case kUnorderedNotEqual:
-      case kUnorderedLessThan:
-      case kUnorderedGreaterThanOrEqual:
-      case kUnorderedLessThanOrEqual:
-      case kUnorderedGreaterThan:
-        TRACE_MSG("Unordered tests not implemented on integer compare.\n");
-        UNIMPLEMENTED();
+      default:
+        UNSUPPORTED_COND(kMipsCmp, condition);
         break;
     }
+    __ Branch(USE_DELAY_SLOT, &done, cc, left, right);
+    __ li(result, Operand(1));  // In delay slot.
+
   } else if (instr->arch_opcode() == kMipsFloat64Cmp) {
     FPURegister left = i.InputDoubleRegister(0);
     FPURegister right = i.InputDoubleRegister(1);
@@ -571,80 +604,41 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
     FPURegister dummy2 = f2;
     switch (condition) {
       case kUnorderedEqual:
-        // TODO(plind):  HANDLE the NaN junk - better than this ugliness:
-        __ BranchF(NULL, &false_value, cc_default, dummy1, dummy2);
-      // Fall through.
-      case kEqual:
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, eq, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        // TODO(plind):  improve the NaN testing throughout this function.
+        __ BranchF(NULL, &false_value, kNoCondition, dummy1, dummy2);
+        cc = eq;
         break;
       case kUnorderedNotEqual:
-        // TODO(plind):  HANDLE the NaN junk - better than this ugliness:
-        // TODO(plind): this confusing bit of code returns 1 on NaN.
-        __ BranchF(USE_DELAY_SLOT, NULL, &done, cc_default, dummy1, dummy2);
-        __ li(result, Operand(1));  // In delay slot.
-      // Fall through.
-      case kNotEqual:
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, ne, left, right);
-        __ li(result, Operand(1));  // In delay slot.
-        break;
-      case kSignedLessThan:
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, lt, left, right);
-        __ li(result, Operand(1));  // In delay slot.
-        break;
-      case kSignedGreaterThanOrEqual:
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, ge, left, right);
-        __ li(result, Operand(1));  // In delay slot.
-        break;
-      case kSignedLessThanOrEqual:
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, le, left, right);
-        __ li(result, Operand(1));  // In delay slot.
-        break;
-      case kSignedGreaterThan:
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, gt, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        __ BranchF(USE_DELAY_SLOT, NULL, &done, kNoCondition, dummy1, dummy2);
+        __ li(result, Operand(1));  // In delay slot - returns 1 on NaN.
+        cc = ne;
         break;
       case kUnorderedLessThan:
-        // TODO(plind):  HANDLE the NaN junk - better than this ugliness:
-        __ BranchF(NULL, &false_value, cc_default, dummy1, dummy2);
-      // Fall through.
-      case kUnsignedLessThan:
-        // TODO(plind): Experimental: use FP signed compare in these 4 cases.
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, lt, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        __ BranchF(NULL, &false_value, kNoCondition, dummy1, dummy2);
+        cc = lt;
         break;
       case kUnorderedGreaterThanOrEqual:
-        // TODO(plind):  HANDLE the NaN junk - better than this ugliness:
-        // TODO(plind): this confusing bit of code returns 1 on NaN.
-        __ BranchF(USE_DELAY_SLOT, NULL, &done, cc_default, dummy1, dummy2);
-        __ li(result, Operand(1));  // In delay slot.
-      case kUnsignedGreaterThanOrEqual:
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, ge, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        __ BranchF(USE_DELAY_SLOT, NULL, &done, kNoCondition, dummy1, dummy2);
+        __ li(result, Operand(1));  // In delay slot - returns 1 on NaN.
+        cc = ge;
         break;
       case kUnorderedLessThanOrEqual:
-        // TODO(plind):  HANDLE the NaN junk - better than this ugliness:
-        __ BranchF(NULL, &false_value, cc_default, dummy1, dummy2);
-      // Fall through.
-      case kUnsignedLessThanOrEqual:
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, le, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        __ BranchF(NULL, &false_value, kNoCondition, dummy1, dummy2);
+        cc = le;
         break;
       case kUnorderedGreaterThan:
-        // TODO(plind):  HANDLE the NaN junk - better than this ugliness:
-        // TODO(plind): this confusing bit of code returns 1 on NaN.
-        __ BranchF(USE_DELAY_SLOT, NULL, &done, cc_default, dummy1, dummy2);
-        __ li(result, Operand(1));  // In delay slot.
-      case kUnsignedGreaterThan:
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, gt, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        __ BranchF(USE_DELAY_SLOT, NULL, &done, kNoCondition, dummy1, dummy2);
+        __ li(result, Operand(1));  // In delay slot - returns 1 on NaN.
+        cc = gt;
         break;
-      case kOverflow:
-      case kNotOverflow:
-        TRACE_MSG("Under/Overflow not implemented on FP compare.\n");
-        UNIMPLEMENTED();
+      default:
+        UNSUPPORTED_COND(kMipsCmp, condition);
         break;
     }
+    __ BranchF(USE_DELAY_SLOT, &done, NULL, cc, left, right);
+    __ li(result, Operand(1));  // In delay slot - branch taken returns 1.
+    // Fall-thru (branch not taken) returns 0.
+
   } else {
     PrintF("AssembleArchBranch Unimplemented arch_opcode is : %d\n",
            instr->arch_opcode());
