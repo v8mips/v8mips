@@ -707,7 +707,7 @@ INSTANTIATE_TEST_CASE_P(InstructionSelectorTest,
 
 
 // ----------------------------------------------------------------------------
-// Load more than 16 bits.
+// Load/store offsets more than 16 bits.
 // ----------------------------------------------------------------------------
 
 
