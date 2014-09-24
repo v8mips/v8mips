@@ -367,22 +367,6 @@ void InstructionSelector::VisitChangeFloat64ToUint32(Node* node) {
 
 
 void InstructionSelector::VisitFloat64Add(Node* node) {
-  MipsOperandGenerator g(this);
-  Int32BinopMatcher m(node);
-  if (m.left().IsFloat64Mul() && CanCover(node, m.left().node())) {
-    Int32BinopMatcher mleft(m.left().node());
-    Emit(kMipsFloat64Madd, g.DefineSameAsFirst(node),
-         g.UseRegister(m.right().node()), g.UseRegister(mleft.left().node()),
-         g.UseRegister(mleft.right().node()));
-    return;
-  }
-  if (m.right().IsFloat64Mul() && CanCover(node, m.right().node())) {
-    Int32BinopMatcher mright(m.right().node());
-    Emit(kMipsFloat64Madd, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
-         g.UseRegister(mright.left().node()),
-         g.UseRegister(mright.right().node()));
-    return;
-  }
   VisitRRR(this, kMipsFloat64Add, node);
 }
 
