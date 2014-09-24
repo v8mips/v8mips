@@ -54,6 +54,11 @@
             'x64/instruction-selector-x64-unittest.cc',
           ],
         }],
+        ['v8_target_arch=="mipsel"', {
+          'sources': [  ### gcmole(arch:mipsel) ###
+            'mips/instruction-selector-mips-unittest.cc',
+          ],
+        }],
       ],
     },
   ],
