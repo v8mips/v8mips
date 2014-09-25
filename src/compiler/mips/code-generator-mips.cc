@@ -44,6 +44,9 @@ class MipsOperandConverter : public InstructionOperandConverter {
     switch (constant.type()) {
       case Constant::kInt32:
         return Operand(constant.ToInt32());
+      case Constant::kFloat32:
+        return Operand(
+            isolate()->factory()->NewNumber(constant.ToFloat32(), TENURED));
       case Constant::kFloat64:
         return Operand(
             isolate()->factory()->NewNumber(constant.ToFloat64(), TENURED));
@@ -772,14 +775,18 @@ void CodeGenerator::AssembleMove(InstructionOperand* source,
       __ sw(temp, g.ToMemOperand(destination));
     }
   } else if (source->IsConstant()) {
+    Constant src = g.ToConstant(source);
     if (destination->IsRegister() || destination->IsStackSlot()) {
       Register dst =
           destination->IsRegister() ? g.ToRegister(destination) : kScratchReg;
-      Constant src = g.ToConstant(source);
       switch (src.type()) {
         case Constant::kInt32:
           __ li(dst, Operand(src.ToInt32()));
           break;
+        case Constant::kFloat32:
+          __ li(dst,
+              isolate()->factory()->NewNumber(src.ToFloat32(), TENURED));
+        break;
         case Constant::kInt64:
           UNREACHABLE();
           break;
@@ -794,14 +801,25 @@ void CodeGenerator::AssembleMove(InstructionOperand* source,
           break;
       }
       if (destination->IsStackSlot()) __ sw(dst, g.ToMemOperand(destination));
-    } else if (destination->IsDoubleRegister()) {
-      FPURegister result = g.ToDoubleRegister(destination);
-      __ Move(result, g.ToDouble(source));
+    } else if (src.type() == Constant::kFloat32) {
+      FPURegister dst = destination->IsDoubleRegister() ?
+          g.ToDoubleRegister(destination):
+              kScratchDoubleReg.low();
+      // TODO(turbofan): Can we do better here?
+      __ li(at, Operand(bit_cast<int32_t>(src.ToFloat32())));
+      __ mtc1(at, dst);
+      if (destination->IsDoubleStackSlot()) {
+        __ swc1(dst, g.ToMemOperand(destination));
+      }
     } else {
-      DCHECK(destination->IsDoubleStackSlot());
-      FPURegister temp = kScratchDoubleReg;
-      __ Move(temp, g.ToDouble(source));
-      __ sdc1(temp, g.ToMemOperand(destination));
+      DCHECK_EQ(Constant::kFloat64, src.type());
+      DoubleRegister dst = destination->IsDoubleRegister()
+        ? g.ToDoubleRegister(destination)
+            : kScratchDoubleReg;
+      __ Move(dst, src.ToFloat64());
+      if (destination->IsDoubleStackSlot()) {
+        __ sdc1(dst, g.ToMemOperand(destination));
+      }
     }
   } else if (source->IsDoubleRegister()) {
     FPURegister src = g.ToDoubleRegister(source);
