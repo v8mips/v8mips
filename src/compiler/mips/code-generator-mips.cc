@@ -44,7 +44,7 @@ class MipsOperandConverter FINAL : public InstructionOperandConverter {
   }
 
   FloatRegister InputSingleRegister(int index) {
-    return ToSingleRegister(instr_->OutputAt(index));
+    return ToSingleRegister(instr_->InputAt(index));
   }
 
   FloatRegister ToSingleRegister(InstructionOperand* op) {
