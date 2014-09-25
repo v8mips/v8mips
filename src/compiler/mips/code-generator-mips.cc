@@ -263,6 +263,20 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       __ MovFromFloatResult(i.OutputDoubleRegister());
       break;
     }
+    case kMipsSqrtD: {
+      __ sqrt_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0));
+    }
+    case kMipsCvtSD: {
+      // All FPURegisters are double-precision sized, but can hold singles.
+      // TODO(plind): We may need to set rounding mode to truncation here.
+      __ cvt_s_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0));
+      break;
+    }
+    case kMipsCvtDS: {
+      // All FPURegisters are double-precision sized, but can hold singles.
+      __ cvt_d_s(i.OutputDoubleRegister(), i.InputDoubleRegister(0));
+      break;
+    }
     case kMipsInt32ToFloat64: {
       FPURegister scratch = kScratchDoubleReg;
       __ mtc1(i.InputRegister(0), scratch);
