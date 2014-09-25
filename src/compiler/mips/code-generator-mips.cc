@@ -265,6 +265,7 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
     }
     case kMipsSqrtD: {
       __ sqrt_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0));
+      break;
     }
     case kMipsCvtSD: {
       // All FPURegisters are double-precision sized, but can hold singles.
@@ -327,18 +328,13 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
     case kMipsSw:
       __ sw(i.InputRegister(2), i.MemoryOperand());
       break;
-    case kMipsLwc1: {
-      FPURegister scratch = kScratchDoubleReg;
-      __ lwc1(scratch, i.MemoryOperand());
-      __ cvt_d_s(i.OutputDoubleRegister(), scratch);
+    case kMipsLwc1:
+      __ lwc1(i.OutputDoubleRegister(), i.MemoryOperand());
       break;
-    }
     case kMipsSwc1: {
       int index = 0;
-      FPURegister scratch = kScratchDoubleReg;
       MemOperand operand = i.MemoryOperand(&index);
-      __ cvt_s_d(scratch, i.InputDoubleRegister(index));
-      __ swc1(scratch, operand);
+      __ swc1(i.InputDoubleRegister(index), operand);
       break;
     }
     case kMipsLdc1:
