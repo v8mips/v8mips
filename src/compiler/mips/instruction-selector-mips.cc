@@ -332,6 +332,12 @@ void InstructionSelector::VisitInt32UMod(Node* node) {
 }
 
 
+void InstructionSelector::VisitChangeFloat32ToFloat64(Node* node) {
+  MipsOperandGenerator g(this);
+  Emit(kMipsCvtDS, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
+}
+
+
 void InstructionSelector::VisitChangeInt32ToFloat64(Node* node) {
   MipsOperandGenerator g(this);
   Emit(kMipsInt32ToFloat64, g.DefineAsRegister(node),
@@ -357,6 +363,12 @@ void InstructionSelector::VisitChangeFloat64ToUint32(Node* node) {
   MipsOperandGenerator g(this);
   Emit(kMipsFloat64ToUint32, g.DefineAsRegister(node),
        g.UseRegister(node->InputAt(0)));
+}
+
+
+void InstructionSelector::VisitTruncateFloat64ToFloat32(Node* node) {
+  MipsOperandGenerator g(this);
+  Emit(kMipsCvtSD, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
 }
 
 
@@ -387,6 +399,11 @@ void InstructionSelector::VisitFloat64Mod(Node* node) {
        g.UseFixed(node->InputAt(1), f14))->MarkAsCall();
 }
 
+
+void InstructionSelector::VisitFloat64Sqrt(Node* node) {
+  MipsOperandGenerator g(this);
+  Emit(kMipsSqrtD, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
+}
 
 void InstructionSelector::VisitCall(Node* call, BasicBlock* continuation,
                                     BasicBlock* deoptimization) {

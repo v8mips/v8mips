@@ -34,10 +34,24 @@ namespace compiler {
 
 
 // Adds Mips-specific methods to convert InstructionOperands.
-class MipsOperandConverter : public InstructionOperandConverter {
+class MipsOperandConverter FINAL : public InstructionOperandConverter {
  public:
   MipsOperandConverter(CodeGenerator* gen, Instruction* instr)
       : InstructionOperandConverter(gen, instr) {}
+
+  FloatRegister OutputSingleRegister(int index = 0) {
+    return ToSingleRegister(instr_->OutputAt(index));
+  }
+
+  FloatRegister InputSingleRegister(int index) {
+    return ToSingleRegister(instr_->OutputAt(index));
+  }
+
+  FloatRegister ToSingleRegister(InstructionOperand* op) {
+    // Single (Float) and Double register namespace is same on MIPS,
+    // both are typedefs of FPURegister.
+    return ToDoubleRegister(op);
+  }
 
   Operand InputImmediate(int index) {
     Constant constant = ToConstant(instr_->InputAt(index));
@@ -263,6 +277,21 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       __ MovFromFloatResult(i.OutputDoubleRegister());
       break;
     }
+    case kMipsSqrtD: {
+      __ sqrt_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0));
+      break;
+    }
+    case kMipsCvtSD: {
+      // All FPURegisters are double-precision sized, but can hold singles.
+      // TODO(plind): We may need to set rounding mode to truncation here.
+      __ cvt_s_d(i.OutputSingleRegister(), i.InputDoubleRegister(0));
+      break;
+    }
+    case kMipsCvtDS: {
+      // All FPURegisters are double-precision sized, but can hold singles.
+      __ cvt_d_s(i.OutputDoubleRegister(), i.InputSingleRegister(0));
+      break;
+    }
     case kMipsInt32ToFloat64: {
       FPURegister scratch = kScratchDoubleReg;
       __ mtc1(i.InputRegister(0), scratch);
@@ -314,17 +343,13 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       __ sw(i.InputRegister(2), i.MemoryOperand());
       break;
     case kMipsLwc1: {
-      FPURegister scratch = kScratchDoubleReg;
-      __ lwc1(scratch, i.MemoryOperand());
-      __ cvt_d_s(i.OutputDoubleRegister(), scratch);
+      __ lwc1(i.OutputSingleRegister(), i.MemoryOperand());
       break;
     }
     case kMipsSwc1: {
       int index = 0;
-      FPURegister scratch = kScratchDoubleReg;
       MemOperand operand = i.MemoryOperand(&index);
-      __ cvt_s_d(scratch, i.InputDoubleRegister(index));
-      __ swc1(scratch, operand);
+      __ swc1(i.InputSingleRegister(index), operand);
       break;
     }
     case kMipsLdc1:
