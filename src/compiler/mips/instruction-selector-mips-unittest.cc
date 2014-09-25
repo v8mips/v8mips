@@ -18,6 +18,11 @@ struct MachInst {
   MachineType machine_type;
 };
 
+template <typename T>
+std::ostream& operator<<(std::ostream& os, const MachInst<T>& mi) {
+  return os << mi.constructor_name;
+}
+
 typedef MachInst<Node* (RawMachineAssembler::*)(Node*)> MachInst1;
 typedef MachInst<Node* (RawMachineAssembler::*)(Node*, Node*)> MachInst2;
 
@@ -34,7 +39,7 @@ struct FPCmp {
   FlagsCondition cond;
 };
 
-static const FPCmp kFPCmpInstructions[] = {
+const FPCmp kFPCmpInstructions[] = {
     {{&RawMachineAssembler::Float64Equal, "Float64Equal", kMipsFloat64Cmp,
       kMachFloat64},
      kUnorderedEqual},
@@ -63,7 +68,7 @@ struct Conversion {
 // ----------------------------------------------------------------------------
 
 
-static const MachInst2 kLogicalInstructions[] = {
+const MachInst2 kLogicalInstructions[] = {
     {&RawMachineAssembler::WordAnd, "WordAnd", kMipsAnd, kMachInt16},
     {&RawMachineAssembler::WordOr, "WordOr", kMipsOr, kMachInt16},
     {&RawMachineAssembler::WordXor, "WordXor", kMipsXor, kMachInt16},
@@ -77,7 +82,7 @@ static const MachInst2 kLogicalInstructions[] = {
 // ----------------------------------------------------------------------------
 
 
-static const MachInst2 kShiftInstructions[] = {
+const MachInst2 kShiftInstructions[] = {
     {&RawMachineAssembler::WordShl, "WordShl", kMipsShl, kMachInt16},
     {&RawMachineAssembler::WordShr, "WordShr", kMipsShr, kMachInt16},
     {&RawMachineAssembler::WordSar, "WordSar", kMipsSar, kMachInt16},
@@ -93,7 +98,7 @@ static const MachInst2 kShiftInstructions[] = {
 // ----------------------------------------------------------------------------
 
 
-static const MachInst2 kMulDivInstructions[] = {
+const MachInst2 kMulDivInstructions[] = {
     {&RawMachineAssembler::Int32Mul, "Int32Mul", kMipsMul, kMachInt32},
     {&RawMachineAssembler::Int32Div, "Int32Div", kMipsDiv, kMachInt32},
     {&RawMachineAssembler::Int32UDiv, "Int32UDiv", kMipsDivU, kMachUint32},
@@ -108,7 +113,7 @@ static const MachInst2 kMulDivInstructions[] = {
 // ----------------------------------------------------------------------------
 
 
-static const MachInst2 kModInstructions[] = {
+const MachInst2 kModInstructions[] = {
     {&RawMachineAssembler::Int32Mod, "Int32Mod", kMipsMod, kMachInt32},
     {&RawMachineAssembler::Int32UMod, "Int32UMod", kMipsModU, kMachInt32},
     {&RawMachineAssembler::Float64Mod, "Float64Mod", kMipsFloat64Mod,
@@ -120,7 +125,7 @@ static const MachInst2 kModInstructions[] = {
 // ----------------------------------------------------------------------------
 
 
-static const MachInst2 kFPArithInstructions[] = {
+const MachInst2 kFPArithInstructions[] = {
     {&RawMachineAssembler::Float64Add, "Float64Add", kMipsFloat64Add,
      kMachFloat64},
     {&RawMachineAssembler::Float64Sub, "Float64Sub", kMipsFloat64Sub,
@@ -132,7 +137,7 @@ static const MachInst2 kFPArithInstructions[] = {
 // ----------------------------------------------------------------------------
 
 
-static const MachInst2 kAddSubInstructions[] = {
+const MachInst2 kAddSubInstructions[] = {
     {&RawMachineAssembler::Int32Add, "Int32Add", kMipsAdd, kMachInt32},
     {&RawMachineAssembler::Int32Sub, "Int32Sub", kMipsSub, kMachInt32},
     {&RawMachineAssembler::Int32AddWithOverflow, "Int32AddWithOverflow",
@@ -146,7 +151,7 @@ static const MachInst2 kAddSubInstructions[] = {
 // ----------------------------------------------------------------------------
 
 
-static const MachInst1 kAddSubOneInstructions[] = {
+const MachInst1 kAddSubOneInstructions[] = {
     {&RawMachineAssembler::Int32Neg, "Int32Neg", kMipsSub, kMachInt32},
     // TODO(dusmil): check this ...
     // {&RawMachineAssembler::WordEqual  , "WordEqual"  , kMipsTst, kMachInt32}
@@ -158,7 +163,7 @@ static const MachInst1 kAddSubOneInstructions[] = {
 // ----------------------------------------------------------------------------
 
 
-static const IntCmp kCmpInstructions[] = {
+const IntCmp kCmpInstructions[] = {
     {{&RawMachineAssembler::WordEqual, "WordEqual", kMipsCmp, kMachInt16}, 1U},
     {{&RawMachineAssembler::WordNotEqual, "WordNotEqual", kMipsCmp, kMachInt16},
      2U},
@@ -191,7 +196,7 @@ static const IntCmp kCmpInstructions[] = {
 // Conversion instructions.
 // ----------------------------------------------------------------------------
 
-static const Conversion kConversionInstructions[] = {
+const Conversion kConversionInstructions[] = {
     // Conversion instructions are related to machine_operator.h:
     // FPU conversions:
     // Convert representation of integers between float64 and int32/uint32.
@@ -511,6 +516,13 @@ struct MemoryAccessImm {
 };
 
 
+std::ostream& operator<<(std::ostream& os, const MemoryAccessImm& acc) {
+  OStringStream ost;
+  ost << acc.type;
+  return os << ost.c_str();
+}
+
+
 struct MemoryAccessImm1 {
   MachineType type;
   ArchOpcode load_opcode;
@@ -521,12 +533,19 @@ struct MemoryAccessImm1 {
 };
 
 
+std::ostream& operator<<(std::ostream& os, const MemoryAccessImm1& acc) {
+  OStringStream ost;
+  ost << acc.type;
+  return os << ost.c_str();
+}
+
+
 // ----------------------------------------------------------------------------
 // Loads and stores immediate values.
 // ----------------------------------------------------------------------------
 
 
-static const MemoryAccessImm kMemoryAccessesImm[] = {
+const MemoryAccessImm kMemoryAccessesImm[] = {
     {kMachInt8,
      kMipsLb,
      kMipsSb,
@@ -578,7 +597,7 @@ static const MemoryAccessImm kMemoryAccessesImm[] = {
       115, 124, 286, 655, 1362, 1569, 2587, 3067, 3096, 3462, 3510, 4095}}};
 
 
-static const MemoryAccessImm1 kMemoryAccessImmMoreThan16bit[] = {
+const MemoryAccessImm1 kMemoryAccessImmMoreThan16bit[] = {
     {kMachInt8,
      kMipsLb,
      kMipsSb,
@@ -791,7 +810,6 @@ TEST_F(InstructionSelectorTest, Word32EqualWithZero) {
     EXPECT_EQ(kEqual, s[0]->flags_condition());
   }
 }
-
 
 }  // namespace compiler
 }  // namespace internal
