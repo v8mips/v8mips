@@ -31,19 +31,19 @@ namespace compiler {
   V(MipsMov)                       \
   V(MipsTst)                       \
   V(MipsCmp)                       \
-  V(MipsFloat64Cmp)                \
-  V(MipsFloat64Add)                \
-  V(MipsFloat64Sub)                \
-  V(MipsFloat64Mul)                \
-  V(MipsFloat64Div)                \
-  V(MipsFloat64Mod)                \
+  V(MipsCmpD)                      \
+  V(MipsAddD)                      \
+  V(MipsSubD)                      \
+  V(MipsMulD)                      \
+  V(MipsDivD)                      \
+  V(MipsModD)                      \
   V(MipsSqrtD)                     \
   V(MipsCvtSD)                     \
   V(MipsCvtDS)                     \
-  V(MipsFloat64ToInt32)            \
-  V(MipsFloat64ToUint32)           \
-  V(MipsInt32ToFloat64)            \
-  V(MipsUint32ToFloat64)           \
+  V(MipsTruncWD)                   \
+  V(MipsTruncUwD)                  \
+  V(MipsCvtDW)                     \
+  V(MipsCvtDUw)                    \
   V(MipsLb)                        \
   V(MipsLbu)                       \
   V(MipsSb)                        \

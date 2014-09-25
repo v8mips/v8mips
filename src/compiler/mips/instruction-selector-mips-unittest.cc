@@ -40,20 +40,20 @@ struct FPCmp {
 };
 
 const FPCmp kFPCmpInstructions[] = {
-    {{&RawMachineAssembler::Float64Equal, "Float64Equal", kMipsFloat64Cmp,
+    {{&RawMachineAssembler::Float64Equal, "Float64Equal", kMipsCmpD,
       kMachFloat64},
      kUnorderedEqual},
-    {{&RawMachineAssembler::Float64LessThan, "Float64LessThan", kMipsFloat64Cmp,
+    {{&RawMachineAssembler::Float64LessThan, "Float64LessThan", kMipsCmpD,
       kMachFloat64},
      kUnorderedLessThan},
     {{&RawMachineAssembler::Float64LessThanOrEqual, "Float64LessThanOrEqual",
-      kMipsFloat64Cmp, kMachFloat64},
+      kMipsCmpD, kMachFloat64},
      kUnorderedLessThanOrEqual},
-    {{&RawMachineAssembler::Float64GreaterThan, "Float64GreaterThan",
-      kMipsFloat64Cmp, kMachFloat64},
+    {{&RawMachineAssembler::Float64GreaterThan, "Float64GreaterThan", kMipsCmpD,
+      kMachFloat64},
      kUnorderedLessThan},
     {{&RawMachineAssembler::Float64GreaterThanOrEqual,
-      "Float64GreaterThanOrEqual", kMipsFloat64Cmp, kMachFloat64},
+      "Float64GreaterThanOrEqual", kMipsCmpD, kMachFloat64},
      kUnorderedLessThanOrEqual}};
 
 struct Conversion {
@@ -102,10 +102,8 @@ const MachInst2 kMulDivInstructions[] = {
     {&RawMachineAssembler::Int32Mul, "Int32Mul", kMipsMul, kMachInt32},
     {&RawMachineAssembler::Int32Div, "Int32Div", kMipsDiv, kMachInt32},
     {&RawMachineAssembler::Int32UDiv, "Int32UDiv", kMipsDivU, kMachUint32},
-    {&RawMachineAssembler::Float64Mul, "Float64Mul", kMipsFloat64Mul,
-     kMachFloat64},
-    {&RawMachineAssembler::Float64Div, "Float64Div", kMipsFloat64Div,
-     kMachFloat64}};
+    {&RawMachineAssembler::Float64Mul, "Float64Mul", kMipsMulD, kMachFloat64},
+    {&RawMachineAssembler::Float64Div, "Float64Div", kMipsDivD, kMachFloat64}};
 
 
 // ----------------------------------------------------------------------------
@@ -116,8 +114,7 @@ const MachInst2 kMulDivInstructions[] = {
 const MachInst2 kModInstructions[] = {
     {&RawMachineAssembler::Int32Mod, "Int32Mod", kMipsMod, kMachInt32},
     {&RawMachineAssembler::Int32UMod, "Int32UMod", kMipsModU, kMachInt32},
-    {&RawMachineAssembler::Float64Mod, "Float64Mod", kMipsFloat64Mod,
-     kMachFloat64}};
+    {&RawMachineAssembler::Float64Mod, "Float64Mod", kMipsModD, kMachFloat64}};
 
 
 // ----------------------------------------------------------------------------
@@ -126,10 +123,8 @@ const MachInst2 kModInstructions[] = {
 
 
 const MachInst2 kFPArithInstructions[] = {
-    {&RawMachineAssembler::Float64Add, "Float64Add", kMipsFloat64Add,
-     kMachFloat64},
-    {&RawMachineAssembler::Float64Sub, "Float64Sub", kMipsFloat64Sub,
-     kMachFloat64}};
+    {&RawMachineAssembler::Float64Add, "Float64Add", kMipsAddD, kMachFloat64},
+    {&RawMachineAssembler::Float64Sub, "Float64Sub", kMipsSubD, kMachFloat64}};
 
 
 // ----------------------------------------------------------------------------
@@ -205,22 +200,22 @@ const Conversion kConversionInstructions[] = {
     // integers.
     // mips instruction: cvt_d_w
     {{&RawMachineAssembler::ChangeInt32ToFloat64, "ChangeInt32ToFloat64",
-      kMipsInt32ToFloat64, kMachFloat64},
+      kMipsCvtDW, kMachFloat64},
      kMachInt32},
 
     // mips instruction: cvt_d_uw
     {{&RawMachineAssembler::ChangeUint32ToFloat64, "ChangeUint32ToFloat64",
-      kMipsUint32ToFloat64, kMachFloat64},
+      kMipsCvtDUw, kMachFloat64},
      kMachInt32},
 
     // mips instruction: trunc_w_d
     {{&RawMachineAssembler::ChangeFloat64ToInt32, "ChangeFloat64ToInt32",
-      kMipsFloat64ToInt32, kMachFloat64},
+      kMipsTruncWD, kMachFloat64},
      kMachInt32},
 
     // mips instruction: trunc_uw_d
     {{&RawMachineAssembler::ChangeFloat64ToUint32, "ChangeFloat64ToUint32",
-      kMipsFloat64ToUint32, kMachFloat64},
+      kMipsTruncUwD, kMachFloat64},
      kMachInt32}};
 
 }  // namespace

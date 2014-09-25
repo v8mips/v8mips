@@ -118,20 +118,6 @@ static inline bool HasRegisterInput(Instruction* instr, int index) {
 }
 
 
-// TODO(plind): There are only 3 shift ops, does that justify this slightly
-//    messy macro? Consider expanding this in place for sll, srl, sra ops.
-#define ASSEMBLE_SHIFT(asm_instr)                                \
-  do {                                                           \
-    if (instr->InputAt(1)->IsRegister()) {                       \
-      __ asm_instr##v(i.OutputRegister(), i.InputRegister(0),    \
-                      i.InputRegister(1));                       \
-    } else {                                                     \
-      int32_t imm = i.InputOperand(1).immediate();               \
-      __ asm_instr(i.OutputRegister(), i.InputRegister(0), imm); \
-    }                                                            \
-  } while (0);
-
-
 // Assembles an instruction after register allocation, producing machine code.
 void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
   MipsOperandConverter i(this, instr);
@@ -215,13 +201,28 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       __ Xor(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
     case kMipsShl:
-      ASSEMBLE_SHIFT(sll);
+      if (instr->InputAt(1)->IsRegister()) {
+        __ sllv(i.OutputRegister(), i.InputRegister(0), i.InputRegister(1));
+      } else {
+        int32_t imm = i.InputOperand(1).immediate();
+        __ sll(i.OutputRegister(), i.InputRegister(0), imm);
+      }
       break;
     case kMipsShr:
-      ASSEMBLE_SHIFT(srl);
+      if (instr->InputAt(1)->IsRegister()) {
+        __ srlv(i.OutputRegister(), i.InputRegister(0), i.InputRegister(1));
+      } else {
+        int32_t imm = i.InputOperand(1).immediate();
+        __ srl(i.OutputRegister(), i.InputRegister(0), imm);
+      }
       break;
     case kMipsSar:
-      ASSEMBLE_SHIFT(sra);
+      if (instr->InputAt(1)->IsRegister()) {
+        __ srav(i.OutputRegister(), i.InputRegister(0), i.InputRegister(1));
+      } else {
+        int32_t imm = i.InputOperand(1).immediate();
+        __ sra(i.OutputRegister(), i.InputRegister(0), imm);
+      }
       break;
     case kMipsRor:
       __ Ror(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
@@ -243,28 +244,28 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       }
       break;
 
-    case kMipsFloat64Cmp:
+    case kMipsCmpD:
       // Psuedo-instruction used for FP cmp/branch. No opcode emitted here.
       break;
-    case kMipsFloat64Add:
+    case kMipsAddD:
       // TODO(plind): add special case: combine mult & add.
       __ add_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0),
                i.InputDoubleRegister(1));
       break;
-    case kMipsFloat64Sub:
+    case kMipsSubD:
       __ sub_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0),
                i.InputDoubleRegister(1));
       break;
-    case kMipsFloat64Mul:
+    case kMipsMulD:
       // TODO(plind): add special case: right op is -1.0, see arm port.
       __ mul_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0),
                i.InputDoubleRegister(1));
       break;
-    case kMipsFloat64Div:
+    case kMipsDivD:
       __ div_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0),
                i.InputDoubleRegister(1));
       break;
-    case kMipsFloat64Mod: {
+    case kMipsModD: {
       // TODO(bmeurer): We should really get rid of this special instruction,
       // and generate a CallAddress instruction instead.
       FrameScope scope(masm(), StackFrame::MANUAL);
@@ -282,35 +283,32 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       break;
     }
     case kMipsCvtSD: {
-      // All FPURegisters are double-precision sized, but can hold singles.
-      // TODO(plind): We may need to set rounding mode to truncation here.
       __ cvt_s_d(i.OutputSingleRegister(), i.InputDoubleRegister(0));
       break;
     }
     case kMipsCvtDS: {
-      // All FPURegisters are double-precision sized, but can hold singles.
       __ cvt_d_s(i.OutputDoubleRegister(), i.InputSingleRegister(0));
       break;
     }
-    case kMipsInt32ToFloat64: {
+    case kMipsCvtDW: {
       FPURegister scratch = kScratchDoubleReg;
       __ mtc1(i.InputRegister(0), scratch);
       __ cvt_d_w(i.OutputDoubleRegister(), scratch);
       break;
     }
-    case kMipsUint32ToFloat64: {
+    case kMipsCvtDUw: {
       FPURegister scratch = kScratchDoubleReg;
       __ Cvt_d_uw(i.OutputDoubleRegister(), i.InputRegister(0), scratch);
       break;
     }
-    case kMipsFloat64ToInt32: {
+    case kMipsTruncWD: {
       FPURegister scratch = kScratchDoubleReg;
       // Other arches use round to zero here, so we follow.
       __ trunc_w_d(scratch, i.InputDoubleRegister(0));
       __ mfc1(i.OutputRegister(), scratch);
       break;
     }
-    case kMipsFloat64ToUint32: {
+    case kMipsTruncUwD: {
       FPURegister scratch = kScratchDoubleReg;
       // TODO(plind): Fix wrong param order of Trunc_uw_d() macro-asm function.
       __ Trunc_uw_d(i.InputDoubleRegister(0), i.OutputRegister(), scratch);
@@ -477,7 +475,7 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
     if (!fallthru) __ Branch(flabel);  // no fallthru to flabel.
     __ bind(&done);
 
-  } else if (instr->arch_opcode() == kMipsFloat64Cmp) {
+  } else if (instr->arch_opcode() == kMipsCmpD) {
     // TODO(dusmil) optimize unordered checks to use less instructions
     // even if we have to unfold BranchF macro.
     Label* nan = flabel;
@@ -504,7 +502,7 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
         nan = tlabel;
         break;
       default:
-        UNSUPPORTED_COND(kMipsFloat64Cmp, condition);
+        UNSUPPORTED_COND(kMipsCmpD, condition);
         break;
     }
     __ BranchF(tlabel, nan, cc, i.InputDoubleRegister(0),
@@ -619,7 +617,7 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
     __ Branch(USE_DELAY_SLOT, &done, cc, left, right);
     __ li(result, Operand(1));  // In delay slot.
 
-  } else if (instr->arch_opcode() == kMipsFloat64Cmp) {
+  } else if (instr->arch_opcode() == kMipsCmpD) {
     FPURegister left = i.InputDoubleRegister(0);
     FPURegister right = i.InputDoubleRegister(1);
     // TODO(plind): Provide NaN-testing macro-asm function without need for

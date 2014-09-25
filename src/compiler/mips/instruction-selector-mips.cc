@@ -340,28 +340,25 @@ void InstructionSelector::VisitChangeFloat32ToFloat64(Node* node) {
 
 void InstructionSelector::VisitChangeInt32ToFloat64(Node* node) {
   MipsOperandGenerator g(this);
-  Emit(kMipsInt32ToFloat64, g.DefineAsRegister(node),
-       g.UseRegister(node->InputAt(0)));
+  Emit(kMipsCvtDW, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
 }
 
 
 void InstructionSelector::VisitChangeUint32ToFloat64(Node* node) {
   MipsOperandGenerator g(this);
-  Emit(kMipsUint32ToFloat64, g.DefineAsRegister(node),
-       g.UseRegister(node->InputAt(0)));
+  Emit(kMipsCvtDUw, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
 }
 
 
 void InstructionSelector::VisitChangeFloat64ToInt32(Node* node) {
   MipsOperandGenerator g(this);
-  Emit(kMipsFloat64ToInt32, g.DefineAsRegister(node),
-       g.UseRegister(node->InputAt(0)));
+  Emit(kMipsTruncWD, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
 }
 
 
 void InstructionSelector::VisitChangeFloat64ToUint32(Node* node) {
   MipsOperandGenerator g(this);
-  Emit(kMipsFloat64ToUint32, g.DefineAsRegister(node),
+  Emit(kMipsTruncUwD, g.DefineAsRegister(node),
        g.UseRegister(node->InputAt(0)));
 }
 
@@ -373,29 +370,28 @@ void InstructionSelector::VisitTruncateFloat64ToFloat32(Node* node) {
 
 
 void InstructionSelector::VisitFloat64Add(Node* node) {
-  VisitRRR(this, kMipsFloat64Add, node);
+  VisitRRR(this, kMipsAddD, node);
 }
 
 
 void InstructionSelector::VisitFloat64Sub(Node* node) {
-  VisitRRR(this, kMipsFloat64Sub, node);
+  VisitRRR(this, kMipsSubD, node);
 }
 
 
 void InstructionSelector::VisitFloat64Mul(Node* node) {
-  VisitRRR(this, kMipsFloat64Mul, node);
+  VisitRRR(this, kMipsMulD, node);
 }
 
 
 void InstructionSelector::VisitFloat64Div(Node* node) {
-  VisitRRR(this, kMipsFloat64Div, node);
+  VisitRRR(this, kMipsDivD, node);
 }
 
 
 void InstructionSelector::VisitFloat64Mod(Node* node) {
   MipsOperandGenerator g(this);
-  Emit(kMipsFloat64Mod, g.DefineAsFixed(node, f0),
-       g.UseFixed(node->InputAt(0), f12),
+  Emit(kMipsModD, g.DefineAsFixed(node, f0), g.UseFixed(node->InputAt(0), f12),
        g.UseFixed(node->InputAt(1), f14))->MarkAsCall();
 }
 
@@ -539,7 +535,7 @@ void InstructionSelector::VisitFloat64Compare(Node* node,
   MipsOperandGenerator g(this);
   Node* left = node->InputAt(0);
   Node* right = node->InputAt(1);
-  VisitCompare(this, kMipsFloat64Cmp, g.UseRegister(left), g.UseRegister(right),
+  VisitCompare(this, kMipsCmpD, g.UseRegister(left), g.UseRegister(right),
                cont);
 }
 
