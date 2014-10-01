@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file
 
-#include "src/compiler/instruction-selector-unittest.h"
+#include "test/unittests/compiler/instruction-selector-unittest.h"
 
 namespace v8 {
 namespace internal {
@@ -101,7 +101,7 @@ const MachInst2 kShiftInstructions[] = {
 const MachInst2 kMulDivInstructions[] = {
     {&RawMachineAssembler::Int32Mul, "Int32Mul", kMipsMul, kMachInt32},
     {&RawMachineAssembler::Int32Div, "Int32Div", kMipsDiv, kMachInt32},
-    {&RawMachineAssembler::Int32UDiv, "Int32UDiv", kMipsDivU, kMachUint32},
+    {&RawMachineAssembler::Uint32Div, "Uint32Div", kMipsDivU, kMachUint32},
     {&RawMachineAssembler::Float64Mul, "Float64Mul", kMipsMulD, kMachFloat64},
     {&RawMachineAssembler::Float64Div, "Float64Div", kMipsDivD, kMachFloat64}};
 
@@ -113,7 +113,7 @@ const MachInst2 kMulDivInstructions[] = {
 
 const MachInst2 kModInstructions[] = {
     {&RawMachineAssembler::Int32Mod, "Int32Mod", kMipsMod, kMachInt32},
-    {&RawMachineAssembler::Int32UMod, "Int32UMod", kMipsModU, kMachInt32},
+    {&RawMachineAssembler::Uint32Mod, "Int32UMod", kMipsModU, kMachInt32},
     {&RawMachineAssembler::Float64Mod, "Float64Mod", kMipsModD, kMachFloat64}};
 
 
@@ -512,9 +512,7 @@ struct MemoryAccessImm {
 
 
 std::ostream& operator<<(std::ostream& os, const MemoryAccessImm& acc) {
-  OStringStream ost;
-  ost << acc.type;
-  return os << ost.c_str();
+  return os << acc.type;
 }
 
 
@@ -529,9 +527,7 @@ struct MemoryAccessImm1 {
 
 
 std::ostream& operator<<(std::ostream& os, const MemoryAccessImm1& acc) {
-  OStringStream ost;
-  ost << acc.type;
-  return os << ost.c_str();
+  return os << acc.type;
 }
 
 

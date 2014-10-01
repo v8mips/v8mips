@@ -308,7 +308,7 @@ void InstructionSelector::VisitInt32Div(Node* node) {
 }
 
 
-void InstructionSelector::VisitInt32UDiv(Node* node) {
+void InstructionSelector::VisitUint32Div(Node* node) {
   MipsOperandGenerator g(this);
   Int32BinopMatcher m(node);
   Emit(kMipsDivU, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
@@ -324,7 +324,7 @@ void InstructionSelector::VisitInt32Mod(Node* node) {
 }
 
 
-void InstructionSelector::VisitInt32UMod(Node* node) {
+void InstructionSelector::VisitUint32Mod(Node* node) {
   MipsOperandGenerator g(this);
   Int32BinopMatcher m(node);
   Emit(kMipsModU, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
