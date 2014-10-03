@@ -201,6 +201,12 @@ TEST(DisasmIa320) {
   __ rcl(edx, 7);
   __ rcr(edx, 1);
   __ rcr(edx, 7);
+  __ ror(edx, 1);
+  __ ror(edx, 6);
+  __ ror_cl(edx);
+  __ ror(Operand(ebx, ecx, times_4, 10000), 1);
+  __ ror(Operand(ebx, ecx, times_4, 10000), 6);
+  __ ror_cl(Operand(ebx, ecx, times_4, 10000));
   __ sar(edx, 1);
   __ sar(edx, 6);
   __ sar_cl(edx);
@@ -416,6 +422,7 @@ TEST(DisasmIa320) {
     __ addsd(xmm1, xmm0);
     __ mulsd(xmm1, xmm0);
     __ subsd(xmm1, xmm0);
+    __ subsd(xmm1, Operand(ebx, ecx, times_4, 10000));
     __ divsd(xmm1, xmm0);
     __ ucomisd(xmm0, xmm1);
     __ cmpltsd(xmm0, xmm1);

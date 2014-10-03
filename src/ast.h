@@ -9,13 +9,13 @@
 
 #include "src/assembler.h"
 #include "src/ast-value-factory.h"
+#include "src/bailout-reason.h"
 #include "src/factory.h"
-#include "src/feedback-slots.h"
 #include "src/interface.h"
 #include "src/isolate.h"
 #include "src/jsregexp.h"
 #include "src/list-inl.h"
-#include "src/runtime.h"
+#include "src/runtime/runtime.h"
 #include "src/small-pointer-list.h"
 #include "src/smart-pointers.h"
 #include "src/token.h"
@@ -114,7 +114,6 @@ class BreakableStatement;
 class Expression;
 class IterationStatement;
 class MaterializedLiteral;
-class OStream;
 class Statement;
 class TargetCollector;
 class TypeFeedbackOracle;
@@ -232,6 +231,17 @@ class AstNode: public ZoneObject {
   virtual BreakableStatement* AsBreakableStatement() { return NULL; }
   virtual IterationStatement* AsIterationStatement() { return NULL; }
   virtual MaterializedLiteral* AsMaterializedLiteral() { return NULL; }
+
+  // The interface for feedback slots, with default no-op implementations for
+  // node types which don't actually have this. Note that this is conceptually
+  // not really nice, but multiple inheritance would introduce yet another
+  // vtable entry per node, something we don't want for space reasons.
+  static const int kInvalidFeedbackSlot = -1;
+  virtual int ComputeFeedbackSlotCount() {
+    UNREACHABLE();
+    return 0;
+  }
+  virtual void SetFirstFeedbackSlot(int slot) { UNREACHABLE(); }
 
  protected:
   // Some nodes re-use bailout IDs for type feedback.
@@ -353,9 +363,12 @@ class Expression : public AstNode {
   void set_bounds(Bounds bounds) { bounds_ = bounds; }
 
   // Whether the expression is parenthesized
-  unsigned parenthesization_level() const { return parenthesization_level_; }
-  bool is_parenthesized() const { return parenthesization_level_ > 0; }
-  void increase_parenthesization_level() { ++parenthesization_level_; }
+  bool is_parenthesized() const { return is_parenthesized_; }
+  bool is_multi_parenthesized() const { return is_multi_parenthesized_; }
+  void increase_parenthesization_level() {
+    is_multi_parenthesized_ = is_parenthesized_;
+    is_parenthesized_ = true;
+  }
 
   // Type feedback information for assignments and properties.
   virtual bool IsMonomorphic() {
@@ -381,16 +394,18 @@ class Expression : public AstNode {
  protected:
   Expression(Zone* zone, int pos, IdGen* id_gen)
       : AstNode(pos),
+        is_parenthesized_(false),
+        is_multi_parenthesized_(false),
         bounds_(Bounds::Unbounded(zone)),
-        parenthesization_level_(0),
         id_(id_gen->GetNextId()),
         test_id_(id_gen->GetNextId()) {}
   void set_to_boolean_types(byte types) { to_boolean_types_ = types; }
 
  private:
-  Bounds bounds_;
   byte to_boolean_types_;
-  unsigned parenthesization_level_;
+  bool is_parenthesized_ : 1;
+  bool is_multi_parenthesized_ : 1;
+  Bounds bounds_;
 
   const BailoutId id_;
   const TypeFeedbackId test_id_;
@@ -914,8 +929,7 @@ class ForEachStatement : public IterationStatement {
 };
 
 
-class ForInStatement FINAL : public ForEachStatement,
-    public FeedbackSlotInterface {
+class ForInStatement FINAL : public ForEachStatement {
  public:
   DECLARE_NODE_TYPE(ForInStatement)
 
@@ -1371,28 +1385,17 @@ class Literal FINAL : public Expression {
 
   // Support for using Literal as a HashMap key. NOTE: Currently, this works
   // only for string and number literals!
-  uint32_t Hash() { return ToString()->Hash(); }
-
-  static bool Match(void* literal1, void* literal2) {
-    Handle<String> s1 = static_cast<Literal*>(literal1)->ToString();
-    Handle<String> s2 = static_cast<Literal*>(literal2)->ToString();
-    return String::Equals(s1, s2);
-  }
+  uint32_t Hash();
+  static bool Match(void* literal1, void* literal2);
 
   TypeFeedbackId LiteralFeedbackId() const { return reuse(id()); }
 
  protected:
   Literal(Zone* zone, const AstValue* value, int position, IdGen* id_gen)
-      : Expression(zone, position, id_gen),
-        value_(value),
-        isolate_(zone->isolate()) {}
+      : Expression(zone, position, id_gen), value_(value) {}
 
  private:
-  Handle<String> ToString();
-
   const AstValue* value_;
-  // TODO(dcarney): remove.  this is only needed for Match and Hash.
-  Isolate* isolate_;
 };
 
 
@@ -1628,7 +1631,7 @@ class ArrayLiteral FINAL : public MaterializedLiteral {
 };
 
 
-class VariableProxy FINAL : public Expression, public FeedbackSlotInterface {
+class VariableProxy FINAL : public Expression {
  public:
   DECLARE_NODE_TYPE(VariableProxy)
 
@@ -1672,7 +1675,7 @@ class VariableProxy FINAL : public Expression, public FeedbackSlotInterface {
 };
 
 
-class Property FINAL : public Expression, public FeedbackSlotInterface {
+class Property FINAL : public Expression {
  public:
   DECLARE_NODE_TYPE(Property)
 
@@ -1741,7 +1744,7 @@ class Property FINAL : public Expression, public FeedbackSlotInterface {
 };
 
 
-class Call FINAL : public Expression, public FeedbackSlotInterface {
+class Call FINAL : public Expression {
  public:
   DECLARE_NODE_TYPE(Call)
 
@@ -1795,6 +1798,7 @@ class Call FINAL : public Expression, public FeedbackSlotInterface {
   bool ComputeGlobalTarget(Handle<GlobalObject> global, LookupIterator* it);
 
   BailoutId ReturnId() const { return return_id_; }
+  BailoutId EvalOrLookupId() const { return eval_or_lookup_id_; }
 
   enum CallType {
     POSSIBLY_EVAL_CALL,
@@ -1820,7 +1824,8 @@ class Call FINAL : public Expression, public FeedbackSlotInterface {
         expression_(expression),
         arguments_(arguments),
         call_feedback_slot_(kInvalidFeedbackSlot),
-        return_id_(id_gen->GetNextId()) {
+        return_id_(id_gen->GetNextId()),
+        eval_or_lookup_id_(id_gen->GetNextId()) {
     if (expression->IsProperty()) {
       expression->AsProperty()->mark_for_call();
     }
@@ -1836,10 +1841,13 @@ class Call FINAL : public Expression, public FeedbackSlotInterface {
   int call_feedback_slot_;
 
   const BailoutId return_id_;
+  // TODO(jarin) Only allocate the bailout id for the POSSIBLY_EVAL_CALL and
+  // LOOKUP_SLOT_CALL types.
+  const BailoutId eval_or_lookup_id_;
 };
 
 
-class CallNew FINAL : public Expression, public FeedbackSlotInterface {
+class CallNew FINAL : public Expression {
  public:
   DECLARE_NODE_TYPE(CallNew)
 
@@ -1867,7 +1875,6 @@ class CallNew FINAL : public Expression, public FeedbackSlotInterface {
   void RecordTypeFeedback(TypeFeedbackOracle* oracle);
   virtual bool IsMonomorphic() OVERRIDE { return is_monomorphic_; }
   Handle<JSFunction> target() const { return target_; }
-  ElementsKind elements_kind() const { return elements_kind_; }
   Handle<AllocationSite> allocation_site() const {
     return allocation_site_;
   }
@@ -1883,7 +1890,6 @@ class CallNew FINAL : public Expression, public FeedbackSlotInterface {
         expression_(expression),
         arguments_(arguments),
         is_monomorphic_(false),
-        elements_kind_(GetInitialFastElementsKind()),
         callnew_feedback_slot_(kInvalidFeedbackSlot),
         return_id_(id_gen->GetNextId()) {}
 
@@ -1893,7 +1899,6 @@ class CallNew FINAL : public Expression, public FeedbackSlotInterface {
 
   bool is_monomorphic_;
   Handle<JSFunction> target_;
-  ElementsKind elements_kind_;
   Handle<AllocationSite> allocation_site_;
   int callnew_feedback_slot_;
 
@@ -1905,7 +1910,7 @@ class CallNew FINAL : public Expression, public FeedbackSlotInterface {
 // language construct. Instead it is used to call a C or JS function
 // with a set of arguments. This is used from the builtins that are
 // implemented in JavaScript (see "v8natives.js").
-class CallRuntime FINAL : public Expression, public FeedbackSlotInterface {
+class CallRuntime FINAL : public Expression {
  public:
   DECLARE_NODE_TYPE(CallRuntime)
 
@@ -2221,7 +2226,7 @@ class Assignment FINAL : public Expression {
 };
 
 
-class Yield FINAL : public Expression, public FeedbackSlotInterface {
+class Yield FINAL : public Expression {
  public:
   DECLARE_NODE_TYPE(Yield)
 
@@ -2510,27 +2515,23 @@ class ClassLiteral FINAL : public Expression {
   Handle<String> name() const { return raw_name_->string(); }
   const AstRawString* raw_name() const { return raw_name_; }
   Expression* extends() const { return extends_; }
-  FunctionLiteral* constructor() const { return constructor_; }
+  Expression* constructor() const { return constructor_; }
   ZoneList<Property*>* properties() const { return properties_; }
 
  protected:
   ClassLiteral(Zone* zone, const AstRawString* name, Expression* extends,
-               FunctionLiteral* constructor, ZoneList<Property*>* properties,
-               AstValueFactory* ast_value_factory, int position, IdGen* id_gen)
+               Expression* constructor, ZoneList<Property*>* properties,
+               int position, IdGen* id_gen)
       : Expression(zone, position, id_gen),
         raw_name_(name),
-        raw_inferred_name_(ast_value_factory->empty_string()),
         extends_(extends),
         constructor_(constructor),
         properties_(properties) {}
 
  private:
   const AstRawString* raw_name_;
-  Handle<String> name_;
-  const AstString* raw_inferred_name_;
-  Handle<String> inferred_name_;
   Expression* extends_;
-  FunctionLiteral* constructor_;
+  Expression* constructor_;
   ZoneList<Property*>* properties_;
 };
 
@@ -2614,7 +2615,7 @@ class RegExpTree : public ZoneObject {
   // expression.
   virtual Interval CaptureRegisters() { return Interval::Empty(); }
   virtual void AppendToText(RegExpText* text, Zone* zone);
-  OStream& Print(OStream& os, Zone* zone);  // NOLINT
+  std::ostream& Print(std::ostream& os, Zone* zone);  // NOLINT
 #define MAKE_ASTYPE(Name)                                                  \
   virtual RegExp##Name* As##Name();                                        \
   virtual bool Is##Name();
@@ -3040,7 +3041,7 @@ class AstConstructionVisitor BASE_EMBEDDED {
     dont_turbofan_reason_ = reason;
   }
 
-  void add_slot_node(FeedbackSlotInterface* slot_node) {
+  void add_slot_node(AstNode* slot_node) {
     int count = slot_node->ComputeFeedbackSlotCount();
     if (count > 0) {
       slot_node->SetFirstFeedbackSlot(properties_.feedback_slots());
@@ -3392,7 +3393,16 @@ class AstNodeFactory FINAL BASE_EMBEDDED {
   Call* NewCall(Expression* expression,
                 ZoneList<Expression*>* arguments,
                 int pos) {
-    Call* call = new (zone_) Call(zone_, expression, arguments, pos, id_gen_);
+    SuperReference* super_ref = expression->AsSuperReference();
+    Call* call;
+    if (super_ref != NULL) {
+      Literal* constructor =
+          NewStringLiteral(ast_value_factory_->constructor_string(), pos);
+      Property* superConstructor = NewProperty(super_ref, constructor, pos);
+      call = new (zone_) Call(zone_, superConstructor, arguments, pos, id_gen_);
+    } else {
+      call = new (zone_) Call(zone_, expression, arguments, pos, id_gen_);
+    }
     VISIT_AND_RETURN(Call, call)
   }
 
@@ -3504,13 +3514,11 @@ class AstNodeFactory FINAL BASE_EMBEDDED {
   }
 
   ClassLiteral* NewClassLiteral(const AstRawString* name, Expression* extends,
-                                FunctionLiteral* constructor,
+                                Expression* constructor,
                                 ZoneList<ObjectLiteral::Property*>* properties,
-                                AstValueFactory* ast_value_factory,
                                 int position) {
-    ClassLiteral* lit =
-        new (zone_) ClassLiteral(zone_, name, extends, constructor, properties,
-                                 ast_value_factory, position, id_gen_);
+    ClassLiteral* lit = new (zone_) ClassLiteral(
+        zone_, name, extends, constructor, properties, position, id_gen_);
     VISIT_AND_RETURN(ClassLiteral, lit)
   }
 

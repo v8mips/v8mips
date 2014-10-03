@@ -31,16 +31,19 @@ namespace compiler {
   V(MipsMov)                       \
   V(MipsTst)                       \
   V(MipsCmp)                       \
-  V(MipsFloat64Cmp)                \
-  V(MipsFloat64Add)                \
-  V(MipsFloat64Sub)                \
-  V(MipsFloat64Mul)                \
-  V(MipsFloat64Div)                \
-  V(MipsFloat64Mod)                \
-  V(MipsFloat64ToInt32)            \
-  V(MipsFloat64ToUint32)           \
-  V(MipsInt32ToFloat64)            \
-  V(MipsUint32ToFloat64)           \
+  V(MipsCmpD)                      \
+  V(MipsAddD)                      \
+  V(MipsSubD)                      \
+  V(MipsMulD)                      \
+  V(MipsDivD)                      \
+  V(MipsModD)                      \
+  V(MipsSqrtD)                     \
+  V(MipsCvtSD)                     \
+  V(MipsCvtDS)                     \
+  V(MipsTruncWD)                   \
+  V(MipsTruncUwD)                  \
+  V(MipsCvtDW)                     \
+  V(MipsCvtDUw)                    \
   V(MipsLb)                        \
   V(MipsLbu)                       \
   V(MipsSb)                        \
@@ -55,39 +58,6 @@ namespace compiler {
   V(MipsSdc1)                      \
   V(MipsPush)                      \
   V(MipsStoreWriteBarrier)
-
-/*** plind
-  V(MipsBic)                        \
-  V(MipsCmn)                        \
-  V(MipsTst)                        \
-  V(MipsTeq)                        \
-  V(MipsEor)                        \
-  V(MipsRsb)                        \
-  V(MipsMla)                        \
-  V(MipsMls)                        \
-  V(MipsSdiv)                       \
-  V(MipsUdiv)                       \
-  V(MipsMvn)                        \
-  V(MipsBfc)                        \
-  V(MipsUbfx)                       \
-
-  V(MipsVcmpF64)                    \
-  V(MipsVaddF64)                    \
-  V(MipsVsubF64)                    \
-  V(MipsVmulF64)                    \
-  V(MipsVmlaF64)                    \
-  V(MipsVmlsF64)                    \
-  V(MipsVdivF64)                    \
-  V(MipsVmodF64)                    \
-  V(MipsVnegF64)                    \
-  V(MipsVcvtF64S32)                 \
-  V(MipsVcvtF64U32)                 \
-  V(MipsVcvtS32F64)                 \
-  V(MipsVcvtU32F64)                 \
-  V(MipsFloat64Load)                \
-  V(MipsFloat64Store)               \
-***/
-
 
 
 // Addressing modes represent the "shape" of inputs to an instruction.

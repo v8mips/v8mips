@@ -1145,10 +1145,8 @@ class MacroAssembler: public Assembler {
                                Register overflow_dst,
                                Register scratch = at);
 
-  void AdduAndCheckForOverflow(Register dst,
-                               Register left,
-                               const Operand& right,
-                               Register overflow_dst,
+  void AdduAndCheckForOverflow(Register dst, Register left,
+                               const Operand& right, Register overflow_dst,
                                Register scratch = at);
 
   void SubuAndCheckForOverflow(Register dst,
@@ -1157,10 +1155,8 @@ class MacroAssembler: public Assembler {
                                Register overflow_dst,
                                Register scratch = at);
 
-  void SubuAndCheckForOverflow(Register dst,
-                               Register left,
-                               const Operand& right,
-                               Register overflow_dst,
+  void SubuAndCheckForOverflow(Register dst, Register left,
+                               const Operand& right, Register overflow_dst,
                                Register scratch = at);
 
   void BranchOnOverflow(Label* label,
@@ -1187,9 +1183,7 @@ class MacroAssembler: public Assembler {
   // Runtime calls.
 
   // See comments at the beginning of CEntryStub::Generate.
-  inline void PrepareCEntryArgs(int num_args) {
-    li(a0, num_args);
-  }
+  inline void PrepareCEntryArgs(int num_args) { li(a0, num_args); }
 
   inline void PrepareCEntryFunction(const ExternalReference& ref) {
     li(a1, Operand(ref));
@@ -1497,7 +1491,7 @@ const Operand& rt = Operand(zero_reg), BranchDelaySlot bd = PROTECT
   void JumpIfInstanceTypeIsNotSequentialOneByte(Register type, Register scratch,
                                                 Label* failure);
 
-  void JumpIfNotUniqueName(Register reg, Label* not_unique_name);
+  void JumpIfNotUniqueNameInstanceType(Register reg, Label* not_unique_name);
 
   void EmitSeqStringSetCharCheck(Register string,
                                  Register index,

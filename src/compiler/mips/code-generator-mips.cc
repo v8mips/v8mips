@@ -3,12 +3,11 @@
 // found in the LICENSE file.
 
 #include "src/compiler/code-generator.h"
-
-#include "src/mips/macro-assembler-mips.h"
 #include "src/compiler/code-generator-impl.h"
 #include "src/compiler/gap-resolver.h"
 #include "src/compiler/node-matchers.h"
 #include "src/compiler/node-properties-inl.h"
+#include "src/mips/macro-assembler-mips.h"
 #include "src/scopes.h"
 
 namespace v8 {
@@ -18,42 +17,50 @@ namespace compiler {
 #define __ masm()->
 
 
-// TODO(plind): Should NOT use these lithium names, change within assembler.
+// TODO(plind): Possibly avoid using these lithium names.
 #define kScratchReg kLithiumScratchReg
 #define kCompareReg kLithiumScratchReg2
 #define kScratchDoubleReg kLithiumScratchDouble
 
 
-// TODO(plind): remove these debug lines.
+// TODO(plind): consider renaming these macros.
+#define TRACE_MSG(msg)                                                      \
+  PrintF("code_gen: \'%s\' in function %s at line %d\n", msg, __FUNCTION__, \
+         __LINE__)
 
-#if 1
-#define TRACE() PrintF("code_gen: %s at line %d\n", \
-    __FUNCTION__, __LINE__)
-
-#define TRACE_MSG(msg) PrintF("code_gen: \'%s\' in function %s at line %d\n", \
-    msg, __FUNCTION__, __LINE__)
-
-#else
-#define TRACE()
-#define TRACE_MSG(msg)
-#endif
-
-#define TRACE_UNIMPL() PrintF("UNIMPLEMENTED code_generator_mips: %s at line %d\n", \
-    __FUNCTION__, __LINE__)
-
+#define TRACE_UNIMPL()                                                       \
+  PrintF("UNIMPLEMENTED code_generator_mips: %s at line %d\n", __FUNCTION__, \
+         __LINE__)
 
 
 // Adds Mips-specific methods to convert InstructionOperands.
-class MipsOperandConverter : public InstructionOperandConverter {
+class MipsOperandConverter FINAL : public InstructionOperandConverter {
  public:
   MipsOperandConverter(CodeGenerator* gen, Instruction* instr)
       : InstructionOperandConverter(gen, instr) {}
+
+  FloatRegister OutputSingleRegister(int index = 0) {
+    return ToSingleRegister(instr_->OutputAt(index));
+  }
+
+  FloatRegister InputSingleRegister(int index) {
+    return ToSingleRegister(instr_->InputAt(index));
+  }
+
+  FloatRegister ToSingleRegister(InstructionOperand* op) {
+    // Single (Float) and Double register namespace is same on MIPS,
+    // both are typedefs of FPURegister.
+    return ToDoubleRegister(op);
+  }
 
   Operand InputImmediate(int index) {
     Constant constant = ToConstant(instr_->InputAt(index));
     switch (constant.type()) {
       case Constant::kInt32:
         return Operand(constant.ToInt32());
+      case Constant::kFloat32:
+        return Operand(
+            isolate()->factory()->NewNumber(constant.ToFloat32(), TENURED));
       case Constant::kFloat64:
         return Operand(
             isolate()->factory()->NewNumber(constant.ToFloat64(), TENURED));
@@ -73,7 +80,7 @@ class MipsOperandConverter : public InstructionOperandConverter {
     if (op->IsRegister()) {
       return Operand(ToRegister(op));
     }
-    return InputImmediate(index);  // TODO(plind): make this InputImmediate name & param more symmetical
+    return InputImmediate(index);
   }
 
   MemOperand MemoryOperand(int* first_index) {
@@ -114,33 +121,14 @@ static inline bool HasRegisterInput(Instruction* instr, int index) {
 }
 
 
-// TODO(plind): There are only 3 shift ops, does that justify this slightly
-//    messy macro? Consider expanding this in place for sll, srl, sra ops.
-#define ASSEMBLE_SHIFT(asm_instr)                                              \
-  do {                                                                         \
-    if (instr->InputAt(1)->IsRegister()) {                                     \
-      __ asm_instr##v(i.OutputRegister(), i.InputRegister(0),                  \
-                   i.InputRegister(1));                                        \
-    } else {                                                                   \
-      int32_t imm = i.InputOperand(1).immediate();                             \
-      __ asm_instr(i.OutputRegister(), i.InputRegister(0), imm);               \
-    }                                                                          \
-  } while (0);
-
-
 // Assembles an instruction after register allocation, producing machine code.
 void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
   MipsOperandConverter i(this, instr);
   InstructionCode opcode = instr->opcode();
 
   switch (ArchOpcodeField::decode(opcode)) {
-    case kArchCallAddress: {
-      DirectCEntryStub stub(isolate());
-      stub.GenerateCall(masm(), i.InputRegister(0));
-      __ Drop(kCArgSlotCount);  // TODO(plind): speculative - needs to be tested!! ............
-      break;
-    }
     case kArchCallCodeObject: {
+      EnsureSpaceForLazyDeopt();
       if (instr->InputAt(0)->IsImmediate()) {
         __ Call(Handle<Code>::cast(i.InputHeapObject(0)),
                 RelocInfo::CODE_TARGET);
@@ -152,6 +140,7 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       break;
     }
     case kArchCallJSFunction: {
+      EnsureSpaceForLazyDeopt();
       Register func = i.InputRegister(0);
       if (FLAG_debug_code) {
         // Check the function's context matches the context argument.
@@ -164,12 +153,6 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       AddSafepointAndDeopt(instr);
       break;
     }
-    case kArchDrop: {
-      int words = MiscField::decode(instr->opcode());
-      __ Drop(words);
-      DCHECK_LT(0, words);
-      break;
-    }
     case kArchJmp:
       __ Branch(code_->GetLabel(i.InputBlock(0)));
       break;
@@ -178,6 +161,9 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       break;
     case kArchRet:
       AssembleReturn();
+      break;
+    case kArchStackPointer:
+      __ mov(i.OutputRegister(), sp);
       break;
     case kArchTruncateDoubleToI:
       __ TruncateDoubleToI(i.OutputRegister(), i.InputDoubleRegister(0));
@@ -221,13 +207,28 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       __ Xor(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
     case kMipsShl:
-      ASSEMBLE_SHIFT(sll);
+      if (instr->InputAt(1)->IsRegister()) {
+        __ sllv(i.OutputRegister(), i.InputRegister(0), i.InputRegister(1));
+      } else {
+        int32_t imm = i.InputOperand(1).immediate();
+        __ sll(i.OutputRegister(), i.InputRegister(0), imm);
+      }
       break;
     case kMipsShr:
-      ASSEMBLE_SHIFT(srl);
+      if (instr->InputAt(1)->IsRegister()) {
+        __ srlv(i.OutputRegister(), i.InputRegister(0), i.InputRegister(1));
+      } else {
+        int32_t imm = i.InputOperand(1).immediate();
+        __ srl(i.OutputRegister(), i.InputRegister(0), imm);
+      }
       break;
     case kMipsSar:
-      ASSEMBLE_SHIFT(sra);
+      if (instr->InputAt(1)->IsRegister()) {
+        __ srav(i.OutputRegister(), i.InputRegister(0), i.InputRegister(1));
+      } else {
+        int32_t imm = i.InputOperand(1).immediate();
+        __ sra(i.OutputRegister(), i.InputRegister(0), imm);
+      }
       break;
     case kMipsRor:
       __ Ror(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
@@ -249,28 +250,28 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       }
       break;
 
-    case kMipsFloat64Cmp:
+    case kMipsCmpD:
       // Psuedo-instruction used for FP cmp/branch. No opcode emitted here.
       break;
-    case kMipsFloat64Add:
-    // TODO(plind): add special case: combine mult & add.
+    case kMipsAddD:
+      // TODO(plind): add special case: combine mult & add.
       __ add_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0),
-              i.InputDoubleRegister(1));
+               i.InputDoubleRegister(1));
       break;
-    case kMipsFloat64Sub:
+    case kMipsSubD:
       __ sub_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0),
-              i.InputDoubleRegister(1));
+               i.InputDoubleRegister(1));
       break;
-    case kMipsFloat64Mul:
+    case kMipsMulD:
       // TODO(plind): add special case: right op is -1.0, see arm port.
       __ mul_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0),
-              i.InputDoubleRegister(1));
+               i.InputDoubleRegister(1));
       break;
-    case kMipsFloat64Div:
+    case kMipsDivD:
       __ div_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0),
-              i.InputDoubleRegister(1));
+               i.InputDoubleRegister(1));
       break;
-    case kMipsFloat64Mod: {
+    case kMipsModD: {
       // TODO(bmeurer): We should really get rid of this special instruction,
       // and generate a CallAddress instruction instead.
       FrameScope scope(masm(), StackFrame::MANUAL);
@@ -283,25 +284,37 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       __ MovFromFloatResult(i.OutputDoubleRegister());
       break;
     }
-    case kMipsInt32ToFloat64: {
+    case kMipsSqrtD: {
+      __ sqrt_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0));
+      break;
+    }
+    case kMipsCvtSD: {
+      __ cvt_s_d(i.OutputSingleRegister(), i.InputDoubleRegister(0));
+      break;
+    }
+    case kMipsCvtDS: {
+      __ cvt_d_s(i.OutputDoubleRegister(), i.InputSingleRegister(0));
+      break;
+    }
+    case kMipsCvtDW: {
       FPURegister scratch = kScratchDoubleReg;
       __ mtc1(i.InputRegister(0), scratch);
       __ cvt_d_w(i.OutputDoubleRegister(), scratch);
       break;
     }
-    case kMipsUint32ToFloat64: {
+    case kMipsCvtDUw: {
       FPURegister scratch = kScratchDoubleReg;
       __ Cvt_d_uw(i.OutputDoubleRegister(), i.InputRegister(0), scratch);
       break;
     }
-    case kMipsFloat64ToInt32: {
+    case kMipsTruncWD: {
       FPURegister scratch = kScratchDoubleReg;
       // Other arches use round to zero here, so we follow.
       __ trunc_w_d(scratch, i.InputDoubleRegister(0));
       __ mfc1(i.OutputRegister(), scratch);
       break;
     }
-    case kMipsFloat64ToUint32: {
+    case kMipsTruncUwD: {
       FPURegister scratch = kScratchDoubleReg;
       // TODO(plind): Fix wrong param order of Trunc_uw_d() macro-asm function.
       __ Trunc_uw_d(i.InputDoubleRegister(0), i.OutputRegister(), scratch);
@@ -334,17 +347,13 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       __ sw(i.InputRegister(2), i.MemoryOperand());
       break;
     case kMipsLwc1: {
-      FPURegister scratch = kScratchDoubleReg;
-      __ lwc1(scratch, i.MemoryOperand());
-      __ cvt_d_s(i.OutputDoubleRegister(), scratch);
+      __ lwc1(i.OutputSingleRegister(), i.MemoryOperand());
       break;
     }
     case kMipsSwc1: {
       int index = 0;
-      FPURegister scratch = kScratchDoubleReg;
       MemOperand operand = i.MemoryOperand(&index);
-      __ cvt_s_d(scratch, i.InputDoubleRegister(index));
-      __ swc1(scratch, operand);
+      __ swc1(i.InputSingleRegister(index), operand);
       break;
     }
     case kMipsLdc1:
@@ -353,7 +362,7 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
     case kMipsSdc1:
       __ sdc1(i.InputDoubleRegister(2), i.MemoryOperand());
       break;
-     case kMipsPush:
+    case kMipsPush:
       __ Push(i.InputRegister(0));
       break;
     case kMipsStoreWriteBarrier:
@@ -403,9 +412,15 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
   if (instr->arch_opcode() == kMipsTst) {
     // The kMipsTst psuedo-instruction emits And to 'kCompareReg' register.
     switch (condition) {
-      case kNotEqual: cc = ne; break;
-      case kEqual:    cc = eq; break;
-      default: UNSUPPORTED_COND(kMipsTst, condition); break;
+      case kNotEqual:
+        cc = ne;
+        break;
+      case kEqual:
+        cc = eq;
+        break;
+      default:
+        UNSUPPORTED_COND(kMipsTst, condition);
+        break;
     }
     __ Branch(tlabel, cc, kCompareReg, Operand(zero_reg));
 
@@ -413,46 +428,91 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
              instr->arch_opcode() == kMipsSubOvf) {
     // kMipsAddOvf, SubOvf emit negative result to 'kCompareReg' on overflow.
     switch (condition) {
-      case kOverflow:    cc = lt; break;
-      case kNotOverflow: cc = ge; break;
-      default: UNSUPPORTED_COND(kMipsAddOvf, condition); break;
+      case kOverflow:
+        cc = lt;
+        break;
+      case kNotOverflow:
+        cc = ge;
+        break;
+      default:
+        UNSUPPORTED_COND(kMipsAddOvf, condition);
+        break;
     }
     __ Branch(tlabel, cc, kCompareReg, Operand(zero_reg));
 
   } else if (instr->arch_opcode() == kMipsCmp) {
     switch (condition) {
-      case kEqual:                      cc = eq; break;
-      case kNotEqual:                   cc = ne; break;
-      case kSignedLessThan:             cc = lt; break;
-      case kSignedGreaterThanOrEqual:   cc = ge; break;
-      case kSignedLessThanOrEqual:      cc = le; break;
-      case kSignedGreaterThan:          cc = gt; break;
-      case kUnsignedLessThan:           cc = lo; break;
-      case kUnsignedGreaterThanOrEqual: cc = hs; break;
-      case kUnsignedLessThanOrEqual:    cc = ls; break;
-      case kUnsignedGreaterThan:        cc = hi; break;
-      default: UNSUPPORTED_COND(kMipsCmp, condition); break;
+      case kEqual:
+        cc = eq;
+        break;
+      case kNotEqual:
+        cc = ne;
+        break;
+      case kSignedLessThan:
+        cc = lt;
+        break;
+      case kSignedGreaterThanOrEqual:
+        cc = ge;
+        break;
+      case kSignedLessThanOrEqual:
+        cc = le;
+        break;
+      case kSignedGreaterThan:
+        cc = gt;
+        break;
+      case kUnsignedLessThan:
+        cc = lo;
+        break;
+      case kUnsignedGreaterThanOrEqual:
+        cc = hs;
+        break;
+      case kUnsignedLessThanOrEqual:
+        cc = ls;
+        break;
+      case kUnsignedGreaterThan:
+        cc = hi;
+        break;
+      default:
+        UNSUPPORTED_COND(kMipsCmp, condition);
+        break;
     }
     __ Branch(tlabel, cc, i.InputRegister(0), i.InputOperand(1));
 
     if (!fallthru) __ Branch(flabel);  // no fallthru to flabel.
     __ bind(&done);
 
-  } else if (instr->arch_opcode() == kMipsFloat64Cmp) {
+  } else if (instr->arch_opcode() == kMipsCmpD) {
     // TODO(dusmil) optimize unordered checks to use less instructions
     // even if we have to unfold BranchF macro.
-    Label *nan = flabel;
+    Label* nan = flabel;
     switch (condition) {
-      case kUnorderedEqual:              cc = eq;               break;
-      case kUnorderedNotEqual:           cc = ne; nan = tlabel; break;
-      case kUnorderedLessThan:           cc = lt;               break;
-      case kUnorderedGreaterThanOrEqual: cc = ge; nan = tlabel; break;
-      case kUnorderedLessThanOrEqual:    cc = le;               break;
-      case kUnorderedGreaterThan:        cc = gt; nan = tlabel; break;
-      default: UNSUPPORTED_COND(kMipsFloat64Cmp, condition);    break;
+      case kUnorderedEqual:
+        cc = eq;
+        break;
+      case kUnorderedNotEqual:
+        cc = ne;
+        nan = tlabel;
+        break;
+      case kUnorderedLessThan:
+        cc = lt;
+        break;
+      case kUnorderedGreaterThanOrEqual:
+        cc = ge;
+        nan = tlabel;
+        break;
+      case kUnorderedLessThanOrEqual:
+        cc = le;
+        break;
+      case kUnorderedGreaterThan:
+        cc = gt;
+        nan = tlabel;
+        break;
+      default:
+        UNSUPPORTED_COND(kMipsCmpD, condition);
+        break;
     }
-    __ BranchF(tlabel, nan, cc,
-               i.InputDoubleRegister(0), i.InputDoubleRegister(1));
+    __ BranchF(tlabel, nan, cc, i.InputDoubleRegister(0),
+               i.InputDoubleRegister(1));
 
     if (!fallthru) __ Branch(flabel);  // no fallthru to flabel.
     __ bind(&done);
@@ -476,7 +536,7 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
   Label false_value;
   DCHECK_NE(0, instr->OutputCount());
   Register result = i.OutputRegister(instr->OutputCount() - 1);
-  // Condition cc = kNoCondition;  // TODO(plind): Optimize this routine using cc, make the code read simpler.
+  Condition cc = kNoCondition;
 
   // MIPS does not have condition code flags, so compare and branch are
   // implemented differently than on the other arch's. The compare operations
@@ -492,98 +552,78 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
     // The kMipsTst psuedo-instruction emits And to 'kCompareReg' register.
     switch (condition) {
       case kNotEqual:
-        __ Branch(USE_DELAY_SLOT, &done, ne, kCompareReg, Operand(zero_reg));
-        __ li(result, Operand(1));  // In delay slot.
+        cc = ne;
         break;
       case kEqual:
-        __ Branch(USE_DELAY_SLOT, &done, eq, kCompareReg, Operand(zero_reg));
-        __ li(result, Operand(1));  // In delay slot.
+        cc = eq;
         break;
       default:
-        // TODO(plind): Find debug printing support for text condition codes.
-        PrintF("Unsupported kMipsTst condition: %d\n", condition);
-        UNIMPLEMENTED();
+        UNSUPPORTED_COND(kMipsTst, condition);
         break;
     }
+    __ Branch(USE_DELAY_SLOT, &done, cc, kCompareReg, Operand(zero_reg));
+    __ li(result, Operand(1));  // In delay slot.
+
   } else if (instr->arch_opcode() == kMipsAddOvf ||
              instr->arch_opcode() == kMipsSubOvf) {
     // kMipsAddOvf, SubOvf emits negative result to 'kCompareReg' on overflow.
     switch (condition) {
       case kOverflow:
-        __ Branch(USE_DELAY_SLOT, &done, lt, kCompareReg, Operand(zero_reg));
-        __ li(result, Operand(1));  // In delay slot.
+        cc = lt;
         break;
       case kNotOverflow:
-        __ Branch(USE_DELAY_SLOT, &done, ge, kCompareReg, Operand(zero_reg));
-        __ li(result, Operand(1));  // In delay slot.
+        cc = ge;
         break;
       default:
-        // TODO(plind): Find debug printing support for text condition codes.
-        PrintF("Unsupported kMipsAdd/SubOvf condition: %d\n", condition);
-        UNIMPLEMENTED();
+        UNSUPPORTED_COND(kMipsAddOvf, condition);
         break;
     }
+    __ Branch(USE_DELAY_SLOT, &done, cc, kCompareReg, Operand(zero_reg));
+    __ li(result, Operand(1));  // In delay slot.
+
+
   } else if (instr->arch_opcode() == kMipsCmp) {
     Register left = i.InputRegister(0);
     Operand right = i.InputOperand(1);
     switch (condition) {
-      // TODO(plind): this can be totally cleaned up to a single branch to 'cc' ......
       case kEqual:
-        __ Branch(USE_DELAY_SLOT, &done, eq, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        cc = eq;
         break;
       case kNotEqual:
-        __ Branch(USE_DELAY_SLOT, &done, ne, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        cc = ne;
         break;
       case kSignedLessThan:
-        __ Branch(USE_DELAY_SLOT, &done, lt, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        cc = lt;
         break;
       case kSignedGreaterThanOrEqual:
-        __ Branch(USE_DELAY_SLOT, &done, ge, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        cc = ge;
         break;
       case kSignedLessThanOrEqual:
-        __ Branch(USE_DELAY_SLOT, &done, le, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        cc = le;
         break;
       case kSignedGreaterThan:
-        __ Branch(USE_DELAY_SLOT, &done, gt, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        cc = gt;
         break;
       case kUnsignedLessThan:
-        __ Branch(USE_DELAY_SLOT, &done, lo, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        cc = lo;
         break;
       case kUnsignedGreaterThanOrEqual:
-        __ Branch(USE_DELAY_SLOT, &done, hs, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        cc = hs;
         break;
       case kUnsignedLessThanOrEqual:
-        __ Branch(USE_DELAY_SLOT, &done, ls, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        cc = ls;
         break;
       case kUnsignedGreaterThan:
-        __ Branch(USE_DELAY_SLOT, &done, hi, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        cc = hi;
         break;
-      case kOverflow:
-      case kNotOverflow:
-        TRACE_MSG("Under/Overflow not implemented on integer compare.\n");
-        UNIMPLEMENTED();
-        break;
-      case kUnorderedEqual:
-      case kUnorderedNotEqual:
-      case kUnorderedLessThan:
-      case kUnorderedGreaterThanOrEqual:
-      case kUnorderedLessThanOrEqual:
-      case kUnorderedGreaterThan:
-        TRACE_MSG("Unordered tests not implemented on integer compare.\n");
-        UNIMPLEMENTED();
+      default:
+        UNSUPPORTED_COND(kMipsCmp, condition);
         break;
     }
-  } else if (instr->arch_opcode() == kMipsFloat64Cmp) {
+    __ Branch(USE_DELAY_SLOT, &done, cc, left, right);
+    __ li(result, Operand(1));  // In delay slot.
+
+  } else if (instr->arch_opcode() == kMipsCmpD) {
     FPURegister left = i.InputDoubleRegister(0);
     FPURegister right = i.InputDoubleRegister(1);
     // TODO(plind): Provide NaN-testing macro-asm function without need for
@@ -592,80 +632,41 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
     FPURegister dummy2 = f2;
     switch (condition) {
       case kUnorderedEqual:
-        // TODO(plind):  HANDLE the NaN junk - better than this ugliness:
-        __ BranchF(NULL, &false_value, cc_default, dummy1, dummy2);
-      // Fall through.
-      case kEqual:
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, eq, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        // TODO(plind):  improve the NaN testing throughout this function.
+        __ BranchF(NULL, &false_value, kNoCondition, dummy1, dummy2);
+        cc = eq;
         break;
       case kUnorderedNotEqual:
-        // TODO(plind):  HANDLE the NaN junk - better than this ugliness:
-        // TODO(plind): this confusing bit of code returns 1 on NaN.
-        __ BranchF(USE_DELAY_SLOT, NULL, &done, cc_default, dummy1, dummy2);
-        __ li(result, Operand(1));  // In delay slot.
-      // Fall through.
-      case kNotEqual:
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, ne, left, right);
-        __ li(result, Operand(1));  // In delay slot.
-        break;
-      case kSignedLessThan:
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, lt, left, right);
-        __ li(result, Operand(1));  // In delay slot.
-        break;
-      case kSignedGreaterThanOrEqual:
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, ge, left, right);
-        __ li(result, Operand(1));  // In delay slot.
-        break;
-      case kSignedLessThanOrEqual:
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, le, left, right);
-        __ li(result, Operand(1));  // In delay slot.
-        break;
-      case kSignedGreaterThan:
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, gt, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        __ BranchF(USE_DELAY_SLOT, NULL, &done, kNoCondition, dummy1, dummy2);
+        __ li(result, Operand(1));  // In delay slot - returns 1 on NaN.
+        cc = ne;
         break;
       case kUnorderedLessThan:
-        // TODO(plind):  HANDLE the NaN junk - better than this ugliness:
-        __ BranchF(NULL, &false_value, cc_default, dummy1, dummy2);
-      // Fall through.
-      case kUnsignedLessThan:
-        // TODO(plind): Experimental: use FP signed compare in these 4 cases.
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, lt, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        __ BranchF(NULL, &false_value, kNoCondition, dummy1, dummy2);
+        cc = lt;
         break;
       case kUnorderedGreaterThanOrEqual:
-        // TODO(plind):  HANDLE the NaN junk - better than this ugliness:
-        // TODO(plind): this confusing bit of code returns 1 on NaN.
-        __ BranchF(USE_DELAY_SLOT, NULL, &done, cc_default, dummy1, dummy2);
-        __ li(result, Operand(1));  // In delay slot.
-      case kUnsignedGreaterThanOrEqual:
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, ge, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        __ BranchF(USE_DELAY_SLOT, NULL, &done, kNoCondition, dummy1, dummy2);
+        __ li(result, Operand(1));  // In delay slot - returns 1 on NaN.
+        cc = ge;
         break;
       case kUnorderedLessThanOrEqual:
-        // TODO(plind):  HANDLE the NaN junk - better than this ugliness:
-        __ BranchF(NULL, &false_value, cc_default, dummy1, dummy2);
-      // Fall through.
-      case kUnsignedLessThanOrEqual:
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, le, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        __ BranchF(NULL, &false_value, kNoCondition, dummy1, dummy2);
+        cc = le;
         break;
       case kUnorderedGreaterThan:
-        // TODO(plind):  HANDLE the NaN junk - better than this ugliness:
-        // TODO(plind): this confusing bit of code returns 1 on NaN.
-        __ BranchF(USE_DELAY_SLOT, NULL, &done, cc_default, dummy1, dummy2);
-        __ li(result, Operand(1));  // In delay slot.
-      case kUnsignedGreaterThan:
-        __ BranchF(USE_DELAY_SLOT, &done, NULL, gt, left, right);
-        __ li(result, Operand(1));  // In delay slot.
+        __ BranchF(USE_DELAY_SLOT, NULL, &done, kNoCondition, dummy1, dummy2);
+        __ li(result, Operand(1));  // In delay slot - returns 1 on NaN.
+        cc = gt;
         break;
-      case kOverflow:
-      case kNotOverflow:
-        TRACE_MSG("Under/Overflow not implemented on FP compare.\n");
-        UNIMPLEMENTED();
+      default:
+        UNSUPPORTED_COND(kMipsCmp, condition);
         break;
     }
+    __ BranchF(USE_DELAY_SLOT, &done, NULL, cc, left, right);
+    __ li(result, Operand(1));  // In delay slot - branch taken returns 1.
+                                // Fall-thru (branch not taken) returns 0.
+
   } else {
     PrintF("AssembleArchBranch Unimplemented arch_opcode is : %d\n",
            instr->arch_opcode());
@@ -676,7 +677,6 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
   __ bind(&false_value);
   __ li(result, Operand(0));
   __ bind(&done);
-
 }
 
 
@@ -726,7 +726,6 @@ void CodeGenerator::AssemblePrologue() {
       __ sw(a2, MemOperand(fp, receiver_slot * kPointerSize));
       __ bind(&ok);
     }
-
   } else {
     __ StubPrologue();
     frame()->SetRegisterSaveAreaSize(
@@ -792,20 +791,22 @@ void CodeGenerator::AssembleMove(InstructionOperand* source,
       __ sw(temp, g.ToMemOperand(destination));
     }
   } else if (source->IsConstant()) {
+    Constant src = g.ToConstant(source);
     if (destination->IsRegister() || destination->IsStackSlot()) {
       Register dst =
           destination->IsRegister() ? g.ToRegister(destination) : kScratchReg;
-      Constant src = g.ToConstant(source);
       switch (src.type()) {
         case Constant::kInt32:
           __ li(dst, Operand(src.ToInt32()));
+          break;
+        case Constant::kFloat32:
+          __ li(dst, isolate()->factory()->NewNumber(src.ToFloat32(), TENURED));
           break;
         case Constant::kInt64:
           UNREACHABLE();
           break;
         case Constant::kFloat64:
-          __ li(dst,
-                isolate()->factory()->NewNumber(src.ToFloat64(), TENURED));
+          __ li(dst, isolate()->factory()->NewNumber(src.ToFloat64(), TENURED));
           break;
         case Constant::kExternalReference:
           __ li(dst, Operand(src.ToExternalReference()));
@@ -815,14 +816,25 @@ void CodeGenerator::AssembleMove(InstructionOperand* source,
           break;
       }
       if (destination->IsStackSlot()) __ sw(dst, g.ToMemOperand(destination));
-    } else if (destination->IsDoubleRegister()) {
-      FPURegister result = g.ToDoubleRegister(destination);
-      __ Move(result, g.ToDouble(source));
+    } else if (src.type() == Constant::kFloat32) {
+      FPURegister dst = destination->IsDoubleRegister()
+                            ? g.ToDoubleRegister(destination)
+                            : kScratchDoubleReg.low();
+      // TODO(turbofan): Can we do better here?
+      __ li(at, Operand(bit_cast<int32_t>(src.ToFloat32())));
+      __ mtc1(at, dst);
+      if (destination->IsDoubleStackSlot()) {
+        __ swc1(dst, g.ToMemOperand(destination));
+      }
     } else {
-      DCHECK(destination->IsDoubleStackSlot());
-      FPURegister temp = kScratchDoubleReg;
-      __ Move(temp, g.ToDouble(source));
-      __ sdc1(temp, g.ToMemOperand(destination));
+      DCHECK_EQ(Constant::kFloat64, src.type());
+      DoubleRegister dst = destination->IsDoubleRegister()
+                               ? g.ToDoubleRegister(destination)
+                               : kScratchDoubleReg;
+      __ Move(dst, src.ToFloat64());
+      if (destination->IsDoubleStackSlot()) {
+        __ sdc1(dst, g.ToMemOperand(destination));
+      }
     }
   } else if (source->IsDoubleRegister()) {
     FPURegister src = g.ToDoubleRegister(source);
@@ -922,9 +934,30 @@ void CodeGenerator::AddNopForSmiCodeInlining() {
   __ nop();  // Maybe PROPERTY_ACCESS_INLINED?
 }
 
+
+void CodeGenerator::EnsureSpaceForLazyDeopt() {
+  int space_needed = Deoptimizer::patch_size();
+  if (!linkage()->info()->IsStub()) {
+    // Ensure that we have enough space after the previous lazy-bailout
+    // instruction for patching the code here.
+    int current_pc = masm()->pc_offset();
+    if (current_pc < last_lazy_deopt_pc_ + space_needed) {
+      // Block tramoline pool emission for duration of padding.
+      v8::internal::Assembler::BlockTrampolinePoolScope block_trampoline_pool(
+          masm());
+      int padding_size = last_lazy_deopt_pc_ + space_needed - current_pc;
+      DCHECK_EQ(0, padding_size % v8::internal::Assembler::kInstrSize);
+      while (padding_size > 0) {
+        __ nop();
+        padding_size -= v8::internal::Assembler::kInstrSize;
+      }
+    }
+  }
+  MarkLazyDeoptSite();
+}
+
 #undef __
 
 }  // namespace compiler
 }  // namespace internal
 }  // namespace v8
-

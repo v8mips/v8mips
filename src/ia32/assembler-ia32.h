@@ -148,6 +148,11 @@ struct XMMRegister {
     return kMaxNumAllocatableRegisters;
   }
 
+  // TODO(turbofan): Proper support for float32.
+  static int NumAllocatableAliasedRegisters() {
+    return NumAllocatableRegisters();
+  }
+
   static int ToAllocationIndex(XMMRegister reg) {
     DCHECK(reg.code() != 0);
     return reg.code() - 1;
@@ -735,8 +740,11 @@ class Assembler : public AssemblerBase {
 
   void rcl(Register dst, uint8_t imm8);
   void rcr(Register dst, uint8_t imm8);
-  void ror(Register dst, uint8_t imm8);
-  void ror_cl(Register dst);
+
+  void ror(Register dst, uint8_t imm8) { ror(Operand(dst), imm8); }
+  void ror(const Operand& dst, uint8_t imm8);
+  void ror_cl(Register dst) { ror_cl(Operand(dst)); }
+  void ror_cl(const Operand& dst);
 
   void sar(Register dst, uint8_t imm8) { sar(Operand(dst), imm8); }
   void sar(const Operand& dst, uint8_t imm8);
@@ -956,6 +964,7 @@ class Assembler : public AssemblerBase {
   void addsd(XMMRegister dst, XMMRegister src);
   void addsd(XMMRegister dst, const Operand& src);
   void subsd(XMMRegister dst, XMMRegister src);
+  void subsd(XMMRegister dst, const Operand& src);
   void mulsd(XMMRegister dst, XMMRegister src);
   void mulsd(XMMRegister dst, const Operand& src);
   void divsd(XMMRegister dst, XMMRegister src);
@@ -1037,9 +1046,6 @@ class Assembler : public AssemblerBase {
   // non-temporal
   void prefetch(const Operand& src, int level);
   // TODO(lrn): Need SFENCE for movnt?
-
-  // Debugging
-  void Print();
 
   // Check the code size generated from label to here.
   int SizeOfCodeGeneratedSince(Label* label) {

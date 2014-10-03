@@ -15,7 +15,7 @@
 #include "src/cpu-profiler.h"
 #include "src/debug.h"
 #include "src/isolate-inl.h"
-#include "src/runtime.h"
+#include "src/runtime/runtime.h"
 
 namespace v8 {
 namespace internal {
@@ -810,6 +810,7 @@ void MacroAssembler::Div(Register res, Register rs, const Operand& rt) {
     }
   }
 }
+
 
 void MacroAssembler::Mod(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
@@ -3646,8 +3647,8 @@ void MacroAssembler::AllocateOneByteSlicedString(Register result,
 }
 
 
-void MacroAssembler::JumpIfNotUniqueName(Register reg,
-                                         Label* not_unique_name) {
+void MacroAssembler::JumpIfNotUniqueNameInstanceType(Register reg,
+                                                     Label* not_unique_name) {
   STATIC_ASSERT(kInternalizedTag == 0 && kStringTag == 0);
   Label succeed;
   And(at, reg, Operand(kIsNotStringMask | kIsNotInternalizedMask));
@@ -4541,8 +4542,7 @@ void MacroAssembler::SmiToDoubleFPURegister(Register smi,
 }
 
 
-void MacroAssembler::AdduAndCheckForOverflow(Register dst,
-                                             Register left,
+void MacroAssembler::AdduAndCheckForOverflow(Register dst, Register left,
                                              const Operand& right,
                                              Register overflow_dst,
                                              Register scratch) {
@@ -4569,8 +4569,7 @@ void MacroAssembler::AdduAndCheckForOverflow(Register dst,
 }
 
 
-void MacroAssembler::AdduAndCheckForOverflow(Register dst,
-                                             Register left,
+void MacroAssembler::AdduAndCheckForOverflow(Register dst, Register left,
                                              Register right,
                                              Register overflow_dst,
                                              Register scratch) {

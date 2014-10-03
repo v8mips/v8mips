@@ -200,6 +200,11 @@ struct XMMRegister {
     return kMaxNumAllocatableRegisters;
   }
 
+  // TODO(turbofan): Proper support for float32.
+  static int NumAllocatableAliasedRegisters() {
+    return NumAllocatableRegisters();
+  }
+
   static int ToAllocationIndex(XMMRegister reg) {
     DCHECK(reg.code() != 0);
     return reg.code() - 1;
@@ -808,30 +813,42 @@ class Assembler : public AssemblerBase {
   // Multiply rax by src, put the result in rdx:rax.
   void mul(Register src);
 
-#define DECLARE_SHIFT_INSTRUCTION(instruction, subcode)     \
-  void instruction##p(Register dst, Immediate imm8) {       \
-    shift(dst, imm8, subcode, kPointerSize);                \
-  }                                                         \
-                                                            \
-  void instruction##l(Register dst, Immediate imm8) {       \
-    shift(dst, imm8, subcode, kInt32Size);                  \
-  }                                                         \
-                                                            \
-  void instruction##q(Register dst, Immediate imm8) {       \
-    shift(dst, imm8, subcode, kInt64Size);                  \
-  }                                                         \
-                                                            \
-  void instruction##p_cl(Register dst) {                    \
-    shift(dst, subcode, kPointerSize);                      \
-  }                                                         \
-                                                            \
-  void instruction##l_cl(Register dst) {                    \
-    shift(dst, subcode, kInt32Size);                        \
-  }                                                         \
-                                                            \
-  void instruction##q_cl(Register dst) {                    \
-    shift(dst, subcode, kInt64Size);                        \
-  }
+#define DECLARE_SHIFT_INSTRUCTION(instruction, subcode)                       \
+  void instruction##p(Register dst, Immediate imm8) {                         \
+    shift(dst, imm8, subcode, kPointerSize);                                  \
+  }                                                                           \
+                                                                              \
+  void instruction##l(Register dst, Immediate imm8) {                         \
+    shift(dst, imm8, subcode, kInt32Size);                                    \
+  }                                                                           \
+                                                                              \
+  void instruction##q(Register dst, Immediate imm8) {                         \
+    shift(dst, imm8, subcode, kInt64Size);                                    \
+  }                                                                           \
+                                                                              \
+  void instruction##p(Operand dst, Immediate imm8) {                          \
+    shift(dst, imm8, subcode, kPointerSize);                                  \
+  }                                                                           \
+                                                                              \
+  void instruction##l(Operand dst, Immediate imm8) {                          \
+    shift(dst, imm8, subcode, kInt32Size);                                    \
+  }                                                                           \
+                                                                              \
+  void instruction##q(Operand dst, Immediate imm8) {                          \
+    shift(dst, imm8, subcode, kInt64Size);                                    \
+  }                                                                           \
+                                                                              \
+  void instruction##p_cl(Register dst) { shift(dst, subcode, kPointerSize); } \
+                                                                              \
+  void instruction##l_cl(Register dst) { shift(dst, subcode, kInt32Size); }   \
+                                                                              \
+  void instruction##q_cl(Register dst) { shift(dst, subcode, kInt64Size); }   \
+                                                                              \
+  void instruction##p_cl(Operand dst) { shift(dst, subcode, kPointerSize); }  \
+                                                                              \
+  void instruction##l_cl(Operand dst) { shift(dst, subcode, kInt32Size); }    \
+                                                                              \
+  void instruction##q_cl(Operand dst) { shift(dst, subcode, kInt64Size); }
   SHIFT_INSTRUCTION_LIST(DECLARE_SHIFT_INSTRUCTION)
 #undef DECLARE_SHIFT_INSTRUCTION
 
@@ -1048,6 +1065,7 @@ class Assembler : public AssemblerBase {
   void cvttsd2si(Register dst, const Operand& src);
   void cvttsd2si(Register dst, XMMRegister src);
   void cvttsd2siq(Register dst, XMMRegister src);
+  void cvttsd2siq(Register dst, const Operand& src);
 
   void cvtlsi2sd(XMMRegister dst, const Operand& src);
   void cvtlsi2sd(XMMRegister dst, Register src);
@@ -1316,6 +1334,7 @@ class Assembler : public AssemblerBase {
   // The first argument is the reg field, the second argument is the r/m field.
   void emit_sse_operand(XMMRegister dst, XMMRegister src);
   void emit_sse_operand(XMMRegister reg, const Operand& adr);
+  void emit_sse_operand(Register reg, const Operand& adr);
   void emit_sse_operand(XMMRegister dst, Register src);
   void emit_sse_operand(Register dst, XMMRegister src);
 
@@ -1358,9 +1377,11 @@ class Assembler : public AssemblerBase {
                                int size);
 
   // Emit machine code for a shift operation.
+  void shift(Operand dst, Immediate shift_amount, int subcode, int size);
   void shift(Register dst, Immediate shift_amount, int subcode, int size);
   // Shift dst by cl % 64 bits.
   void shift(Register dst, int subcode, int size);
+  void shift(Operand dst, int subcode, int size);
 
   void emit_farith(int b1, int b2, int i);
 
@@ -1447,6 +1468,7 @@ class Assembler : public AssemblerBase {
   void emit_imul(Register dst, Register src, int size);
   void emit_imul(Register dst, const Operand& src, int size);
   void emit_imul(Register dst, Register src, Immediate imm, int size);
+  void emit_imul(Register dst, const Operand& src, Immediate imm, int size);
 
   void emit_inc(Register dst, int size);
   void emit_inc(const Operand& dst, int size);

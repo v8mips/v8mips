@@ -524,7 +524,6 @@ class ParserTraits {
   }
   static ObjectLiteralProperty* EmptyObjectLiteralProperty() { return NULL; }
   static FunctionLiteral* EmptyFunctionLiteral() { return NULL; }
-  static ClassLiteral* EmptyClassLiteral() { return NULL; }
 
   // Used in error return values.
   static ZoneList<Expression*>* NullExpressionList() {
@@ -549,6 +548,12 @@ class ParserTraits {
   Expression* SuperReference(Scope* scope,
                              AstNodeFactory<AstConstructionVisitor>* factory,
                              int pos = RelocInfo::kNoPosition);
+  Expression* ClassLiteral(const AstRawString* name, Expression* extends,
+                           Expression* constructor,
+                           ZoneList<ObjectLiteral::Property*>* properties,
+                           int pos,
+                           AstNodeFactory<AstConstructionVisitor>* factory);
+
   Literal* ExpressionFromLiteral(
       Token::Value token, int pos, Scanner* scanner,
       AstNodeFactory<AstConstructionVisitor>* factory);
@@ -627,7 +632,11 @@ class Parser : public ParserBase<ParserTraits> {
                             info->isolate()->unicode_cache()};
     Parser parser(info, &parse_info);
     parser.set_allow_lazy(allow_lazy);
-    return parser.Parse();
+    if (parser.Parse()) {
+      info->SetStrictMode(info->function()->strict_mode());
+      return true;
+    }
+    return false;
   }
   bool Parse();
   void ParseOnBackground();
@@ -841,6 +850,10 @@ class Parser : public ParserBase<ParserTraits> {
   int use_counts_[v8::Isolate::kUseCounterFeatureCount];
   int total_preparse_skipped_;
   HistogramTimer* pre_parse_timer_;
+
+  // Temporary; for debugging. See Parser::SkipLazyFunctionBody. TODO(marja):
+  // remove this once done.
+  ScriptCompiler::CompileOptions debug_saved_compile_options_;
 };
 
 

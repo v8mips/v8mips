@@ -9,28 +9,23 @@
 #include "src/compiler.h"
 #include "src/ic/ic.h"
 #include "src/ic/stub-cache.h"
-#include "src/macro-assembler.h"
 #include "src/type-info.h"
-
-#include "src/objects-inl.h"
 
 namespace v8 {
 namespace internal {
 
 
-TypeFeedbackOracle::TypeFeedbackOracle(Handle<Code> code,
-                                       Handle<FixedArray> feedback_vector,
-                                       Handle<Context> native_context,
-                                       Zone* zone)
-    : native_context_(native_context),
-      zone_(zone) {
+TypeFeedbackOracle::TypeFeedbackOracle(
+    Handle<Code> code, Handle<TypeFeedbackVector> feedback_vector,
+    Handle<Context> native_context, Zone* zone)
+    : native_context_(native_context), zone_(zone) {
   BuildDictionary(code);
   DCHECK(dictionary_->IsDictionary());
   // We make a copy of the feedback vector because a GC could clear
   // the type feedback info contained therein.
   // TODO(mvstanton): revisit the decision to copy when we weakly
   // traverse the feedback vector at GC time.
-  feedback_vector_ = isolate()->factory()->CopyFixedArray(feedback_vector);
+  feedback_vector_ = TypeFeedbackVector::Copy(isolate(), feedback_vector);
 }
 
 
@@ -83,17 +78,6 @@ bool TypeFeedbackOracle::StoreIsUninitialized(TypeFeedbackId ast_id) {
 }
 
 
-bool TypeFeedbackOracle::StoreIsKeyedPolymorphic(TypeFeedbackId ast_id) {
-  Handle<Object> maybe_code = GetInfo(ast_id);
-  if (maybe_code->IsCode()) {
-    Handle<Code> code = Handle<Code>::cast(maybe_code);
-    return code->is_keyed_store_stub() &&
-        code->ic_state() == POLYMORPHIC;
-  }
-  return false;
-}
-
-
 bool TypeFeedbackOracle::CallIsMonomorphic(int slot) {
   Handle<Object> value = GetInfo(slot);
   return value->IsAllocationSite() || value->IsJSFunction();
@@ -111,8 +95,9 @@ bool TypeFeedbackOracle::CallNewIsMonomorphic(int slot) {
 byte TypeFeedbackOracle::ForInType(int feedback_vector_slot) {
   Handle<Object> value = GetInfo(feedback_vector_slot);
   return value.is_identical_to(
-      TypeFeedbackInfo::UninitializedSentinel(isolate()))
-      ? ForInStatement::FAST_FOR_IN : ForInStatement::SLOW_FOR_IN;
+             TypeFeedbackVector::UninitializedSentinel(isolate()))
+             ? ForInStatement::FAST_FOR_IN
+             : ForInStatement::SLOW_FOR_IN;
 }
 
 

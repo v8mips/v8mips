@@ -6,6 +6,7 @@
 
 #include "src/api.h"
 #include "src/ast.h"
+#include "src/bailout-reason.h"
 #include "src/base/platform/platform.h"
 #include "src/bootstrapper.h"
 #include "src/char-predicates-inl.h"
@@ -14,7 +15,7 @@
 #include "src/messages.h"
 #include "src/parser.h"
 #include "src/preparser.h"
-#include "src/runtime.h"
+#include "src/runtime/runtime.h"
 #include "src/scanner-character-streams.h"
 #include "src/scopeinfo.h"
 #include "src/string-stream.h"
@@ -664,6 +665,13 @@ Expression* ParserTraits::SuperReference(
       pos);
 }
 
+Expression* ParserTraits::ClassLiteral(
+    const AstRawString* name, Expression* extends, Expression* constructor,
+    ZoneList<ObjectLiteral::Property*>* properties, int pos,
+    AstNodeFactory<AstConstructionVisitor>* factory) {
+  return factory->NewClassLiteral(name, extends, constructor, properties, pos);
+}
+
 Literal* ParserTraits::ExpressionFromLiteral(
     Token::Value token, int pos,
     Scanner* scanner,
@@ -799,6 +807,7 @@ FunctionLiteral* Parser::ParseProgram() {
   // Initialize parser state.
   CompleteParserRecorder recorder;
 
+  debug_saved_compile_options_ = compile_options();
   if (compile_options() == ScriptCompiler::kProduceParserCache) {
     log_ = &recorder;
   } else if (compile_options() == ScriptCompiler::kConsumeParserCache) {
@@ -1113,6 +1122,7 @@ void* Parser::ParseSourceElements(ZoneList<Statement*>* processor,
           // Store the usage count; The actual use counter on the isolate is
           // incremented after parsing is done.
           ++use_counts_[v8::Isolate::kUseAsm];
+          scope_->SetAsmModule();
         }
       } else {
         // End of the directive prologue.
@@ -1962,8 +1972,8 @@ Statement* Parser::ParseClassDeclaration(ZoneList<const AstRawString*>* names,
   bool is_strict_reserved = false;
   const AstRawString* name =
       ParseIdentifierOrStrictReservedWord(&is_strict_reserved, CHECK_OK);
-  ClassLiteral* value = ParseClassLiteral(name, scanner()->location(),
-                                          is_strict_reserved, pos, CHECK_OK);
+  Expression* value = ParseClassLiteral(name, scanner()->location(),
+                                        is_strict_reserved, pos, CHECK_OK);
 
   Block* block = factory()->NewBlock(NULL, 1, true, pos);
   VariableMode mode = LET;
@@ -3371,7 +3381,7 @@ bool CheckAndDeclareArrowParameter(ParserTraits* traits, Expression* expression,
 
   // Too many parentheses around expression:
   //   (( ... )) => ...
-  if (expression->parenthesization_level() > 1) return false;
+  if (expression->is_multi_parenthesized()) return false;
 
   // Case for a single parameter:
   //   (foo) => ...
@@ -3693,6 +3703,17 @@ void Parser::SkipLazyFunctionBody(const AstRawString* function_name,
                                   int* materialized_literal_count,
                                   int* expected_property_count,
                                   bool* ok) {
+  // Temporary debugging code for tracking down a mystery crash which should
+  // never happen. The crash happens on the line where we log the function in
+  // the preparse data: log_->LogFunction(...). TODO(marja): remove this once
+  // done.
+  CHECK(materialized_literal_count);
+  CHECK(expected_property_count);
+  CHECK(debug_saved_compile_options_ == compile_options());
+  if (compile_options() == ScriptCompiler::kProduceParserCache) {
+    CHECK(log_);
+  }
+
   int function_block_pos = position();
   if (compile_options() == ScriptCompiler::kConsumeParserCache) {
     // If we have cached data, we use it to skip parsing the function body. The
@@ -4917,6 +4938,7 @@ void Parser::ParseOnBackground() {
   fni_ = new (zone()) FuncNameInferrer(ast_value_factory(), zone());
 
   CompleteParserRecorder recorder;
+  debug_saved_compile_options_ = compile_options();
   if (compile_options() == ScriptCompiler::kProduceParserCache) {
     log_ = &recorder;
   }
