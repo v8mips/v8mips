@@ -168,15 +168,21 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
     case kArchTruncateDoubleToI:
       __ TruncateDoubleToI(i.OutputRegister(), i.InputDoubleRegister(0));
       break;
-    case kMipsAdd:
+    case kMips64Add:
       __ Addu(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
+      break;
+    case kMips64Dadd:
+      __ Daddu(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
     case kMipsAddOvf:
       __ AdduAndCheckForOverflow(i.OutputRegister(), i.InputRegister(0),
                                  i.InputOperand(1), kCompareReg, kScratchReg);
       break;
-    case kMipsSub:
+    case kMips64Sub:
       __ Subu(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
+      break;
+    case kMips64Dsub:
+      __ Dsubu(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
     case kMipsSubOvf:
       __ SubuAndCheckForOverflow(i.OutputRegister(), i.InputRegister(0),
@@ -206,7 +212,7 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
     case kMipsXor:
       __ Xor(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
-    case kMipsShl:
+    case kMips64Shl:
       if (instr->InputAt(1)->IsRegister()) {
         __ sllv(i.OutputRegister(), i.InputRegister(0), i.InputRegister(1));
       } else {
@@ -214,7 +220,7 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
         __ sll(i.OutputRegister(), i.InputRegister(0), imm);
       }
       break;
-    case kMipsShr:
+    case kMips64Shr:
       if (instr->InputAt(1)->IsRegister()) {
         __ srlv(i.OutputRegister(), i.InputRegister(0), i.InputRegister(1));
       } else {
@@ -222,12 +228,36 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
         __ srl(i.OutputRegister(), i.InputRegister(0), imm);
       }
       break;
-    case kMipsSar:
+    case kMips64Sar:
       if (instr->InputAt(1)->IsRegister()) {
         __ srav(i.OutputRegister(), i.InputRegister(0), i.InputRegister(1));
       } else {
         int32_t imm = i.InputOperand(1).immediate();
         __ sra(i.OutputRegister(), i.InputRegister(0), imm);
+      }
+      break;
+       case kMips64Dshl:
+      if (instr->InputAt(1)->IsRegister()) {
+        __ dsllv(i.OutputRegister(), i.InputRegister(0), i.InputRegister(1));
+      } else {
+        int32_t imm = i.InputOperand(1).immediate();
+        __ dsll(i.OutputRegister(), i.InputRegister(0), imm);
+      }
+      break;
+    case kMips64Dshr:
+      if (instr->InputAt(1)->IsRegister()) {
+        __ dsrlv(i.OutputRegister(), i.InputRegister(0), i.InputRegister(1));
+      } else {
+        int32_t imm = i.InputOperand(1).immediate();
+        __ dsrl(i.OutputRegister(), i.InputRegister(0), imm);
+      }
+      break;
+    case kMips64Dsar:
+      if (instr->InputAt(1)->IsRegister()) {
+        __ dsrav(i.OutputRegister(), i.InputRegister(0), i.InputRegister(1));
+      } else {
+        int32_t imm = i.InputOperand(1).immediate();
+        __ dsra(i.OutputRegister(), i.InputRegister(0), imm);
       }
       break;
     case kMipsRor:

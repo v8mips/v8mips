@@ -30,18 +30,22 @@ class MipsOperandGenerator FINAL : public OperandGenerator {
   }
 
   bool CanBeImmediate(Node* node, InstructionCode opcode) {
-    Int32Matcher m(node);
-    if (!m.HasValue()) return false;
-    int32_t value = m.Value();
+    int64_t value;
+    if (node->opcode() == IrOpcode::kInt32Constant)
+      value = OpParameter<int32_t>(node);
+    else if (node->opcode() == IrOpcode::kInt64Constant)
+      value = OpParameter<int64_t>(node);
+    else
+      return false;
     switch (ArchOpcodeField::decode(opcode)) {
-      case kMipsShl:
-      case kMipsSar:
-      case kMipsShr:
+      case kMips64Shl:
+      case kMips64Sar:
+      case kMips64Shr:
         return is_uint5(value);
-      case kMipsXor:
+      case kMips64Xor:
         return is_uint16(value);
-      case kMipsLdc1:
-      case kMipsSdc1:
+      case kMips64Ldc1:
+      case kMips64Sdc1:
         return is_int16(value + kIntSize);
       default:
         return is_int16(value);
@@ -244,14 +248,28 @@ void InstructionSelector::VisitWord32Shl(Node* node) {
 
 
 void InstructionSelector::VisitWord32Shr(Node* node) {
-  VisitRRO(this, kMipsShr, node);
+  VisitRRO(this, kMips64Shr, node);
 }
 
 
 void InstructionSelector::VisitWord32Sar(Node* node) {
-  VisitRRO(this, kMipsSar, node);
+  VisitRRO(this, kMips64Sar, node);
 }
 
+
+void InstructionSelector::VisitWord64Shl(Node* node) {
+  VisitRRO(this, kMips64Dshl, node);
+}
+
+
+void InstructionSelector::VisitWord64Shr(Node* node) {
+  VisitRRO(this, kMips64Dshr, node);
+}
+
+
+void InstructionSelector::VisitWord64Sar(Node* node) {
+  VisitRRO(this, kMips64Dsar, node);
+}
 
 void InstructionSelector::VisitWord32Ror(Node* node) {
   VisitRRO(this, kMipsRor, node);
@@ -262,12 +280,25 @@ void InstructionSelector::VisitInt32Add(Node* node) {
   MipsOperandGenerator g(this);
 
   // TODO(plind): Consider multiply & add optimization from arm port.
-  VisitBinop(this, node, kMipsAdd);
+  VisitBinop(this, node, kMips64Add);
+}
+
+
+void InstructionSelector::VisitInt64Add(Node* node) {
+  MipsOperandGenerator g(this);
+
+  // TODO(plind): Consider multiply & add optimization from arm port.
+  VisitBinop(this, node, kMips64Dadd);
 }
 
 
 void InstructionSelector::VisitInt32Sub(Node* node) {
-  VisitBinop(this, node, kMipsSub);
+  VisitBinop(this, node, kMips64Sub);
+}
+
+
+void InstructionSelector::VisitInt64Sub(Node* node) {
+  VisitBinop(this, node, kMips64Dsub);
 }
 
 
@@ -277,34 +308,69 @@ void InstructionSelector::VisitInt32Mul(Node* node) {
   if (m.right().HasValue() && m.right().Value() > 0) {
     int32_t value = m.right().Value();
     if (base::bits::IsPowerOfTwo32(value)) {
-      Emit(kMipsShl | AddressingModeField::encode(kMode_None),
+      Emit(kMips64Shl | AddressingModeField::encode(kMode_None),
            g.DefineAsRegister(node), g.UseRegister(m.left().node()),
            g.TempImmediate(WhichPowerOf2(value)));
       return;
     }
     if (base::bits::IsPowerOfTwo32(value - 1)) {
       InstructionOperand* temp = g.TempRegister();
-      Emit(kMipsShl | AddressingModeField::encode(kMode_None), temp,
+      Emit(kMips64Shl | AddressingModeField::encode(kMode_None), temp,
            g.UseRegister(m.left().node()),
            g.TempImmediate(WhichPowerOf2(value - 1)));
-      Emit(kMipsAdd | AddressingModeField::encode(kMode_None),
+      Emit(kMips64Add | AddressingModeField::encode(kMode_None),
            g.DefineAsRegister(node), g.UseRegister(m.left().node()), temp);
       return;
     }
     if (base::bits::IsPowerOfTwo32(value + 1)) {
       InstructionOperand* temp = g.TempRegister();
-      Emit(kMipsShl | AddressingModeField::encode(kMode_None), temp,
+      Emit(kMips64Shl | AddressingModeField::encode(kMode_None), temp,
            g.UseRegister(m.left().node()),
            g.TempImmediate(WhichPowerOf2(value + 1)));
-      Emit(kMipsSub | AddressingModeField::encode(kMode_None),
+      Emit(kMips64Sub | AddressingModeField::encode(kMode_None),
            g.DefineAsRegister(node), temp, g.UseRegister(m.left().node()));
       return;
     }
   }
-  Emit(kMipsMul, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
+  Emit(kMips64Mul, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
        g.UseRegister(m.right().node()));
 }
 
+
+void InstructionSelector::VisitInt64Mul(Node* node) {
+  MipsOperandGenerator g(this);
+  Int64BinopMatcher m(node);
+  // TODO(dusmil): Add optimization for shifts larger than 32.
+  if (m.right().HasValue() && m.right().Value() > 0) {
+    int64_t value = m.right().Value();
+    if (base::bits::IsPowerOfTwo32(value)) {
+      Emit(kMips64Dshl | AddressingModeField::encode(kMode_None),
+           g.DefineAsRegister(node), g.UseRegister(m.left().node()),
+           g.TempImmediate(WhichPowerOf2(value)));
+      return;
+    }
+    if (base::bits::IsPowerOfTwo32(value - 1)) {
+      InstructionOperand* temp = g.TempRegister();
+      Emit(kMips64Dshl | AddressingModeField::encode(kMode_None), temp,
+           g.UseRegister(m.left().node()),
+           g.TempImmediate(WhichPowerOf2(value - 1)));
+      Emit(kMipsDadd | AddressingModeField::encode(kMode_None),
+           g.DefineAsRegister(node), g.UseRegister(m.left().node()), temp);
+      return;
+    }
+    if (base::bits::IsPowerOfTwo32(value + 1)) {
+      InstructionOperand* temp = g.TempRegister();
+      Emit(kMips64Dshl | AddressingModeField::encode(kMode_None), temp,
+           g.UseRegister(m.left().node()),
+           g.TempImmediate(WhichPowerOf2(value + 1)));
+      Emit(kMips64Dsub | AddressingModeField::encode(kMode_None),
+           g.DefineAsRegister(node), temp, g.UseRegister(m.left().node()));
+      return;
+    }
+  }
+  Emit(kMips64DMul, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
+       g.UseRegister(m.right().node()));
+}
 
 void InstructionSelector::VisitInt32Div(Node* node) {
   MipsOperandGenerator g(this);
