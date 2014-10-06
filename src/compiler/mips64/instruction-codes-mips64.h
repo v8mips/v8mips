@@ -59,8 +59,10 @@ namespace compiler {
   V(Mips64Lh)                        \
   V(Mips64Lhu)                       \
   V(Mips64Sh)                        \
+  V(Mips64Ld)                        \
   V(Mips64Lw)                        \
   V(Mips64Sw)                        \
+  V(Mips64Sd)                        \
   V(Mips64Lwc1)                      \
   V(Mips64Swc1)                      \
   V(Mips64Ldc1)                      \

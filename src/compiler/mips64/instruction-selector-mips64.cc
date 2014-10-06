@@ -124,21 +124,24 @@ void InstructionSelector::VisitLoad(Node* node) {
   ArchOpcode opcode;
   switch (rep) {
     case kRepFloat32:
-      opcode = kMipsLwc1;
+      opcode = kMips64Lwc1;
       break;
     case kRepFloat64:
-      opcode = kMipsLdc1;
+      opcode = kMips64Ldc1;
       break;
     case kRepBit:  // Fall through.
     case kRepWord8:
-      opcode = typ == kTypeUint32 ? kMipsLbu : kMipsLb;
+      opcode = typ == kTypeUint32 ? kMips64Lbu : kMips64Lb;
       break;
     case kRepWord16:
-      opcode = typ == kTypeUint32 ? kMipsLhu : kMipsLh;
+      opcode = typ == kTypeUint32 ? kMips64Lhu : kMips64Lh;
+      break;
+    case kRepWord32:
+      opcode = kMips64Lw;
       break;
     case kRepTagged:  // Fall through.
-    case kRepWord32:
-      opcode = kMipsLw;
+    case kRepWord64:
+      opcode = kMips64Ld;
       break;
     default:
       UNREACHABLE();
@@ -150,7 +153,7 @@ void InstructionSelector::VisitLoad(Node* node) {
          g.DefineAsRegister(node), g.UseRegister(base), g.UseImmediate(index));
   } else {
     InstructionOperand* addr_reg = g.TempRegister();
-    Emit(kMipsAdd | AddressingModeField::encode(kMode_None), addr_reg,
+    Emit(kMips64Dadd | AddressingModeField::encode(kMode_None), addr_reg,
          g.UseRegister(index), g.UseRegister(base));
     // Emit desired load opcode, using temp addr_reg.
     Emit(opcode | AddressingModeField::encode(kMode_MRI),
@@ -173,7 +176,7 @@ void InstructionSelector::VisitStore(Node* node) {
     //                and pass them here instead of using fixed regs
     // TODO(dcarney): handle immediate indices.
     InstructionOperand* temps[] = {g.TempRegister(t1), g.TempRegister(t2)};
-    Emit(kMipsStoreWriteBarrier, NULL, g.UseFixed(base, t0),
+    Emit(kMips64StoreWriteBarrier, NULL, g.UseFixed(base, t0),
          g.UseFixed(index, t1), g.UseFixed(value, t2), arraysize(temps), temps);
     return;
   }
@@ -182,21 +185,24 @@ void InstructionSelector::VisitStore(Node* node) {
   ArchOpcode opcode;
   switch (rep) {
     case kRepFloat32:
-      opcode = kMipsSwc1;
+      opcode = kMips64Swc1;
       break;
     case kRepFloat64:
-      opcode = kMipsSdc1;
+      opcode = kMips64Sdc1;
       break;
     case kRepBit:  // Fall through.
     case kRepWord8:
-      opcode = kMipsSb;
+      opcode = kMips64Sb;
       break;
     case kRepWord16:
-      opcode = kMipsSh;
+      opcode = kMips64Sh;
+      break;
+    case kRepWord32:
+      opcode = kMips64Sw;
       break;
     case kRepTagged:  // Fall through.
-    case kRepWord32:
-      opcode = kMipsSw;
+    case kRepWord64:
+      opcode = kMips64Sd;
       break;
     default:
       UNREACHABLE();
@@ -208,7 +214,7 @@ void InstructionSelector::VisitStore(Node* node) {
          g.UseRegister(base), g.UseImmediate(index), g.UseRegister(value));
   } else {
     InstructionOperand* addr_reg = g.TempRegister();
-    Emit(kMipsAdd | AddressingModeField::encode(kMode_None), addr_reg,
+    Emit(kMips64Dadd | AddressingModeField::encode(kMode_None), addr_reg,
          g.UseRegister(index), g.UseRegister(base));
     // Emit desired store opcode, using temp addr_reg.
     Emit(opcode | AddressingModeField::encode(kMode_MRI), NULL, addr_reg,

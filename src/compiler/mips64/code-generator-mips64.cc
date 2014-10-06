@@ -343,8 +343,14 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
     case kMipsLw:
       __ lw(i.OutputRegister(), i.MemoryOperand());
       break;
+    case kMips64Ld:
+      __ ld(i.OutputRegister(), i.MemoryOperand());
+      break;
     case kMipsSw:
       __ sw(i.InputRegister(2), i.MemoryOperand());
+      break;
+    case kMipsSd:
+      __ sd(i.InputRegister(2), i.MemoryOperand());
       break;
     case kMipsLwc1: {
       __ lwc1(i.OutputSingleRegister(), i.MemoryOperand());
