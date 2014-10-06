@@ -368,14 +368,14 @@ void InstructionSelector::VisitInt64Mul(Node* node) {
       return;
     }
   }
-  Emit(kMips64DMul, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
+  Emit(kMips64Dmul, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
        g.UseRegister(m.right().node()));
 }
 
 void InstructionSelector::VisitInt32Div(Node* node) {
   MipsOperandGenerator g(this);
   Int32BinopMatcher m(node);
-  Emit(kMipsDiv, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
+  Emit(kMips64Div, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
        g.UseRegister(m.right().node()));
 }
 
@@ -383,7 +383,7 @@ void InstructionSelector::VisitInt32Div(Node* node) {
 void InstructionSelector::VisitUint32Div(Node* node) {
   MipsOperandGenerator g(this);
   Int32BinopMatcher m(node);
-  Emit(kMipsDivU, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
+  Emit(kMips64DivU, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
        g.UseRegister(m.right().node()));
 }
 
@@ -391,7 +391,7 @@ void InstructionSelector::VisitUint32Div(Node* node) {
 void InstructionSelector::VisitInt32Mod(Node* node) {
   MipsOperandGenerator g(this);
   Int32BinopMatcher m(node);
-  Emit(kMipsMod, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
+  Emit(kMips64Mod, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
        g.UseRegister(m.right().node()));
 }
 
@@ -399,10 +399,41 @@ void InstructionSelector::VisitInt32Mod(Node* node) {
 void InstructionSelector::VisitUint32Mod(Node* node) {
   MipsOperandGenerator g(this);
   Int32BinopMatcher m(node);
-  Emit(kMipsModU, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
+  Emit(kMips64ModU, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
        g.UseRegister(m.right().node()));
 }
 
+
+void InstructionSelector::VisitInt64Div(Node* node) {
+  MipsOperandGenerator g(this);
+  Int64BinopMatcher m(node);
+  Emit(kMips64Ddiv, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
+       g.UseRegister(m.right().node()));
+}
+
+
+void InstructionSelector::VisitUint64Div(Node* node) {
+  MipsOperandGenerator g(this);
+  Int64BinopMatcher m(node);
+  Emit(kMips64DdivU, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
+       g.UseRegister(m.right().node()));
+}
+
+
+void InstructionSelector::VisitInt64Mod(Node* node) {
+  MipsOperandGenerator g(this);
+  Int64BinopMatcher m(node);
+  Emit(kMips64Dmod, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
+       g.UseRegister(m.right().node()));
+}
+
+
+void InstructionSelector::VisitUint64Mod(Node* node) {
+  MipsOperandGenerator g(this);
+  Int64BinopMatcher m(node);
+  Emit(kMips64DmodU, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
+       g.UseRegister(m.right().node()));
+}
 
 void InstructionSelector::VisitChangeFloat32ToFloat64(Node* node) {
   MipsOperandGenerator g(this);

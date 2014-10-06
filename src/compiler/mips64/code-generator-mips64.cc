@@ -188,20 +188,35 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       __ SubuAndCheckForOverflow(i.OutputRegister(), i.InputRegister(0),
                                  i.InputOperand(1), kCompareReg, kScratchReg);
       break;
-    case kMipsMul:
+    case kMips64Mul:
       __ Mul(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
-    case kMipsDiv:
+    case kMips64Div:
       __ Div(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
-    case kMipsDivU:
+    case kMips64DivU:
       __ Divu(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
-    case kMipsMod:
+    case kMips64Mod:
       __ Mod(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
-    case kMipsModU:
+    case kMips64ModU:
       __ Modu(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
+      break;
+    case kMips64Dmul:
+      __ Dmul(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
+      break;
+    case kMips64Ddiv:
+      __ Ddiv(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
+      break;
+    case kMips64DdivU:
+      __ Ddivu(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
+      break;
+    case kMips64Dmod:
+      __ Dmod(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
+      break;
+    case kMips64DmodU:
+      __ Dmodu(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
     case kMipsAnd:
       __ And(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
