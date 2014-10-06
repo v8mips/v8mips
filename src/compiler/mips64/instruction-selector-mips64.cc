@@ -243,7 +243,7 @@ void InstructionSelector::VisitWord32Xor(Node* node) {
 
 
 void InstructionSelector::VisitWord32Shl(Node* node) {
-  VisitRRO(this, kMipsShl, node);
+  VisitRRO(this, kMips64Shl, node);
 }
 
 
@@ -465,6 +465,22 @@ void InstructionSelector::VisitChangeFloat64ToUint32(Node* node) {
        g.UseRegister(node->InputAt(0)));
 }
 
+
+void InstructionSelector::VisitChangeInt32ToInt64(Node* node) {
+  Mips64OperandGenerator g(this);
+  Emit(kMips64Sxt, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
+}
+
+
+void InstructionSelector::VisitChangeUint32ToUint64(Node* node) {
+  Mips64OperandGenerator g(this);
+  Emit(kMips64Mov, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
+}
+
+void InstructionSelector::VisitTruncateInt64ToInt32(Node* node) {
+ Mips64OperandGenerator g(this);
+  Emit(kMips64Mov, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
+}
 
 void InstructionSelector::VisitTruncateFloat64ToFloat32(Node* node) {
   MipsOperandGenerator g(this);

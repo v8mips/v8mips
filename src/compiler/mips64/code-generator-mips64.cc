@@ -227,6 +227,9 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
     case kMipsXor:
       __ Xor(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
+    case kMips64Sxt:
+      __ sll(i.OutputRegister(), i.InputRegister(0), 0);
+      break;
     case kMips64Shl:
       if (instr->InputAt(1)->IsRegister()) {
         __ sllv(i.OutputRegister(), i.InputRegister(0), i.InputRegister(1));
@@ -285,7 +288,7 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
     case kMipsCmp:
       // Psuedo-instruction used for cmp/branch. No opcode emitted here.
       break;
-    case kMipsMov:
+    case kMips64Mov:
       // TODO(plind): Should we combine mov/li like this, or use separate instr?
       //    - Also see x64 ASSEMBLE_BINOP & RegisterOrOperandType
       if (HasRegisterInput(instr, 0)) {
