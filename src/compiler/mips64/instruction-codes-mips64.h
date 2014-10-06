@@ -1,0 +1,95 @@
+// Copyright 2014 the V8 project authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef V8_COMPILER_MIPS_INSTRUCTION_CODES_MIPS_H_
+#define V8_COMPILER_MIPS_INSTRUCTION_CODES_MIPS_H_
+
+namespace v8 {
+namespace internal {
+namespace compiler {
+
+// MIPS64-specific opcodes that specify which assembly sequence to emit.
+// Most opcodes specify a single instruction.
+#define TARGET_ARCH_OPCODE_LIST(V) \
+  V(Mips64Add)                       \
+  V(Mips64Dadd)                      \
+  V(Mips64AddOvf)                    \
+  V(Mips64DaddOvf)                   \
+  V(Mips64Sub)                       \
+  V(Mips64Dsub)                      \
+  V(Mips64SubOvf)                    \
+  V(Mips64DsubOvf)                   \
+  V(Mips64Mul)                       \
+  V(Mips64Dmul)                      \
+  V(Mips64Div)                       \
+  V(Mips64Ddiv)                      \
+  V(Mips64DivU)                      \
+  V(Mips64DdivU)                     \
+  V(Mips64Mod)                       \
+  V(Mips64Dmod)                      \
+  V(Mips64ModU)                      \
+  V(Mips64DmodU)                     \
+  V(Mips64And)                       \
+  V(Mips64Or)                        \
+  V(Mips64Xor)                       \
+  V(Mips64Shl)                       \
+  V(Mips64Shr)                       \
+  V(Mips64Sar)                       \
+  V(Mips64Ror)                       \
+  V(Mips64Mov)                       \
+  V(Mips64Tst)                       \
+  V(Mips64Cmp)                       \
+  V(Mips64CmpD)                      \
+  V(Mips64AddD)                      \
+  V(Mips64SubD)                      \
+  V(Mips64MulD)                      \
+  V(Mips64DivD)                      \
+  V(Mips64ModD)                      \
+  V(Mips64SqrtD)                     \
+  V(Mips64CvtSD)                     \
+  V(Mips64CvtDS)                     \
+  V(Mips64TruncWD)                   \
+  V(Mips64TruncUwD)                  \
+  V(Mips64CvtDW)                     \
+  V(Mips64CvtDUw)                    \
+  V(Mips64Lb)                        \
+  V(Mips64Lbu)                       \
+  V(Mips64Sb)                        \
+  V(Mips64Lh)                        \
+  V(Mips64Lhu)                       \
+  V(Mips64Sh)                        \
+  V(Mips64Lw)                        \
+  V(Mips64Sw)                        \
+  V(Mips64Lwc1)                      \
+  V(Mips64Swc1)                      \
+  V(Mips64Ldc1)                      \
+  V(Mips64Sdc1)                      \
+  V(Mips64Push)                      \
+  V(Mips64StoreWriteBarrier)
+
+
+// Addressing modes represent the "shape" of inputs to an instruction.
+// Many instructions support multiple addressing modes. Addressing modes
+// are encoded into the InstructionCode of the instruction and tell the
+// code generator after register allocation which assembler method to call.
+//
+// We use the following local notation for addressing modes:
+//
+// R = register
+// O = register or stack slot
+// D = double register
+// I = immediate (handle, external, int32)
+// MRI = [register + immediate]
+// MRR = [register + register]
+// TODO(plind): Add the new r6 address modes.
+#define TARGET_ADDRESSING_MODE_LIST(V) \
+  V(MRI) /* [%r0 + K] */               \
+  V(MRR) /* [%r0 + %r1] */
+
+
+}  // namespace compiler
+}  // namespace internal
+}  // namespace v8
+
+#endif  // V8_COMPILER_MIPS_INSTRUCTION_CODES_MIPS_H_
