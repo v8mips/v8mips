@@ -487,14 +487,21 @@ void InstructionSelector::VisitChangeFloat64ToUint32(Node* node) {
 
 
 void InstructionSelector::VisitChangeInt32ToInt64(Node* node) {
-  UNIMPLEMENTED();
+  Mips64OperandGenerator g(this);
+  Emit(kMips64Sxt, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
 }
 
 
 void InstructionSelector::VisitChangeUint32ToUint64(Node* node) {
-  UNIMPLEMENTED();
+  Mips64OperandGenerator g(this);
+  Emit(kMips64Mov, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
 }
 
+
+void InstructionSelector::VisitTruncateInt64ToInt32(Node* node) {
+  Mips64OperandGenerator g(this);
+  Emit(kMips64Mov, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
+}
 
 void InstructionSelector::VisitTruncateFloat64ToFloat32(Node* node) {
   Mips64OperandGenerator g(this);
