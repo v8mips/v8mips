@@ -815,6 +815,72 @@ void MacroAssembler::Div(Register rs, const Operand& rt) {
 }
 
 
+void MacroAssembler::Div(Register res, Register rs, const Operand& rt) {
+  if (rt.is_reg()) {
+    if (kArchVariant != kMips64r6) {
+      div(rs, rt.rm());
+      mflo(res);
+    } else {
+      div(res, rs, rt.rm());
+    }
+  } else {
+    // li handles the relocation.
+    DCHECK(!rs.is(at));
+    li(at, rt);
+    if (kArchVariant != kMips64r6) {
+      div(rs, at);
+      mflo(res);
+    } else {
+      div(res, rs, at);
+    }
+  }
+}
+
+
+void MacroAssembler::Mod(Register rd, Register rs, const Operand& rt) {
+  if (rt.is_reg()) {
+    if (kArchVariant != kMips64r6) {
+      div(rs, rt.rm());
+      mfhi(rd);
+    } else {
+      mod(rd, rs, rt.rm());
+    }
+  } else {
+    // li handles the relocation.
+    DCHECK(!rs.is(at));
+    li(at, rt);
+    if (kArchVariant != kMips64r6) {
+      div(rs, at);
+      mfhi(rd);
+    } else {
+      mod(rd, rs, at);
+    }
+  }
+}
+
+
+void MacroAssembler::Modu(Register rd, Register rs, const Operand& rt) {
+  if (rt.is_reg()) {
+    if (kArchVariant != kMips64r6) {
+      divu(rs, rt.rm());
+      mfhi(rd);
+    } else {
+      modu(rd, rs, rt.rm());
+    }
+  } else {
+    // li handles the relocation.
+    DCHECK(!rs.is(at));
+    li(at, rt);
+    if (kArchVariant != kMips64r6) {
+      divu(rs, at);
+      mfhi(rd);
+    } else {
+      modu(rd, rs, at);
+    }
+  }
+}
+
+
 void MacroAssembler::Ddiv(Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     ddiv(rs, rt.rm());
@@ -864,6 +930,28 @@ void MacroAssembler::Divu(Register rs, const Operand& rt) {
 }
 
 
+void MacroAssembler::Divu(Register res, Register rs, const Operand& rt) {
+  if (rt.is_reg()) {
+    if (kArchVariant != kMips64r6) {
+      divu(rs, rt.rm());
+      mflo(res);
+    } else {
+      divu(res, rs, rt.rm());
+    }
+  } else {
+    // li handles the relocation.
+    DCHECK(!rs.is(at));
+    li(at, rt);
+    if (kArchVariant != kMips64r6) {
+      divu(rs, at);
+      mflo(res);
+    } else {
+      divu(res, rs, at);
+    }
+  }
+}
+
+
 void MacroAssembler::Ddivu(Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     ddivu(rs, rt.rm());
@@ -872,6 +960,28 @@ void MacroAssembler::Ddivu(Register rs, const Operand& rt) {
     DCHECK(!rs.is(at));
     li(at, rt);
     ddivu(rs, at);
+  }
+}
+
+
+void MacroAssembler::Ddivu(Register res, Register rs, const Operand& rt) {
+  if (rt.is_reg()) {
+    if (kArchVariant != kMips64r6) {
+      ddivu(rs, rt.rm());
+      mflo(res);
+    } else {
+      ddivu(res, rs, rt.rm());
+    }
+  } else {
+    // li handles the relocation.
+    DCHECK(!rs.is(at));
+    li(at, rt);
+    if (kArchVariant != kMips64r6) {
+      ddivu(rs, at);
+      mflo(res);
+    } else {
+      ddivu(res, rs, at);
+    }
   }
 }
 
@@ -896,6 +1006,31 @@ void MacroAssembler::Dmod(Register rd, Register rs, const Operand& rt) {
       DCHECK(!rs.is(at));
       li(at, rt);
       dmod(rd, rs, at);
+    }
+  }
+}
+
+
+void MacroAssembler::Dmodu(Register rd, Register rs, const Operand& rt) {
+  if (kArchVariant != kMips64r6) {
+    if (rt.is_reg()) {
+      ddivu(rs, rt.rm());
+      mfhi(rd);
+    } else {
+      // li handles the relocation.
+      DCHECK(!rs.is(at));
+      li(at, rt);
+      ddivu(rs, at);
+      mfhi(rd);
+    }
+  } else {
+    if (rt.is_reg()) {
+      dmodu(rd, rs, rt.rm());
+    } else {
+      // li handles the relocation.
+      DCHECK(!rs.is(at));
+      li(at, rt);
+      dmodu(rd, rs, at);
     }
   }
 }
@@ -4367,6 +4502,33 @@ void MacroAssembler::SmiToDoubleFPURegister(Register smi,
 }
 
 
+void MacroAssembler::AdduAndCheckForOverflow(Register dst, Register left,
+                                             const Operand& right,
+                                             Register overflow_dst,
+                                             Register scratch) {
+  if (right.is_reg()) {
+    AdduAndCheckForOverflow(dst, left, right.rm(), overflow_dst, scratch);
+  } else {
+    if (dst.is(left)) {
+      mov(scratch, left);                   // Preserve left.
+      daddiu(dst, left, right.immediate());  // Left is overwritten.
+      xor_(scratch, dst, scratch);          // Original left.
+      // Load right since xori takes uint16 as immediate.
+      daddiu(t9, zero_reg, right.immediate());
+      xor_(overflow_dst, dst, t9);
+      and_(overflow_dst, overflow_dst, scratch);
+    } else {
+      daddiu(dst, left, right.immediate());
+      xor_(overflow_dst, dst, left);
+      // Load right since xori takes uint16 as immediate.
+      daddiu(t9, zero_reg, right.immediate());
+      xor_(scratch, dst, t9);
+      and_(overflow_dst, scratch, overflow_dst);
+    }
+  }
+}
+
+
 void MacroAssembler::AdduAndCheckForOverflow(Register dst,
                                              Register left,
                                              Register right,
@@ -4405,6 +4567,33 @@ void MacroAssembler::AdduAndCheckForOverflow(Register dst,
     xor_(overflow_dst, dst, left);
     xor_(scratch, dst, right);
     and_(overflow_dst, scratch, overflow_dst);
+  }
+}
+
+
+void MacroAssembler::SubuAndCheckForOverflow(Register dst, Register left,
+                                             const Operand& right,
+                                             Register overflow_dst,
+                                             Register scratch) {
+  if (right.is_reg()) {
+    SubuAndCheckForOverflow(dst, left, right.rm(), overflow_dst, scratch);
+  } else {
+    if (dst.is(left)) {
+      mov(scratch, left);                      // Preserve left.
+      daddiu(dst, left, -(right.immediate()));  // Left is overwritten.
+      xor_(overflow_dst, dst, scratch);        // scratch is original left.
+      // Load right since xori takes uint16 as immediate.
+      daddiu(t9, zero_reg, right.immediate());
+      xor_(scratch, scratch, t9);  // scratch is original left.
+      and_(overflow_dst, scratch, overflow_dst);
+    } else {
+      daddiu(dst, left, -(right.immediate()));
+      xor_(overflow_dst, dst, left);
+      // Load right since xori takes uint16 as immediate.
+      daddiu(t9, zero_reg, right.immediate());
+      xor_(scratch, left, t9);
+      and_(overflow_dst, scratch, overflow_dst);
+    }
   }
 }
 

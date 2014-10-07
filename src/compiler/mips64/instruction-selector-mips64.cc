@@ -17,9 +17,9 @@ namespace compiler {
 
 
 // Adds Mips-specific methods for generating InstructionOperands.
-class MipsOperandGenerator FINAL : public OperandGenerator {
+class Mips64OperandGenerator FINAL : public OperandGenerator {
  public:
-  explicit MipsOperandGenerator(InstructionSelector* selector)
+  explicit Mips64OperandGenerator(InstructionSelector* selector)
       : OperandGenerator(selector) {}
 
   InstructionOperand* UseOperand(Node* node, InstructionCode opcode) {
@@ -62,7 +62,7 @@ class MipsOperandGenerator FINAL : public OperandGenerator {
 
 static void VisitRRR(InstructionSelector* selector, ArchOpcode opcode,
                      Node* node) {
-  MipsOperandGenerator g(selector);
+  Mips64OperandGenerator g(selector);
   selector->Emit(opcode, g.DefineAsRegister(node),
                  g.UseRegister(node->InputAt(0)),
                  g.UseRegister(node->InputAt(1)));
@@ -71,7 +71,7 @@ static void VisitRRR(InstructionSelector* selector, ArchOpcode opcode,
 
 static void VisitRRO(InstructionSelector* selector, ArchOpcode opcode,
                      Node* node) {
-  MipsOperandGenerator g(selector);
+  Mips64OperandGenerator g(selector);
   selector->Emit(opcode, g.DefineAsRegister(node),
                  g.UseRegister(node->InputAt(0)),
                  g.UseOperand(node->InputAt(1), opcode));
@@ -80,7 +80,7 @@ static void VisitRRO(InstructionSelector* selector, ArchOpcode opcode,
 
 static void VisitBinop(InstructionSelector* selector, Node* node,
                        InstructionCode opcode, FlagsContinuation* cont) {
-  MipsOperandGenerator g(selector);
+  Mips64OperandGenerator g(selector);
   Int32BinopMatcher m(node);
   InstructionOperand* inputs[4];
   size_t input_count = 0;
@@ -121,7 +121,7 @@ static void VisitBinop(InstructionSelector* selector, Node* node,
 void InstructionSelector::VisitLoad(Node* node) {
   MachineType rep = RepresentationOf(OpParameter<LoadRepresentation>(node));
   MachineType typ = TypeOf(OpParameter<LoadRepresentation>(node));
-  MipsOperandGenerator g(this);
+  Mips64OperandGenerator g(this);
   Node* base = node->InputAt(0);
   Node* index = node->InputAt(1);
 
@@ -167,7 +167,7 @@ void InstructionSelector::VisitLoad(Node* node) {
 
 
 void InstructionSelector::VisitStore(Node* node) {
-  MipsOperandGenerator g(this);
+  Mips64OperandGenerator g(this);
   Node* base = node->InputAt(0);
   Node* index = node->InputAt(1);
   Node* value = node->InputAt(2);
@@ -228,22 +228,37 @@ void InstructionSelector::VisitStore(Node* node) {
 
 
 void InstructionSelector::VisitWord32And(Node* node) {
-  VisitBinop(this, node, kMipsAnd);
+  VisitBinop(this, node, kMips64And);
+}
+
+
+void InstructionSelector::VisitWord64And(Node* node) {
+  UNIMPLEMENTED();
 }
 
 
 void InstructionSelector::VisitWord32Or(Node* node) {
-  VisitBinop(this, node, kMipsOr);
+  VisitBinop(this, node, kMips64Or);
+}
+
+
+void InstructionSelector::VisitWord64Or(Node* node) {
+  UNIMPLEMENTED();
 }
 
 
 void InstructionSelector::VisitWord32Xor(Node* node) {
-  VisitBinop(this, node, kMipsXor);
+  VisitBinop(this, node, kMips64Xor);
+}
+
+
+void InstructionSelector::VisitWord64Xor(Node* node) {
+  UNIMPLEMENTED();
 }
 
 
 void InstructionSelector::VisitWord32Shl(Node* node) {
-  VisitRRO(this, kMipsShl, node);
+  VisitRRO(this, kMips64Shl, node);
 }
 
 
@@ -272,12 +287,17 @@ void InstructionSelector::VisitWord64Sar(Node* node) {
 }
 
 void InstructionSelector::VisitWord32Ror(Node* node) {
-  VisitRRO(this, kMipsRor, node);
+  VisitRRO(this, kMips64Ror, node);
+}
+
+
+void InstructionSelector::VisitWord64Ror(Node* node) {
+  UNIMPLEMENTED();
 }
 
 
 void InstructionSelector::VisitInt32Add(Node* node) {
-  MipsOperandGenerator g(this);
+  Mips64OperandGenerator g(this);
 
   // TODO(plind): Consider multiply & add optimization from arm port.
   VisitBinop(this, node, kMips64Add);
@@ -285,7 +305,7 @@ void InstructionSelector::VisitInt32Add(Node* node) {
 
 
 void InstructionSelector::VisitInt64Add(Node* node) {
-  MipsOperandGenerator g(this);
+  Mips64OperandGenerator g(this);
 
   // TODO(plind): Consider multiply & add optimization from arm port.
   VisitBinop(this, node, kMips64Dadd);
@@ -303,7 +323,7 @@ void InstructionSelector::VisitInt64Sub(Node* node) {
 
 
 void InstructionSelector::VisitInt32Mul(Node* node) {
-  MipsOperandGenerator g(this);
+  Mips64OperandGenerator g(this);
   Int32BinopMatcher m(node);
   if (m.right().HasValue() && m.right().Value() > 0) {
     int32_t value = m.right().Value();
@@ -338,7 +358,7 @@ void InstructionSelector::VisitInt32Mul(Node* node) {
 
 
 void InstructionSelector::VisitInt64Mul(Node* node) {
-  MipsOperandGenerator g(this);
+  Mips64OperandGenerator g(this);
   Int64BinopMatcher m(node);
   // TODO(dusmil): Add optimization for shifts larger than 32.
   if (m.right().HasValue() && m.right().Value() > 0) {
@@ -354,7 +374,7 @@ void InstructionSelector::VisitInt64Mul(Node* node) {
       Emit(kMips64Dshl | AddressingModeField::encode(kMode_None), temp,
            g.UseRegister(m.left().node()),
            g.TempImmediate(WhichPowerOf2(value - 1)));
-      Emit(kMipsDadd | AddressingModeField::encode(kMode_None),
+      Emit(kMips64Dadd | AddressingModeField::encode(kMode_None),
            g.DefineAsRegister(node), g.UseRegister(m.left().node()), temp);
       return;
     }
@@ -373,7 +393,7 @@ void InstructionSelector::VisitInt64Mul(Node* node) {
 }
 
 void InstructionSelector::VisitInt32Div(Node* node) {
-  MipsOperandGenerator g(this);
+  Mips64OperandGenerator g(this);
   Int32BinopMatcher m(node);
   Emit(kMips64Div, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
        g.UseRegister(m.right().node()));
@@ -381,7 +401,7 @@ void InstructionSelector::VisitInt32Div(Node* node) {
 
 
 void InstructionSelector::VisitUint32Div(Node* node) {
-  MipsOperandGenerator g(this);
+  Mips64OperandGenerator g(this);
   Int32BinopMatcher m(node);
   Emit(kMips64DivU, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
        g.UseRegister(m.right().node()));
@@ -389,7 +409,7 @@ void InstructionSelector::VisitUint32Div(Node* node) {
 
 
 void InstructionSelector::VisitInt32Mod(Node* node) {
-  MipsOperandGenerator g(this);
+  Mips64OperandGenerator g(this);
   Int32BinopMatcher m(node);
   Emit(kMips64Mod, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
        g.UseRegister(m.right().node()));
@@ -397,7 +417,7 @@ void InstructionSelector::VisitInt32Mod(Node* node) {
 
 
 void InstructionSelector::VisitUint32Mod(Node* node) {
-  MipsOperandGenerator g(this);
+  Mips64OperandGenerator g(this);
   Int32BinopMatcher m(node);
   Emit(kMips64ModU, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
        g.UseRegister(m.right().node()));
@@ -405,7 +425,7 @@ void InstructionSelector::VisitUint32Mod(Node* node) {
 
 
 void InstructionSelector::VisitInt64Div(Node* node) {
-  MipsOperandGenerator g(this);
+  Mips64OperandGenerator g(this);
   Int64BinopMatcher m(node);
   Emit(kMips64Ddiv, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
        g.UseRegister(m.right().node()));
@@ -413,7 +433,7 @@ void InstructionSelector::VisitInt64Div(Node* node) {
 
 
 void InstructionSelector::VisitUint64Div(Node* node) {
-  MipsOperandGenerator g(this);
+  Mips64OperandGenerator g(this);
   Int64BinopMatcher m(node);
   Emit(kMips64DdivU, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
        g.UseRegister(m.right().node()));
@@ -421,7 +441,7 @@ void InstructionSelector::VisitUint64Div(Node* node) {
 
 
 void InstructionSelector::VisitInt64Mod(Node* node) {
-  MipsOperandGenerator g(this);
+  Mips64OperandGenerator g(this);
   Int64BinopMatcher m(node);
   Emit(kMips64Dmod, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
        g.UseRegister(m.right().node()));
@@ -429,84 +449,99 @@ void InstructionSelector::VisitInt64Mod(Node* node) {
 
 
 void InstructionSelector::VisitUint64Mod(Node* node) {
-  MipsOperandGenerator g(this);
+  Mips64OperandGenerator g(this);
   Int64BinopMatcher m(node);
   Emit(kMips64DmodU, g.DefineAsRegister(node), g.UseRegister(m.left().node()),
        g.UseRegister(m.right().node()));
 }
 
 void InstructionSelector::VisitChangeFloat32ToFloat64(Node* node) {
-  MipsOperandGenerator g(this);
-  Emit(kMipsCvtDS, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
+  Mips64OperandGenerator g(this);
+  Emit(kMips64CvtDS, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
 }
 
 
 void InstructionSelector::VisitChangeInt32ToFloat64(Node* node) {
-  MipsOperandGenerator g(this);
-  Emit(kMipsCvtDW, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
+  Mips64OperandGenerator g(this);
+  Emit(kMips64CvtDW, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
 }
 
 
 void InstructionSelector::VisitChangeUint32ToFloat64(Node* node) {
-  MipsOperandGenerator g(this);
-  Emit(kMipsCvtDUw, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
+  Mips64OperandGenerator g(this);
+  Emit(kMips64CvtDUw, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
 }
 
 
 void InstructionSelector::VisitChangeFloat64ToInt32(Node* node) {
-  MipsOperandGenerator g(this);
-  Emit(kMipsTruncWD, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
+  Mips64OperandGenerator g(this);
+  Emit(kMips64TruncWD, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
 }
 
 
 void InstructionSelector::VisitChangeFloat64ToUint32(Node* node) {
-  MipsOperandGenerator g(this);
-  Emit(kMipsTruncUwD, g.DefineAsRegister(node),
+  Mips64OperandGenerator g(this);
+  Emit(kMips64TruncUwD, g.DefineAsRegister(node),
        g.UseRegister(node->InputAt(0)));
 }
 
 
+void InstructionSelector::VisitChangeInt32ToInt64(Node* node) {
+  UNIMPLEMENTED();
+}
+
+
+void InstructionSelector::VisitChangeUint32ToUint64(Node* node) {
+  UNIMPLEMENTED();
+}
+
+
 void InstructionSelector::VisitTruncateFloat64ToFloat32(Node* node) {
-  MipsOperandGenerator g(this);
-  Emit(kMipsCvtSD, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
+  Mips64OperandGenerator g(this);
+  Emit(kMips64CvtSD, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
+}
+
+
+void InstructionSelector::VisitTruncateInt64ToInt32(Node* node) {
+  UNIMPLEMENTED();
 }
 
 
 void InstructionSelector::VisitFloat64Add(Node* node) {
-  VisitRRR(this, kMipsAddD, node);
+  VisitRRR(this, kMips64AddD, node);
 }
 
 
 void InstructionSelector::VisitFloat64Sub(Node* node) {
-  VisitRRR(this, kMipsSubD, node);
+  VisitRRR(this, kMips64SubD, node);
 }
 
 
 void InstructionSelector::VisitFloat64Mul(Node* node) {
-  VisitRRR(this, kMipsMulD, node);
+  VisitRRR(this, kMips64MulD, node);
 }
 
 
 void InstructionSelector::VisitFloat64Div(Node* node) {
-  VisitRRR(this, kMipsDivD, node);
+  VisitRRR(this, kMips64DivD, node);
 }
 
 
 void InstructionSelector::VisitFloat64Mod(Node* node) {
-  MipsOperandGenerator g(this);
-  Emit(kMipsModD, g.DefineAsFixed(node, f0), g.UseFixed(node->InputAt(0), f12),
+  Mips64OperandGenerator g(this);
+  Emit(kMips64ModD, g.DefineAsFixed(node, f0), g.UseFixed(node->InputAt(0), f12),
        g.UseFixed(node->InputAt(1), f14))->MarkAsCall();
 }
 
 
 void InstructionSelector::VisitFloat64Sqrt(Node* node) {
-  MipsOperandGenerator g(this);
-  Emit(kMipsSqrtD, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
+  Mips64OperandGenerator g(this);
+  Emit(kMips64SqrtD, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
 }
 
 void InstructionSelector::VisitCall(Node* call, BasicBlock* continuation,
                                     BasicBlock* deoptimization) {
-  MipsOperandGenerator g(this);
+  Mips64OperandGenerator g(this);
   CallDescriptor* descriptor = OpParameter<CallDescriptor*>(call);
 
   FrameStateDescriptor* frame_state_descriptor = NULL;
@@ -527,7 +562,7 @@ void InstructionSelector::VisitCall(Node* call, BasicBlock* continuation,
     // TODO(plind): inefficient for MIPS, use MultiPush here.
     //    - Also need to align the stack. See arm64.
     //    - Maybe combine with arg slot stuff in DirectCEntry stub.
-    Emit(kMipsPush, NULL, g.UseRegister(*input));
+    Emit(kMips64Push, NULL, g.UseRegister(*input));
   }
 
   // Select the appropriate opcode based on the call type.
@@ -561,13 +596,13 @@ void InstructionSelector::VisitCall(Node* call, BasicBlock* continuation,
 
 void InstructionSelector::VisitInt32AddWithOverflow(Node* node,
                                                     FlagsContinuation* cont) {
-  VisitBinop(this, node, kMipsAddOvf, cont);
+  VisitBinop(this, node, kMips64AddOvf, cont);
 }
 
 
 void InstructionSelector::VisitInt32SubWithOverflow(Node* node,
                                                     FlagsContinuation* cont) {
-  VisitBinop(this, node, kMipsSubOvf, cont);
+  VisitBinop(this, node, kMips64SubOvf, cont);
 }
 
 
@@ -575,7 +610,7 @@ void InstructionSelector::VisitInt32SubWithOverflow(Node* node,
 static void VisitCompare(InstructionSelector* selector, InstructionCode opcode,
                          InstructionOperand* left, InstructionOperand* right,
                          FlagsContinuation* cont) {
-  MipsOperandGenerator g(selector);
+  Mips64OperandGenerator g(selector);
   opcode = cont->Encode(opcode);
   if (cont->IsBranch()) {
     selector->Emit(opcode, NULL, left, right, g.Label(cont->true_block()),
@@ -592,7 +627,7 @@ static void VisitCompare(InstructionSelector* selector, InstructionCode opcode,
 static void VisitWordCompare(InstructionSelector* selector, Node* node,
                              InstructionCode opcode, FlagsContinuation* cont,
                              bool commutative) {
-  MipsOperandGenerator g(selector);
+  Mips64OperandGenerator g(selector);
   Node* left = node->InputAt(0);
   Node* right = node->InputAt(1);
 
@@ -615,30 +650,41 @@ void InstructionSelector::VisitWord32Test(Node* node, FlagsContinuation* cont) {
   switch (node->opcode()) {
     case IrOpcode::kWord32And:
       // TODO(plind): understand the significance of 'IR and' special case.
-      return VisitWordCompare(this, node, kMipsTst, cont, true);
+      return VisitWordCompare(this, node, kMips64Tst, cont, true);
     default:
       break;
   }
 
-  MipsOperandGenerator g(this);
-  // kMipsTst is a pseudo-instruction to do logical 'and' and leave the result
+  Mips64OperandGenerator g(this);
+  // kMips64Tst is a pseudo-instruction to do logical 'and' and leave the result
   // in a dedicated tmp register.
-  VisitCompare(this, kMipsTst, g.UseRegister(node), g.UseRegister(node), cont);
+  VisitCompare(this, kMips64Tst, g.UseRegister(node), g.UseRegister(node), cont);
+}
+
+
+void InstructionSelector::VisitWord64Test(Node* node, FlagsContinuation* cont) {
+  UNIMPLEMENTED();
 }
 
 
 void InstructionSelector::VisitWord32Compare(Node* node,
                                              FlagsContinuation* cont) {
-  VisitWordCompare(this, node, kMipsCmp, cont, false);
+  VisitWordCompare(this, node, kMips64Cmp, cont, false);
+}
+
+
+void InstructionSelector::VisitWord64Compare(Node* node,
+                                             FlagsContinuation* cont) {
+  UNIMPLEMENTED();
 }
 
 
 void InstructionSelector::VisitFloat64Compare(Node* node,
                                               FlagsContinuation* cont) {
-  MipsOperandGenerator g(this);
+  Mips64OperandGenerator g(this);
   Node* left = node->InputAt(0);
   Node* right = node->InputAt(1);
-  VisitCompare(this, kMipsCmpD, g.UseRegister(left), g.UseRegister(right),
+  VisitCompare(this, kMips64CmpD, g.UseRegister(left), g.UseRegister(right),
                cont);
 }
 

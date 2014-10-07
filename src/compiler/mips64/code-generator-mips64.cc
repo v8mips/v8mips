@@ -174,7 +174,7 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
     case kMips64Dadd:
       __ Daddu(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
-    case kMipsAddOvf:
+    case kMips64AddOvf:
       __ AdduAndCheckForOverflow(i.OutputRegister(), i.InputRegister(0),
                                  i.InputOperand(1), kCompareReg, kScratchReg);
       break;
@@ -184,7 +184,7 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
     case kMips64Dsub:
       __ Dsubu(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
-    case kMipsSubOvf:
+    case kMips64SubOvf:
       __ SubuAndCheckForOverflow(i.OutputRegister(), i.InputRegister(0),
                                  i.InputOperand(1), kCompareReg, kScratchReg);
       break;
@@ -218,13 +218,13 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
     case kMips64DmodU:
       __ Dmodu(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
-    case kMipsAnd:
+    case kMips64And:
       __ And(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
-    case kMipsOr:
+    case kMips64Or:
       __ Or(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
-    case kMipsXor:
+    case kMips64Xor:
       __ Xor(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
     case kMips64Shl:
@@ -275,17 +275,17 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
         __ dsra(i.OutputRegister(), i.InputRegister(0), imm);
       }
       break;
-    case kMipsRor:
+    case kMips64Ror:
       __ Ror(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
-    case kMipsTst:
+    case kMips64Tst:
       // Psuedo-instruction used for tst/branch.
       __ And(kCompareReg, i.InputRegister(0), i.InputOperand(1));
       break;
-    case kMipsCmp:
+    case kMips64Cmp:
       // Psuedo-instruction used for cmp/branch. No opcode emitted here.
       break;
-    case kMipsMov:
+    case kMips64Mov:
       // TODO(plind): Should we combine mov/li like this, or use separate instr?
       //    - Also see x64 ASSEMBLE_BINOP & RegisterOrOperandType
       if (HasRegisterInput(instr, 0)) {
@@ -295,28 +295,28 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       }
       break;
 
-    case kMipsCmpD:
+    case kMips64CmpD:
       // Psuedo-instruction used for FP cmp/branch. No opcode emitted here.
       break;
-    case kMipsAddD:
+    case kMips64AddD:
       // TODO(plind): add special case: combine mult & add.
       __ add_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0),
                i.InputDoubleRegister(1));
       break;
-    case kMipsSubD:
+    case kMips64SubD:
       __ sub_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0),
                i.InputDoubleRegister(1));
       break;
-    case kMipsMulD:
+    case kMips64MulD:
       // TODO(plind): add special case: right op is -1.0, see arm port.
       __ mul_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0),
                i.InputDoubleRegister(1));
       break;
-    case kMipsDivD:
+    case kMips64DivD:
       __ div_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0),
                i.InputDoubleRegister(1));
       break;
-    case kMipsModD: {
+    case kMips64ModD: {
       // TODO(bmeurer): We should really get rid of this special instruction,
       // and generate a CallAddress instruction instead.
       FrameScope scope(masm(), StackFrame::MANUAL);
@@ -329,37 +329,37 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       __ MovFromFloatResult(i.OutputDoubleRegister());
       break;
     }
-    case kMipsSqrtD: {
+    case kMips64SqrtD: {
       __ sqrt_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0));
       break;
     }
-    case kMipsCvtSD: {
+    case kMips64CvtSD: {
       __ cvt_s_d(i.OutputSingleRegister(), i.InputDoubleRegister(0));
       break;
     }
-    case kMipsCvtDS: {
+    case kMips64CvtDS: {
       __ cvt_d_s(i.OutputDoubleRegister(), i.InputSingleRegister(0));
       break;
     }
-    case kMipsCvtDW: {
+    case kMips64CvtDW: {
       FPURegister scratch = kScratchDoubleReg;
       __ mtc1(i.InputRegister(0), scratch);
       __ cvt_d_w(i.OutputDoubleRegister(), scratch);
       break;
     }
-    case kMipsCvtDUw: {
+    case kMips64CvtDUw: {
       FPURegister scratch = kScratchDoubleReg;
       __ Cvt_d_uw(i.OutputDoubleRegister(), i.InputRegister(0), scratch);
       break;
     }
-    case kMipsTruncWD: {
+    case kMips64TruncWD: {
       FPURegister scratch = kScratchDoubleReg;
       // Other arches use round to zero here, so we follow.
       __ trunc_w_d(scratch, i.InputDoubleRegister(0));
       __ mfc1(i.OutputRegister(), scratch);
       break;
     }
-    case kMipsTruncUwD: {
+    case kMips64TruncUwD: {
       FPURegister scratch = kScratchDoubleReg;
       // TODO(plind): Fix wrong param order of Trunc_uw_d() macro-asm function.
       __ Trunc_uw_d(i.InputDoubleRegister(0), i.OutputRegister(), scratch);
@@ -367,56 +367,56 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
     }
     // ... more basic instructions ...
 
-    case kMipsLbu:
+    case kMips64Lbu:
       __ lbu(i.OutputRegister(), i.MemoryOperand());
       break;
-    case kMipsLb:
+    case kMips64Lb:
       __ lb(i.OutputRegister(), i.MemoryOperand());
       break;
-    case kMipsSb:
+    case kMips64Sb:
       __ sb(i.InputRegister(2), i.MemoryOperand());
       break;
-    case kMipsLhu:
+    case kMips64Lhu:
       __ lhu(i.OutputRegister(), i.MemoryOperand());
       break;
-    case kMipsLh:
+    case kMips64Lh:
       __ lh(i.OutputRegister(), i.MemoryOperand());
       break;
-    case kMipsSh:
+    case kMips64Sh:
       __ sh(i.InputRegister(2), i.MemoryOperand());
       break;
-    case kMipsLw:
+    case kMips64Lw:
       __ lw(i.OutputRegister(), i.MemoryOperand());
       break;
     case kMips64Ld:
       __ ld(i.OutputRegister(), i.MemoryOperand());
       break;
-    case kMipsSw:
+    case kMips64Sw:
       __ sw(i.InputRegister(2), i.MemoryOperand());
       break;
-    case kMipsSd:
+    case kMips64Sd:
       __ sd(i.InputRegister(2), i.MemoryOperand());
       break;
-    case kMipsLwc1: {
+    case kMips64Lwc1: {
       __ lwc1(i.OutputSingleRegister(), i.MemoryOperand());
       break;
     }
-    case kMipsSwc1: {
+    case kMips64Swc1: {
       int index = 0;
       MemOperand operand = i.MemoryOperand(&index);
       __ swc1(i.InputSingleRegister(index), operand);
       break;
     }
-    case kMipsLdc1:
+    case kMips64Ldc1:
       __ ldc1(i.OutputDoubleRegister(), i.MemoryOperand());
       break;
-    case kMipsSdc1:
+    case kMips64Sdc1:
       __ sdc1(i.InputDoubleRegister(2), i.MemoryOperand());
       break;
-    case kMipsPush:
+    case kMips64Push:
       __ Push(i.InputRegister(0));
       break;
-    case kMipsStoreWriteBarrier:
+    case kMips64StoreWriteBarrier:
       Register object = i.InputRegister(0);
       Register index = i.InputRegister(1);
       Register value = i.InputRegister(2);
@@ -460,8 +460,8 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
   // TODO(plind): Add CHECK() to ensure that test/cmp and this branch were
   //    not separated by other instructions.
 
-  if (instr->arch_opcode() == kMipsTst) {
-    // The kMipsTst psuedo-instruction emits And to 'kCompareReg' register.
+  if (instr->arch_opcode() == kMips64Tst) {
+    // The kMips64Tst psuedo-instruction emits And to 'kCompareReg' register.
     switch (condition) {
       case kNotEqual:
         cc = ne;
@@ -470,14 +470,14 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
         cc = eq;
         break;
       default:
-        UNSUPPORTED_COND(kMipsTst, condition);
+        UNSUPPORTED_COND(kMips64Tst, condition);
         break;
     }
     __ Branch(tlabel, cc, kCompareReg, Operand(zero_reg));
 
-  } else if (instr->arch_opcode() == kMipsAddOvf ||
-             instr->arch_opcode() == kMipsSubOvf) {
-    // kMipsAddOvf, SubOvf emit negative result to 'kCompareReg' on overflow.
+  } else if (instr->arch_opcode() == kMips64AddOvf ||
+             instr->arch_opcode() == kMips64SubOvf) {
+    // kMips64AddOvf, SubOvf emit negative result to 'kCompareReg' on overflow.
     switch (condition) {
       case kOverflow:
         cc = lt;
@@ -486,12 +486,12 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
         cc = ge;
         break;
       default:
-        UNSUPPORTED_COND(kMipsAddOvf, condition);
+        UNSUPPORTED_COND(kMips64AddOvf, condition);
         break;
     }
     __ Branch(tlabel, cc, kCompareReg, Operand(zero_reg));
 
-  } else if (instr->arch_opcode() == kMipsCmp) {
+  } else if (instr->arch_opcode() == kMips64Cmp) {
     switch (condition) {
       case kEqual:
         cc = eq;
@@ -524,7 +524,7 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
         cc = hi;
         break;
       default:
-        UNSUPPORTED_COND(kMipsCmp, condition);
+        UNSUPPORTED_COND(kMips64Cmp, condition);
         break;
     }
     __ Branch(tlabel, cc, i.InputRegister(0), i.InputOperand(1));
@@ -532,7 +532,7 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
     if (!fallthru) __ Branch(flabel);  // no fallthru to flabel.
     __ bind(&done);
 
-  } else if (instr->arch_opcode() == kMipsCmpD) {
+  } else if (instr->arch_opcode() == kMips64CmpD) {
     // TODO(dusmil) optimize unordered checks to use less instructions
     // even if we have to unfold BranchF macro.
     Label* nan = flabel;
@@ -559,7 +559,7 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
         nan = tlabel;
         break;
       default:
-        UNSUPPORTED_COND(kMipsCmpD, condition);
+        UNSUPPORTED_COND(kMips64CmpD, condition);
         break;
     }
     __ BranchF(tlabel, nan, cc, i.InputDoubleRegister(0),
@@ -599,8 +599,8 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
 
   // TODO(plind): Add CHECK() to ensure that test/cmp and this branch were
   //    not separated by other instructions.
-  if (instr->arch_opcode() == kMipsTst) {
-    // The kMipsTst psuedo-instruction emits And to 'kCompareReg' register.
+  if (instr->arch_opcode() == kMips64Tst) {
+    // The kMips64Tst psuedo-instruction emits And to 'kCompareReg' register.
     switch (condition) {
       case kNotEqual:
         cc = ne;
@@ -609,15 +609,15 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
         cc = eq;
         break;
       default:
-        UNSUPPORTED_COND(kMipsTst, condition);
+        UNSUPPORTED_COND(kMips64Tst, condition);
         break;
     }
     __ Branch(USE_DELAY_SLOT, &done, cc, kCompareReg, Operand(zero_reg));
     __ li(result, Operand(1));  // In delay slot.
 
-  } else if (instr->arch_opcode() == kMipsAddOvf ||
-             instr->arch_opcode() == kMipsSubOvf) {
-    // kMipsAddOvf, SubOvf emits negative result to 'kCompareReg' on overflow.
+  } else if (instr->arch_opcode() == kMips64AddOvf ||
+             instr->arch_opcode() == kMips64SubOvf) {
+    // kMips64AddOvf, SubOvf emits negative result to 'kCompareReg' on overflow.
     switch (condition) {
       case kOverflow:
         cc = lt;
@@ -626,14 +626,14 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
         cc = ge;
         break;
       default:
-        UNSUPPORTED_COND(kMipsAddOvf, condition);
+        UNSUPPORTED_COND(kMips64AddOvf, condition);
         break;
     }
     __ Branch(USE_DELAY_SLOT, &done, cc, kCompareReg, Operand(zero_reg));
     __ li(result, Operand(1));  // In delay slot.
 
 
-  } else if (instr->arch_opcode() == kMipsCmp) {
+  } else if (instr->arch_opcode() == kMips64Cmp) {
     Register left = i.InputRegister(0);
     Operand right = i.InputOperand(1);
     switch (condition) {
@@ -668,13 +668,13 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
         cc = hi;
         break;
       default:
-        UNSUPPORTED_COND(kMipsCmp, condition);
+        UNSUPPORTED_COND(kMips64Cmp, condition);
         break;
     }
     __ Branch(USE_DELAY_SLOT, &done, cc, left, right);
     __ li(result, Operand(1));  // In delay slot.
 
-  } else if (instr->arch_opcode() == kMipsCmpD) {
+  } else if (instr->arch_opcode() == kMips64CmpD) {
     FPURegister left = i.InputDoubleRegister(0);
     FPURegister right = i.InputDoubleRegister(1);
     // TODO(plind): Provide NaN-testing macro-asm function without need for
@@ -711,7 +711,7 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
         cc = gt;
         break;
       default:
-        UNSUPPORTED_COND(kMipsCmp, condition);
+        UNSUPPORTED_COND(kMips64Cmp, condition);
         break;
     }
     __ BranchF(USE_DELAY_SLOT, &done, NULL, cc, left, right);
@@ -726,7 +726,7 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
   }
   // Fallthru case is the false materialization.
   __ bind(&false_value);
-  __ li(result, Operand(0));
+  __ li(result, Operand(static_cast<int64_t>(0)));
   __ bind(&done);
 }
 

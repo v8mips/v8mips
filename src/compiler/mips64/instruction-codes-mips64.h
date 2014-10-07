@@ -15,11 +15,9 @@ namespace compiler {
   V(Mips64Add)                       \
   V(Mips64Dadd)                      \
   V(Mips64AddOvf)                    \
-  V(Mips64DaddOvf)                   \
   V(Mips64Sub)                       \
   V(Mips64Dsub)                      \
   V(Mips64SubOvf)                    \
-  V(Mips64DsubOvf)                   \
   V(Mips64Mul)                       \
   V(Mips64Dmul)                      \
   V(Mips64Div)                       \

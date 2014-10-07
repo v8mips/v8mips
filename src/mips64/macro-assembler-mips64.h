@@ -599,10 +599,16 @@ class MacroAssembler: public Assembler {
 
   DEFINE_INSTRUCTION(Addu);
   DEFINE_INSTRUCTION(Daddu);
+  DEFINE_INSTRUCTION(Div);
+  DEFINE_INSTRUCTION(Divu);
+  DEFINE_INSTRUCTION(Ddivu);
+  DEFINE_INSTRUCTION(Mod);
+  DEFINE_INSTRUCTION(Modu);
   DEFINE_INSTRUCTION(Ddiv);
   DEFINE_INSTRUCTION(Subu);
   DEFINE_INSTRUCTION(Dsubu);
   DEFINE_INSTRUCTION(Dmod);
+  DEFINE_INSTRUCTION(Dmodu);
   DEFINE_INSTRUCTION(Mul);
   DEFINE_INSTRUCTION(Mulh);
   DEFINE_INSTRUCTION(Dmul);
@@ -1168,10 +1174,18 @@ class MacroAssembler: public Assembler {
                                Register overflow_dst,
                                Register scratch = at);
 
+  void AdduAndCheckForOverflow(Register dst, Register left,
+                               const Operand& right, Register overflow_dst,
+                               Register scratch = at);
+
   void SubuAndCheckForOverflow(Register dst,
                                Register left,
                                Register right,
                                Register overflow_dst,
+                               Register scratch = at);
+
+  void SubuAndCheckForOverflow(Register dst, Register left,
+                               const Operand& right, Register overflow_dst,
                                Register scratch = at);
 
   void BranchOnOverflow(Label* label,
