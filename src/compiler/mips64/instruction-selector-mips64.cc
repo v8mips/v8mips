@@ -509,11 +509,6 @@ void InstructionSelector::VisitTruncateFloat64ToFloat32(Node* node) {
 }
 
 
-void InstructionSelector::VisitTruncateInt64ToInt32(Node* node) {
-  UNIMPLEMENTED();
-}
-
-
 void InstructionSelector::VisitFloat64Add(Node* node) {
   VisitRRR(this, kMips64AddD, node);
 }
