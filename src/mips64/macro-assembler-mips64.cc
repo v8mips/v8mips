@@ -1138,27 +1138,10 @@ void MacroAssembler::Sltu(Register rd, Register rs, const Operand& rt) {
 
 
 void MacroAssembler::Ror(Register rd, Register rs, const Operand& rt) {
-  if (kArchVariant == kMips64r2) {
-    if (rt.is_reg()) {
-      rotrv(rd, rs, rt.rm());
-    } else {
-      rotr(rd, rs, rt.imm64_);
-    }
+  if (rt.is_reg()) {
+    rotrv(rd, rs, rt.rm());
   } else {
-    if (rt.is_reg()) {
-      subu(at, zero_reg, rt.rm());
-      sllv(at, rs, at);
-      srlv(rd, rs, rt.rm());
-      or_(rd, rd, at);
-    } else {
-      if (rt.imm64_ == 0) {
-        srl(rd, rs, 0);
-      } else {
-        srl(at, rs, rt.imm64_);
-        sll(rd, rs, (0x20 - rt.imm64_) & 0x1f);
-        or_(rd, rd, at);
-      }
-    }
+    rotr(rd, rs, rt.imm64_);
   }
 }
 

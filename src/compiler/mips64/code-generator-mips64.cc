@@ -218,11 +218,20 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
     case kMips64DmodU:
       __ Dmodu(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
+    case kMips64And32:
+      UNIMPLEMENTED(); // And32
+      break;
     case kMips64And:
       __ And(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
+    case kMips64Or32:
+      UNIMPLEMENTED(); // Or32
+      break;
     case kMips64Or:
       __ Or(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
+      break;
+    case kMips64Xor32:
+      UNIMPLEMENTED(); // Xor32
       break;
     case kMips64Xor:
       __ Xor(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
@@ -281,6 +290,9 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       break;
     case kMips64Ror:
       __ Ror(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
+      break;
+    case kMips64Dror:
+      __ Dror(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
     case kMips64Tst:
       // Psuedo-instruction used for tst/branch.

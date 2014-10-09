@@ -228,32 +228,32 @@ void InstructionSelector::VisitStore(Node* node) {
 
 
 void InstructionSelector::VisitWord32And(Node* node) {
-  VisitBinop(this, node, kMips64And);
+  VisitBinop(this, node, kMips64And32);
 }
 
 
 void InstructionSelector::VisitWord64And(Node* node) {
-  UNIMPLEMENTED();
+  VisitBinop(this, node, kMips64And);
 }
 
 
 void InstructionSelector::VisitWord32Or(Node* node) {
-  VisitBinop(this, node, kMips64Or);
+  VisitBinop(this, node, kMips64Or32);
 }
 
 
 void InstructionSelector::VisitWord64Or(Node* node) {
-  UNIMPLEMENTED();
+  VisitBinop(this, node, kMips64Or);
 }
 
 
 void InstructionSelector::VisitWord32Xor(Node* node) {
-  VisitBinop(this, node, kMips64Xor);
+  VisitBinop(this, node, kMips64Xor32);
 }
 
 
 void InstructionSelector::VisitWord64Xor(Node* node) {
-  UNIMPLEMENTED();
+  VisitBinop(this, node, kMips64Xor);
 }
 
 
@@ -292,7 +292,7 @@ void InstructionSelector::VisitWord32Ror(Node* node) {
 
 
 void InstructionSelector::VisitWord64Ror(Node* node) {
-  UNIMPLEMENTED();
+  VisitRRO(this, kMips64Dror, node);
 }
 
 
