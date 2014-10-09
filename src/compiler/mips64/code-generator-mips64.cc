@@ -958,13 +958,13 @@ void CodeGenerator::AssemblePrologue() {
       Label ok;
       // +2 for return address and saved frame pointer.
       int receiver_slot = info->scope()->num_parameters() + 2;
-      __ lw(a2, MemOperand(fp, receiver_slot * kPointerSize));
+      __ ld(a2, MemOperand(fp, receiver_slot * kPointerSize));
       __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
       __ Branch(&ok, ne, a2, Operand(at));
 
-      __ lw(a2, GlobalObjectOperand());
-      __ lw(a2, FieldMemOperand(a2, GlobalObject::kGlobalProxyOffset));
-      __ sw(a2, MemOperand(fp, receiver_slot * kPointerSize));
+      __ ld(a2, GlobalObjectOperand());
+      __ ld(a2, FieldMemOperand(a2, GlobalObject::kGlobalProxyOffset));
+      __ sd(a2, MemOperand(fp, receiver_slot * kPointerSize));
       __ bind(&ok);
     }
   } else {
@@ -974,7 +974,7 @@ void CodeGenerator::AssemblePrologue() {
   }
   int stack_slots = frame()->GetSpillSlotCount();
   if (stack_slots > 0) {
-    __ Subu(sp, sp, Operand(stack_slots * kPointerSize));
+    __ Dsubu(sp, sp, Operand(stack_slots * kPointerSize));
   }
 }
 
@@ -986,7 +986,7 @@ void CodeGenerator::AssembleReturn() {
       // Remove this frame's spill slots first.
       int stack_slots = frame()->GetSpillSlotCount();
       if (stack_slots > 0) {
-        __ Addu(sp, sp, Operand(stack_slots * kPointerSize));
+        __ Daddu(sp, sp, Operand(stack_slots * kPointerSize));
       }
       // Restore registers.
       const RegList saves = descriptor->CalleeSavedRegisters();
