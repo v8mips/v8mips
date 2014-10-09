@@ -655,6 +655,23 @@ void InstructionSelector::VisitWord32Test(Node* node, FlagsContinuation* cont) {
   switch (node->opcode()) {
     case IrOpcode::kWord32And:
       // TODO(plind): understand the significance of 'IR and' special case.
+      return VisitWordCompare(this, node, kMips64Tst32, cont, true);
+    default:
+      break;
+  }
+
+  Mips64OperandGenerator g(this);
+  // kMips64Tst is a pseudo-instruction to do logical 'and' and leave the result
+  // in a dedicated tmp register.
+  VisitCompare(this, kMips64Tst32, g.UseRegister(node),g.UseRegister(node),
+               cont);
+}
+
+
+void InstructionSelector::VisitWord64Test(Node* node, FlagsContinuation* cont) {
+    switch (node->opcode()) {
+    case IrOpcode::kWord64And:
+      // TODO(plind): understand the significance of 'IR and' special case.
       return VisitWordCompare(this, node, kMips64Tst, cont, true);
     default:
       break;
@@ -663,24 +680,20 @@ void InstructionSelector::VisitWord32Test(Node* node, FlagsContinuation* cont) {
   Mips64OperandGenerator g(this);
   // kMips64Tst is a pseudo-instruction to do logical 'and' and leave the result
   // in a dedicated tmp register.
-  VisitCompare(this, kMips64Tst, g.UseRegister(node), g.UseRegister(node), cont);
-}
-
-
-void InstructionSelector::VisitWord64Test(Node* node, FlagsContinuation* cont) {
-  UNIMPLEMENTED();
+  VisitCompare(this, kMips64Tst, g.UseRegister(node), g.UseRegister(node),
+               cont);
 }
 
 
 void InstructionSelector::VisitWord32Compare(Node* node,
                                              FlagsContinuation* cont) {
-  VisitWordCompare(this, node, kMips64Cmp, cont, false);
+  VisitWordCompare(this, node, kMips64Cmp32, cont, false);
 }
 
 
 void InstructionSelector::VisitWord64Compare(Node* node,
                                              FlagsContinuation* cont) {
-  UNIMPLEMENTED();
+  VisitWordCompare(this, node, kMips64Cmp, cont, false);
 }
 
 
