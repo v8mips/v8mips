@@ -133,7 +133,7 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
         __ Call(Handle<Code>::cast(i.InputHeapObject(0)),
                 RelocInfo::CODE_TARGET);
       } else {
-        __ addiu(at, i.InputRegister(0), Code::kHeaderSize - kHeapObjectTag);
+        __ daddiu(at, i.InputRegister(0), Code::kHeaderSize - kHeapObjectTag);
         __ Call(at);
       }
       AddSafepointAndDeopt(instr);
@@ -144,11 +144,11 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       Register func = i.InputRegister(0);
       if (FLAG_debug_code) {
         // Check the function's context matches the context argument.
-        __ lw(kScratchReg, FieldMemOperand(func, JSFunction::kContextOffset));
+        __ ld(kScratchReg, FieldMemOperand(func, JSFunction::kContextOffset));
         __ Assert(eq, kWrongFunctionContext, cp, Operand(kScratchReg));
       }
 
-      __ lw(at, FieldMemOperand(func, JSFunction::kCodeEntryOffset));
+      __ ld(at, FieldMemOperand(func, JSFunction::kCodeEntryOffset));
       __ Call(at);
       AddSafepointAndDeopt(instr);
       break;
