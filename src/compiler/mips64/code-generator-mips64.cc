@@ -438,8 +438,8 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       Register object = i.InputRegister(0);
       Register index = i.InputRegister(1);
       Register value = i.InputRegister(2);
-      __ addu(index, object, index);
-      __ sw(value, MemOperand(index));
+      __ daddu(index, object, index);
+      __ sd(value, MemOperand(index));
       SaveFPRegsMode mode =
           frame()->DidAllocateDoubleRegisters() ? kSaveFPRegs : kDontSaveFPRegs;
       RAStatus ra_status = kRAHasNotBeenSaved;
