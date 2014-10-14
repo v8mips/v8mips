@@ -2231,7 +2231,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           // Interpret sa field as 5-bit lsb of insert.
           uint16_t lsb = sa;
           uint16_t size = msb - lsb + 1;
-          uint32_t mask = (1 << size) - 1;
+          uint64_t mask = (1ULL << size) - 1;
           *alu_out = (rt_u & ~(mask << lsb)) | ((rs_u & mask) << lsb);
           break;
         }
@@ -2241,8 +2241,8 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           // Interpret sa field as 5-bit lsb of extract.
           uint16_t lsb = sa;
           uint16_t size = msb + 1;
-          uint32_t mask = (1 << size) - 1;
-          *alu_out = (rs_u & (mask << lsb)) >> lsb;
+          uint64_t mask = (1ULL << size) - 1;
+          *alu_out = static_cast<uint64_t>((rs_u & (mask << lsb)) >> lsb);
           break;
         }
         default:
