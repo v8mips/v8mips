@@ -26,10 +26,10 @@ struct MipsLinkageHelperTraits {
            s6.bit() | s7.bit();
   }
   static Register CRegisterParameter(int i) {
-    static Register register_parameters[] = {a0, a1, a2, a3};
+    static Register register_parameters[] = {a0, a1, a2, a3, a4, a5, a6, a7};
     return register_parameters[i];
   }
-  static int CRegisterParametersLength() { return 4; }
+  static int CRegisterParametersLength() { return 8; }
 };
 
 

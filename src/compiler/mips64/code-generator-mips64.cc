@@ -1019,17 +1019,17 @@ void CodeGenerator::AssembleMove(InstructionOperand* source,
     if (destination->IsRegister()) {
       __ mov(g.ToRegister(destination), src);
     } else {
-      __ sw(src, g.ToMemOperand(destination));
+      __ sd(src, g.ToMemOperand(destination));
     }
   } else if (source->IsStackSlot()) {
     DCHECK(destination->IsRegister() || destination->IsStackSlot());
     MemOperand src = g.ToMemOperand(source);
     if (destination->IsRegister()) {
-      __ lw(g.ToRegister(destination), src);
+      __ ld(g.ToRegister(destination), src);
     } else {
       Register temp = kScratchReg;
-      __ lw(temp, src);
-      __ sw(temp, g.ToMemOperand(destination));
+      __ ld(temp, src);
+      __ sd(temp, g.ToMemOperand(destination));
     }
   } else if (source->IsConstant()) {
     Constant src = g.ToConstant(source);
@@ -1056,7 +1056,7 @@ void CodeGenerator::AssembleMove(InstructionOperand* source,
           __ li(dst, src.ToHeapObject());
           break;
       }
-      if (destination->IsStackSlot()) __ sw(dst, g.ToMemOperand(destination));
+      if (destination->IsStackSlot()) __ sd(dst, g.ToMemOperand(destination));
     } else if (src.type() == Constant::kFloat32) {
       FPURegister dst = destination->IsDoubleRegister()
                             ? g.ToDoubleRegister(destination)
@@ -1120,8 +1120,8 @@ void CodeGenerator::AssembleSwap(InstructionOperand* source,
       DCHECK(destination->IsStackSlot());
       MemOperand dst = g.ToMemOperand(destination);
       __ mov(temp, src);
-      __ lw(src, dst);
-      __ sw(temp, dst);
+      __ ld(src, dst);
+      __ sd(temp, dst);
     }
   } else if (source->IsStackSlot()) {
     DCHECK(destination->IsStackSlot());
@@ -1129,10 +1129,10 @@ void CodeGenerator::AssembleSwap(InstructionOperand* source,
     Register temp_1 = kCompareReg;
     MemOperand src = g.ToMemOperand(source);
     MemOperand dst = g.ToMemOperand(destination);
-    __ lw(temp_0, src);
-    __ lw(temp_1, dst);
-    __ sw(temp_0, dst);
-    __ sw(temp_1, src);
+    __ ld(temp_0, src);
+    __ ld(temp_1, dst);
+    __ sd(temp_0, dst);
+    __ sd(temp_1, src);
   } else if (source->IsDoubleRegister()) {
     FPURegister temp = kScratchDoubleReg;
     FPURegister src = g.ToDoubleRegister(source);
