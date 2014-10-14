@@ -525,8 +525,10 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
         UNSUPPORTED_COND(kMips64AddOvf, condition);
         break;
     }
+   // Sign-extend register on MIPS64 only 64-bit operand
+   // branch and compare op. is available.
+    __ sll(kCompareReg, kCompareReg, 0);
     __ Branch(tlabel, cc, kCompareReg, Operand(zero_reg));
-
   } else if (instr->arch_opcode() == kMips64Cmp) {
     switch (condition) {
       case kEqual:
@@ -733,7 +735,7 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
         UNSUPPORTED_COND(kMips64Tst, condition);
         break;
     }
-    // Zero-extend the register on MIPS64 only 64-bit operand
+    // Zero-extend register on MIPS64 only 64-bit operand
     // branch and compare op. is available.
     __ Ext(kCompareReg, kCompareReg, 0, 32);
     __ Branch(USE_DELAY_SLOT, &done, cc, kCompareReg, Operand(zero_reg));
@@ -752,6 +754,9 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
         UNSUPPORTED_COND(kMips64AddOvf, condition);
         break;
     }
+    // Sign-extend register on MIPS64 only 64-bit operand
+    // branch and compare op. is available.
+    __ sll(kCompareReg, kCompareReg, 0);
     __ Branch(USE_DELAY_SLOT, &done, cc, kCompareReg, Operand(zero_reg));
     __ li(result, Operand(1));  // In delay slot.
   } else if (instr->arch_opcode() == kMips64Cmp) {
