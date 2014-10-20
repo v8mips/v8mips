@@ -35,20 +35,20 @@ struct FPCmp {
 };
 
 static const FPCmp kFPCmpInstructions[] = {
-{{&RawMachineAssembler::Float64Equal, "Float64Equal", kMipsFloat64Cmp,
+{{&RawMachineAssembler::Float64Equal, "Float64Equal", kMips64Float64Cmp,
   kMachFloat64},
  kUnorderedEqual},
 {{&RawMachineAssembler::Float64LessThan, "Float64LessThan",
-  kMipsFloat64Cmp, kMachFloat64},
+  kMips64Float64Cmp, kMachFloat64},
  kUnorderedLessThan},
 {{&RawMachineAssembler::Float64LessThanOrEqual, "Float64LessThanOrEqual",
-  kMipsFloat64Cmp, kMachFloat64},
+  kMips64Float64Cmp, kMachFloat64},
  kUnorderedLessThanOrEqual},
 {{&RawMachineAssembler::Float64GreaterThan, "Float64GreaterThan",
-  kMipsFloat64Cmp, kMachFloat64},
+  kMips64Float64Cmp, kMachFloat64},
  kUnorderedLessThan},
 {{&RawMachineAssembler::Float64GreaterThanOrEqual, "Float64GreaterThanOrEqual",
-  kMipsFloat64Cmp, kMachFloat64},
+  kMips64Float64Cmp, kMachFloat64},
  kUnorderedLessThanOrEqual}
 };
 
@@ -62,41 +62,47 @@ struct Conversion {
 // logical instructions:
 // ---------------------
 static const MachInst2 kLogicalInstructions[] = {
-  {&RawMachineAssembler::WordAnd  , "WordAnd"  , kMipsAnd, kMachInt16},
-  {&RawMachineAssembler::WordOr   , "WordOr"   , kMipsOr , kMachInt16},
-  {&RawMachineAssembler::WordXor  , "WordXor"  , kMipsXor, kMachInt16},
-  {&RawMachineAssembler::Word32And, "Word32And", kMipsAnd, kMachInt32},
-  {&RawMachineAssembler::Word32Or , "Word32Or" , kMipsOr , kMachInt32},
-  {&RawMachineAssembler::Word32Xor, "Word32Xor", kMipsXor, kMachInt32}
+  {&RawMachineAssembler::Word32And, "Word32And", kMips64And32, kMachInt32},
+  {&RawMachineAssembler::Word64And, "Word64And", kMips64And  , kMachInt64},
+  {&RawMachineAssembler::Word32Or , "Word32Or" , kMips64Or32 , kMachInt32},
+  {&RawMachineAssembler::Word64Or , "Word64Or" , kMips64Or   , kMachInt64},
+  {&RawMachineAssembler::Word32Xor, "Word32Xor", kMips64Xor32, kMachInt32},
+  {&RawMachineAssembler::Word64Xor, "Word64Xor", kMips64Xor  , kMachInt64}
 };
 
 // -------------------
 // shift instructions:
 // -------------------
 static const MachInst2 kShiftInstructions[] = {
-  {&RawMachineAssembler::WordShl  , "WordShl"  , kMipsShl, kMachInt16},
-  {&RawMachineAssembler::WordShr  , "WordShr"  , kMipsShr, kMachInt16},
-  {&RawMachineAssembler::WordSar  , "WordSar"  , kMipsSar, kMachInt16},
-  {&RawMachineAssembler::WordRor  , "WordRor"  , kMipsRor, kMachInt16},
-  {&RawMachineAssembler::Word32Shl, "Word32Shl", kMipsShl, kMachInt32},
-  {&RawMachineAssembler::Word32Shr, "Word32Shr", kMipsShr, kMachInt32},
-  {&RawMachineAssembler::Word32Sar, "Word32Sar", kMipsSar, kMachInt32},
-  {&RawMachineAssembler::Word32Ror, "Word32Ror", kMipsRor, kMachInt32}
+  {&RawMachineAssembler::Word32Shl, "Word32Shl", kMips64Shl, kMachInt32},
+  {&RawMachineAssembler::Word64Shl, "Word64Shl", kMips64Dshl, kMachInt64},
+  {&RawMachineAssembler::Word32Shr, "Word32Shr", kMips64Shr, kMachInt32},
+  {&RawMachineAssembler::Word64Shr, "Word64Shr", kMips64Dshr, kMachInt64},
+  {&RawMachineAssembler::Word32Sar, "Word32Sar", kMips64Sar, kMachInt32},
+  {&RawMachineAssembler::Word64Sar, "Word64Sar", kMips64Dsar, kMachInt64},
+  {&RawMachineAssembler::Word32Ror, "Word32Ror", kMips64Ror, kMachInt32},
+  {&RawMachineAssembler::Word64Ror, "Word64Ror", kMips64Dror, kMachInt64}
 };
 
 // ---------------------
 // MUL/DIV instructions:
 // ---------------------
 static const MachInst2 kMulDivInstructions[] = {
-  {&RawMachineAssembler::Int32Mul  , "Int32Mul"  , kMipsMul  ,
+  {&RawMachineAssembler::Int32Mul  , "Int32Mul"  , kMips64Mul ,
   kMachInt32  },
-  {&RawMachineAssembler::Int32Div  , "Int32Div"  , kMipsDiv  ,
+  {&RawMachineAssembler::Int32Div  , "Int32Div"  , kMips64Div ,
   kMachInt32  },
-  {&RawMachineAssembler::Int32UDiv , "Int32UDiv" , kMipsDivU ,
+  {&RawMachineAssembler::Int32UDiv , "Int32UDiv" , kMips64DivU,
   kMachUint32 },
-  {&RawMachineAssembler::Float64Mul, "Float64Mul", kMipsFloat64Mul,
+  {&RawMachineAssembler::Int64Mul  , "Int64Mul"  , kMips64Mul ,
+  kMachInt32  },
+  {&RawMachineAssembler::Int64Div  , "Int64Div"  , kMips64Div ,
+  kMachInt32  },
+  {&RawMachineAssembler::Int64UDiv , "Int64UDiv" , kMips64DivU,
+  kMachUint32 },
+  {&RawMachineAssembler::Float64Mul, "Float64Mul", kMips64Float64Mul,
   kMachFloat64},
-  {&RawMachineAssembler::Float64Div, "Float64Div", kMipsFloat64Div,
+  {&RawMachineAssembler::Float64Div, "Float64Div", kMips64Float64Div,
   kMachFloat64}
 };
 
@@ -104,78 +110,83 @@ static const MachInst2 kMulDivInstructions[] = {
 // MOD instructions:
 // -----------------
 static const MachInst2 kModInstructions[] = {
-  {&RawMachineAssembler::Int32Mod  , "Int32Mod"  , kMipsMod ,
+  {&RawMachineAssembler::Int32Mod  , "Int32Mod"  , kMips64Mod ,
   kMachInt32},
-  {&RawMachineAssembler::Int32UMod , "Int32UMod" , kMipsModU,
+  {&RawMachineAssembler::Int32UMod , "Int32UMod" , kMips64ModU,
   kMachInt32},
-  {&RawMachineAssembler::Float64Mod, "Float64Mod", kMipsFloat64Mod,
+  {&RawMachineAssembler::Float64Mod, "Float64Mod", kMips64Float64Mod,
   kMachFloat64}
 };
 // ----------------------------
 // Arithmetic FPU instructions:
 // ----------------------------
 static const MachInst2 kFPArithInstructions[] = {
-  {&RawMachineAssembler::Float64Add, "Float64Add", kMipsFloat64Add,
+  {&RawMachineAssembler::Float64Add, "Float64Add", kMips64Float64Add,
   kMachFloat64},
-  {&RawMachineAssembler::Float64Sub, "Float64Sub", kMipsFloat64Sub,
+  {&RawMachineAssembler::Float64Sub, "Float64Sub", kMips64Float64Sub,
   kMachFloat64}
 };
 // -------------------------------------
 // IntArithTest instructions, two nodes:
 // -------------------------------------
 static const MachInst2 kAddSubInstructions[] = {
-  {&RawMachineAssembler::Int32Add, "Int32Add", kMipsAdd,
+  {&RawMachineAssembler::Int32Add, "Int32Add", kMips64Add ,
   kMachInt32},
-  {&RawMachineAssembler::Int32Sub, "Int32Sub", kMipsSub,
+  {&RawMachineAssembler::Int64Add, "Int64Add", kMips64Dadd,
+  kMachInt64},
+  {&RawMachineAssembler::Int32Sub, "Int32Sub", kMips64Sub ,
   kMachInt32},
+  {&RawMachineAssembler::Int64Sub, "Int64Sub", kMips64Dsub,
+  kMachInt64},
   {&RawMachineAssembler::Int32AddWithOverflow, "Int32AddWithOverflow",
-  kMipsAddOvf, kMachInt32},
+  kMips64AddOvf, kMachInt32},
   {&RawMachineAssembler::Int32SubWithOverflow, "Int32SubWithOverflow",
-  kMipsSubOvf, kMachInt32}
+  kMips64SubOvf, kMachInt32}
 };
 // ------------------------------------
 // IntArithTest instructions, one node:
 // ------------------------------------
 static const MachInst1 kAddSubOneInstructions[] = {
-  {&RawMachineAssembler::Int32Neg, "Int32Neg", kMipsSub, kMachInt32},
+  {&RawMachineAssembler::Int32Neg, "Int32Neg", kMips64Sub , kMachInt32},
+  {&RawMachineAssembler::Int32Neg, "Int64Neg", kMips64Dsub, kMachInt64}
   // check this ...
-  //{&RawMachineAssembler::WordEqual  , "WordEqual"  , kMipsTst, kMachInt32}
+  //{&RawMachineAssembler::WordEqual  , "WordEqual"  , kMips64Tst, kMachInt32}
 };
 // ------------------------------------------------------------
 // Arithmetic compare instructions:
 // ------------------------------------------------------------
 static const IntCmp kCmpInstructions[] = {
-  {{&RawMachineAssembler::WordEqual, "WordEqual", kMipsCmp,
-  kMachInt16},
+  {{&RawMachineAssembler::WordEqual, "WordEqual", kMips64Cmp,
+  kMachInt64},
   1U},
-  {{&RawMachineAssembler::WordNotEqual, "WordNotEqual", kMipsCmp,
-  kMachInt16},
+  {{&RawMachineAssembler::WordNotEqual, "WordNotEqual", kMips64Cmp,
+  kMachInt64},
   2U},
-  {{&RawMachineAssembler::Word32Equal, "Word32Equal", kMipsCmp,
+  {{&RawMachineAssembler::Word32Equal, "Word32Equal", kMips64Cmp32,
   kMachInt32},
   1U},
-  {{&RawMachineAssembler::Word32NotEqual, "Word32NotEqual", kMipsCmp,
+  {{&RawMachineAssembler::Word32NotEqual, "Word32NotEqual", kMips64Cmp32,
   kMachInt32},
   2U},
-  {{&RawMachineAssembler::Int32LessThan, "Int32LessThan", kMipsCmp,
+  {{&RawMachineAssembler::Int32LessThan, "Int32LessThan", kMips64Cmp32,
   kMachInt32},
   1U},
   {{&RawMachineAssembler::Int32LessThanOrEqual, "Int32LessThanOrEqual",
-  kMipsCmp,
+  kMips64Cmp32,
   kMachInt32},
   1U},
-  {{&RawMachineAssembler::Int32GreaterThan, "Int32GreaterThan", kMipsCmp,
+  {{&RawMachineAssembler::Int32GreaterThan, "Int32GreaterThan", kMips64Cmp32,
   kMachInt32},
   1U},
   {{&RawMachineAssembler::Int32GreaterThanOrEqual, "Int32GreaterThanOrEqual",
-  kMipsCmp,
+  kMips64Cmp32,
   kMachInt32},
   1U},
-  {{&RawMachineAssembler::Uint32LessThan, "Uint32LessThan", kMipsCmp,
+  {{&RawMachineAssembler::Uint32LessThan, "Uint32LessThan", kMips64Cmp32,
   kMachUint32},
   1U},
   {{&RawMachineAssembler::Uint32LessThanOrEqual, "Uint32LessThanOrEqual",
-  kMipsCmp,
+  kMips64Cmp32,
   kMachUint32},
   1U}
 };
@@ -192,27 +203,27 @@ static const Conversion kConversionInstructions[] = {
   // mips instructions:
   // mtc1, cvt.d.w
   {{&RawMachineAssembler::ChangeInt32ToFloat64, "ChangeInt32ToFloat64",
-  kMipsInt32ToFloat64, kMachFloat64},
+  kMips64Int32ToFloat64, kMachFloat64},
   kMachInt32},
 
   // mips instructions:
   // cvt.d.uw
   {{&RawMachineAssembler::ChangeUint32ToFloat64, "ChangeUint32ToFloat64",
-  kMipsUint32ToFloat64, kMachFloat64},
+  kMips64Uint32ToFloat64, kMachFloat64},
   kMachInt32},
 
   // mips instructions:
   // mfc1, trunc double to word, for more details look at mips macro
   // asm and mips asm file
   {{&RawMachineAssembler::ChangeFloat64ToInt32, "ChangeFloat64ToInt32",
-  kMipsFloat64ToInt32, kMachFloat64},
+  kMips64Float64ToInt32, kMachFloat64},
   kMachInt32},
 
   // mips instructions:
   // trunc double to unsigned word, for more details look at mips macro
   // asm and mips asm file
   {{&RawMachineAssembler::ChangeFloat64ToUint32, "ChangeFloat64ToUint32",
-  kMipsFloat64ToUint32, kMachFloat64},
+  kMips64Float64ToUint32, kMachFloat64},
   kMachInt32}
 };
 }
@@ -440,13 +451,13 @@ struct MemoryAccess {
 };
 
 static const MemoryAccess kMemoryAccesses[] = {
-  {kMachInt8  , kMipsLb  , kMipsSb  },
-  {kMachUint8 , kMipsLbu , kMipsSb  },
-  {kMachInt16 , kMipsLh  , kMipsSh  },
-  {kMachUint16, kMipsLhu , kMipsSh  },
-  {kMachInt32 , kMipsLw  , kMipsSw  },
-  {kRepFloat32, kMipsLwc1, kMipsSwc1},
-  {kRepFloat64, kMipsLdc1, kMipsSdc1}
+  {kMachInt8  , kMips64Lb  , kMips64Sb  },
+  {kMachUint8 , kMips64Lbu , kMips64Sb  },
+  {kMachInt16 , kMips64Lh  , kMips64Sh  },
+  {kMachUint16, kMips64Lhu , kMips64Sh  },
+  {kMachInt32 , kMips64Lw  , kMips64Sw  },
+  {kRepFloat32, kMips64Lwc1, kMips64Swc1},
+  {kRepFloat64, kMips64Ldc1, kMips64Sdc1}
 };
 
 struct MemoryAccessImm {
@@ -472,50 +483,52 @@ struct MemoryAccessImm1 {
 // ----------------------------------------------------------------------------
 static const MemoryAccessImm kMemoryAccessesImm[] = {
   {kMachInt8,
-   kMipsLb,
-   kMipsSb,
+   kMips64Lb,
+   kMips64Sb,
    &InstructionSelectorTest::Stream::IsInteger,
    {-4095, -3340, -3231, -3224, -3088, -1758, -1203, -123, -117, -91, -89,
     -87, -86, -82, -44, -23, -3, 0, 7, 10, 39, 52, 69, 71, 91, 92, 107, 109,
     115, 124, 286, 655, 1362, 1569, 2587, 3067, 3096, 3462, 3510, 4095}},
   {kMachUint8,
-   kMipsLbu,
-   kMipsSb,
+   kMips64Lbu,
+   kMips64Sb,
    &InstructionSelectorTest::Stream::IsInteger,
    {-4095, -3340, -3231, -3224, -3088, -1758, -1203, -123, -117, -91, -89,
     -87, -86, -82, -44, -23, -3, 0, 7, 10, 39, 52, 69, 71, 91, 92, 107, 109,
     115, 124, 286, 655, 1362, 1569, 2587, 3067, 3096, 3462, 3510, 4095}},
   {kMachInt16,
-   kMipsLh,
-   kMipsSh,
+   kMips64Lh,
+   kMips64Sh,
    &InstructionSelectorTest::Stream::IsInteger,
    {-4095, -3340, -3231, -3224, -3088, -1758, -1203, -123, -117, -91, -89,
     -87, -86, -82, -44, -23, -3, 0, 7, 10, 39, 52, 69, 71, 91, 92, 107, 109,
     115, 124, 286, 655, 1362, 1569, 2587, 3067, 3096, 3462, 3510, 4095}},
   {kMachUint16,
-   kMipsLhu,
-   kMipsSh,
+   kMips64Lhu,
+   kMips64Sh,
    &InstructionSelectorTest::Stream::IsInteger,
    {-4095, -3340, -3231, -3224, -3088, -1758, -1203, -123, -117, -91, -89,
     -87, -86, -82, -44, -23, -3, 0, 7, 10, 39, 52, 69, 71, 91, 92, 107, 109,
     115, 124, 286, 655, 1362, 1569, 2587, 3067, 3096, 3462, 3510, 4095}},
   {kMachInt32,
-   kMipsLw,
-   kMipsSw,
+   kMips64Lw,
+   kMips64Sw,
    &InstructionSelectorTest::Stream::IsInteger,
    {-4095, -3340, -3231, -3224, -3088, -1758, -1203, -123, -117, -91, -89,
     -87, -86, -82, -44, -23, -3, 0, 7, 10, 39, 52, 69, 71, 91, 92, 107, 109,
     115, 124, 286, 655, 1362, 1569, 2587, 3067, 3096, 3462, 3510, 4095}},
   {kMachFloat32,
-   kMipsLwc1,
-   kMipsSwc1,
+   kMips64Lwc1,
+   kMips64Swc1,
    &InstructionSelectorTest::Stream::IsDouble,
    {-4095, -3340, -3231, -3224, -3088, -1758, -1203, -123, -117, -91, -89,
     -87, -86, -82, -44, -23, -3, 0, 7, 10, 39, 52, 69, 71, 91, 92, 107, 109,
     115, 124, 286, 655, 1362, 1569, 2587, 3067, 3096, 3462, 3510, 4095}},
   {kMachFloat64,
-   kMipsLdc1,
-   kMipsSdc1,
+   kMips64Ldc1,
+   kMips64Sdc1,
+   kMips64Ld,
+   kMips64Sd,
    &InstructionSelectorTest::Stream::IsDouble,
    {-4095, -3340, -3231, -3224, -3088, -1758, -1203, -123, -117, -91, -89,
     -87, -86, -82, -44, -23, -3, 0, 7, 10, 39, 52, 69, 71, 91, 92, 107, 109,
@@ -525,38 +538,40 @@ static const MemoryAccessImm kMemoryAccessesImm[] = {
 
 static const MemoryAccessImm1 kMemoryAccessImmMoreThan16bit[] = {
   {kMachInt8,
-   kMipsLb,
-   kMipsSb,
+   kMips64Lb,
+   kMips64Sb,
    &InstructionSelectorTest::Stream::IsInteger,
    {-65000, -55000, 32777, 55000, 65000}},
   {kMachInt8,
-   kMipsLbu,
-   kMipsSb,
+   kMips64Lbu,
+   kMips64Sb,
    &InstructionSelectorTest::Stream::IsInteger,
    {-65000, -55000, 32777, 55000, 65000}},
   {kMachInt16,
-   kMipsLh,
-   kMipsSh,
+   kMips64Lh,
+   kMips64Sh,
    &InstructionSelectorTest::Stream::IsInteger,
    {-65000, -55000, 32777, 55000, 65000}},
   {kMachInt16,
-   kMipsLhu,
-   kMipsSh,
+   kMips64Lhu,
+   kMips64Sh,
    &InstructionSelectorTest::Stream::IsInteger,
    {-65000, -55000, 32777, 55000, 65000}},
   {kMachInt32,
-   kMipsLw,
-   kMipsSw,
+   kMips64Lw,
+   kMips64Sw,
    &InstructionSelectorTest::Stream::IsInteger,
    {-65000, -55000, 32777, 55000, 65000}},
   {kMachFloat32,
-   kMipsLwc1,
-   kMipsSwc1,
+   kMips64Lwc1,
+   kMips64Swc1,
    &InstructionSelectorTest::Stream::IsDouble,
    {-65000, -55000, 32777, 55000, 65000}},
   {kMachFloat64,
-   kMipsLdc1,
-   kMipsSdc1,
+   kMips64Ldc1,
+   kMips64Sdc1,
+   kMips64Ld,
+   kMips64Sd,
    &InstructionSelectorTest::Stream::IsDouble,
    {-65000, -55000, 32777, 55000, 65000}}
 };
@@ -653,9 +668,9 @@ TEST_P(InstructionSelectorMemoryAccessImmMoreThan16bitTest,
     m.Return(m.Load(memacc.type, m.Parameter(0), m.Int32Constant(index)));
     Stream s = m.Build();
     ASSERT_EQ(2U, s.size());
-    // kMipsAdd is expected opcode
+    // kMips64Add is expected opcode
     // size more than 16 bits wide
-    EXPECT_EQ(kMipsAdd, s[0]->arch_opcode());
+    EXPECT_EQ(kMips64Add, s[0]->arch_opcode());
     EXPECT_EQ(kMode_None, s[0]->addressing_mode());
     EXPECT_EQ(2U, s[0]->InputCount());
     EXPECT_EQ(1U, s[0]->OutputCount());
@@ -672,9 +687,9 @@ TEST_P(InstructionSelectorMemoryAccessImmMoreThan16bitTest,
     m.Return(m.Int32Constant(0));
     Stream s = m.Build();
     ASSERT_EQ(2U, s.size());
-    // kMipsAdd is expected opcode
+    // kMips64Add is expected opcode
     // size more than 16 bits wide
-    EXPECT_EQ(kMipsAdd, s[0]->arch_opcode());
+    EXPECT_EQ(kMips64Add, s[0]->arch_opcode());
     EXPECT_EQ(kMode_None, s[0]->addressing_mode());
     EXPECT_EQ(2U, s[0]->InputCount());
     EXPECT_EQ(1U, s[0]->OutputCount());
@@ -686,14 +701,14 @@ INSTANTIATE_TEST_CASE_P(InstructionSelectorTest,
   ::testing::ValuesIn(kMemoryAccessImmMoreThan16bit));
 
 //
-// kMipsTst testing
+// kMips64Tst testing
 TEST_F(InstructionSelectorTest, Word32EqualWithZero){
   {
     StreamBuilder m(this, kMachInt32, kMachInt32);
     m.Return(m.Word32Equal(m.Parameter(0), m.Int32Constant(0)));
     Stream s = m.Build();
     ASSERT_EQ(1U, s.size());
-    EXPECT_EQ(kMipsTst, s[0]->arch_opcode());
+    EXPECT_EQ(kMips64Tst, s[0]->arch_opcode());
     EXPECT_EQ(kMode_None, s[0]->addressing_mode());
     ASSERT_EQ(2U, s[0]->InputCount());
     EXPECT_EQ(s.ToVreg(s[0]->InputAt(0)), s.ToVreg(s[0]->InputAt(1)));
@@ -706,7 +721,7 @@ TEST_F(InstructionSelectorTest, Word32EqualWithZero){
     m.Return(m.Word32Equal(m.Int32Constant(0), m.Parameter(0)));
     Stream s = m.Build();
     ASSERT_EQ(1U, s.size());
-    EXPECT_EQ(kMipsTst, s[0]->arch_opcode());
+    EXPECT_EQ(kMips64Tst, s[0]->arch_opcode());
     EXPECT_EQ(kMode_None, s[0]->addressing_mode());
     ASSERT_EQ(2U, s[0]->InputCount());
     EXPECT_EQ(s.ToVreg(s[0]->InputAt(0)), s.ToVreg(s[0]->InputAt(1)));
