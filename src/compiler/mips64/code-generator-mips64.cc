@@ -174,19 +174,11 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
     case kMips64Dadd:
       __ Daddu(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
-    case kMips64AddOvf:
-      __ AdduAndCheckForOverflow(i.OutputRegister(), i.InputRegister(0),
-                                 i.InputOperand(1), kCompareReg, kScratchReg);
-      break;
     case kMips64Sub:
       __ Subu(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
     case kMips64Dsub:
       __ Dsubu(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
-      break;
-    case kMips64SubOvf:
-      __ SubuAndCheckForOverflow(i.OutputRegister(), i.InputRegister(0),
-                                 i.InputOperand(1), kCompareReg, kScratchReg);
       break;
     case kMips64Mul:
       __ Mul(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
@@ -511,24 +503,23 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
     // for MIPS64 even for Word32.
     __ Ext(kCompareReg, kCompareReg, 0, 32);
     __ Branch(tlabel, cc, kCompareReg, Operand(zero_reg));
-  } else if (instr->arch_opcode() == kMips64AddOvf ||
-             instr->arch_opcode() == kMips64SubOvf) {
-    // kMips64AddOvf, SubOvf emit negative result to 'kCompareReg' on overflow.
+  } else if (instr->arch_opcode() == kMips64Dadd ||
+             instr->arch_opcode() == kMips64Dsub) {
     switch (condition) {
       case kOverflow:
-        cc = lt;
+        cc = ne;
         break;
       case kNotOverflow:
-        cc = ge;
+        cc = eq;
         break;
       default:
-        UNSUPPORTED_COND(kMips64AddOvf, condition);
+        UNSUPPORTED_COND(kMips64Dadd, condition);
         break;
     }
-   // Sign-extend register on MIPS64 only 64-bit operand
-   // branch and compare op. is available.
-    __ sll(kCompareReg, kCompareReg, 0);
-    __ Branch(tlabel, cc, kCompareReg, Operand(zero_reg));
+
+    __ dsra32(kCompareReg, i.OutputRegister(), 0);
+    __ sra(kScratchReg, i.OutputRegister(), 31);
+    __ Branch(tlabel, cc, kCompareReg, Operand(kScratchReg));
   } else if (instr->arch_opcode() == kMips64Cmp) {
     switch (condition) {
       case kEqual:
@@ -740,24 +731,22 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
     __ Ext(kCompareReg, kCompareReg, 0, 32);
     __ Branch(USE_DELAY_SLOT, &done, cc, kCompareReg, Operand(zero_reg));
     __ li(result, Operand(1));  // In delay slot.
-  } else if (instr->arch_opcode() == kMips64AddOvf ||
-             instr->arch_opcode() == kMips64SubOvf) {
-    // kMips64AddOvf, SubOvf emits negative result to 'kCompareReg' on overflow.
+  } else if (instr->arch_opcode() == kMips64Dadd ||
+             instr->arch_opcode() == kMips64Dsub) {
     switch (condition) {
       case kOverflow:
-        cc = lt;
+        cc = ne;
         break;
       case kNotOverflow:
-        cc = ge;
+        cc = eq;
         break;
       default:
-        UNSUPPORTED_COND(kMips64AddOvf, condition);
+        UNSUPPORTED_COND(kMips64DAdd, condition);
         break;
     }
-    // Sign-extend register on MIPS64 only 64-bit operand
-    // branch and compare op. is available.
-    __ sll(kCompareReg, kCompareReg, 0);
-    __ Branch(USE_DELAY_SLOT, &done, cc, kCompareReg, Operand(zero_reg));
+    __ dsra32(kCompareReg, i.OutputRegister(), 0);
+    __ sra(kScratchReg, i.OutputRegister(), 31);
+    __ Branch(USE_DELAY_SLOT, &done, cc, kCompareReg, Operand(kScratchReg));
     __ li(result, Operand(1));  // In delay slot.
   } else if (instr->arch_opcode() == kMips64Cmp) {
     Register left = i.InputRegister(0);

@@ -604,13 +604,13 @@ void InstructionSelector::VisitCall(Node* call, BasicBlock* continuation,
 
 void InstructionSelector::VisitInt32AddWithOverflow(Node* node,
                                                     FlagsContinuation* cont) {
-  VisitBinop(this, node, kMips64AddOvf, cont);
+  VisitBinop(this, node, kMips64Dadd, cont);
 }
 
 
 void InstructionSelector::VisitInt32SubWithOverflow(Node* node,
                                                     FlagsContinuation* cont) {
-  VisitBinop(this, node, kMips64SubOvf, cont);
+  VisitBinop(this, node, kMips64Dsub, cont);
 }
 
 
