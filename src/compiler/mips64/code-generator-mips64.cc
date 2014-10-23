@@ -261,7 +261,11 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
         __ dsllv(i.OutputRegister(), i.InputRegister(0), i.InputRegister(1));
       } else {
         int32_t imm = i.InputOperand(1).immediate();
-        __ dsll(i.OutputRegister(), i.InputRegister(0), imm);
+        if (imm < 32) {
+          __ dsll(i.OutputRegister(), i.InputRegister(0), imm);
+        } else {
+          __ dsll32(i.OutputRegister(), i.InputRegister(0), imm - 32);
+        }
       }
       break;
     case kMips64Dshr:
@@ -269,7 +273,11 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
         __ dsrlv(i.OutputRegister(), i.InputRegister(0), i.InputRegister(1));
       } else {
         int32_t imm = i.InputOperand(1).immediate();
-        __ dsrl(i.OutputRegister(), i.InputRegister(0), imm);
+        if (imm < 32) {
+          __ dsrl(i.OutputRegister(), i.InputRegister(0), imm);
+        } else {
+          __ dsrl32(i.OutputRegister(), i.InputRegister(0), imm - 32);
+        }
       }
       break;
     case kMips64Dsar:
@@ -277,7 +285,11 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
         __ dsrav(i.OutputRegister(), i.InputRegister(0), i.InputRegister(1));
       } else {
         int32_t imm = i.InputOperand(1).immediate();
-        __ dsra(i.OutputRegister(), i.InputRegister(0), imm);
+        if (imm < 32) {
+          __ dsra(i.OutputRegister(), i.InputRegister(0), imm);
+        } else {
+          __ dsra32(i.OutputRegister(), i.InputRegister(0), imm - 32);
+        }
       }
       break;
     case kMips64Ror:

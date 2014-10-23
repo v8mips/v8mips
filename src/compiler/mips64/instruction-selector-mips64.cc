@@ -41,10 +41,11 @@ class Mips64OperandGenerator FINAL : public OperandGenerator {
       case kMips64Shl:
       case kMips64Sar:
       case kMips64Shr:
+        return is_uint5(value);
       case kMips64Dshl:
       case kMips64Dsar:
       case kMips64Dshr:
-        return is_uint5(value);
+        return is_uint6(value);
       case kMips64Xor:
         return is_uint16(value);
       case kMips64Ldc1:
