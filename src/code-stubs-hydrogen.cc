@@ -233,6 +233,8 @@ Handle<Code> HydrogenCodeStub::GenerateLightweightMissCode(
 
     // Generate the code for the stub.
     masm.set_generating_stub(true);
+    // TODO(yangguo): remove this once we can serialize IC stubs.
+    masm.enable_serializer();
     NoCurrentFrameScope scope(&masm);
     GenerateLightweightMiss(&masm, miss);
   }
@@ -800,12 +802,12 @@ HValue* CodeStubGraphBuilder<StoreTransitionStub>::BuildCodeStub() {
 
       BuildCopyProperties(properties, new_properties, length, new_capacity);
 
-      // Store the new value into the "extended" object.
       Add<HStoreNamedField>(object, HObjectAccess::ForPropertiesPointer(),
                             new_properties);
     }
     // Fall through.
     case StoreTransitionStub::StoreMapAndValue:
+      // Store the new value into the "extended" object.
       BuildStoreNamedField(
           object, GetParameter(StoreTransitionDescriptor::kValueIndex),
           casted_stub()->index(), casted_stub()->representation(), true);

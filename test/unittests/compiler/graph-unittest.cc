@@ -17,18 +17,6 @@ using testing::StringMatchResultListener;
 
 namespace v8 {
 namespace internal {
-
-// TODO(bmeurer): Find a new home for these functions.
-template <typename T>
-inline std::ostream& operator<<(std::ostream& os, const Unique<T>& value) {
-  return os << *value.handle();
-}
-inline std::ostream& operator<<(std::ostream& os,
-                                const ExternalReference& value) {
-  compiler::StaticParameterTraits<ExternalReference>::PrintTo(os, value);
-  return os;
-}
-
 namespace compiler {
 
 GraphTest::GraphTest(int num_parameters) : common_(zone()), graph_(zone()) {
@@ -666,16 +654,14 @@ class IsLoadMatcher FINAL : public NodeMatcher {
 
 class IsStoreMatcher FINAL : public NodeMatcher {
  public:
-  IsStoreMatcher(const Matcher<MachineType>& type_matcher,
-                 const Matcher<WriteBarrierKind> write_barrier_matcher,
+  IsStoreMatcher(const Matcher<StoreRepresentation>& rep_matcher,
                  const Matcher<Node*>& base_matcher,
                  const Matcher<Node*>& index_matcher,
                  const Matcher<Node*>& value_matcher,
                  const Matcher<Node*>& effect_matcher,
                  const Matcher<Node*>& control_matcher)
       : NodeMatcher(IrOpcode::kStore),
-        type_matcher_(type_matcher),
-        write_barrier_matcher_(write_barrier_matcher),
+        rep_matcher_(rep_matcher),
         base_matcher_(base_matcher),
         index_matcher_(index_matcher),
         value_matcher_(value_matcher),
@@ -684,10 +670,8 @@ class IsStoreMatcher FINAL : public NodeMatcher {
 
   virtual void DescribeTo(std::ostream* os) const OVERRIDE {
     NodeMatcher::DescribeTo(os);
-    *os << " whose type (";
-    type_matcher_.DescribeTo(os);
-    *os << "), write barrier (";
-    write_barrier_matcher_.DescribeTo(os);
+    *os << " whose rep (";
+    rep_matcher_.DescribeTo(os);
     *os << "), base (";
     base_matcher_.DescribeTo(os);
     *os << "), index (";
@@ -704,12 +688,8 @@ class IsStoreMatcher FINAL : public NodeMatcher {
   virtual bool MatchAndExplain(Node* node,
                                MatchResultListener* listener) const OVERRIDE {
     return (NodeMatcher::MatchAndExplain(node, listener) &&
-            PrintMatchAndExplain(
-                OpParameter<StoreRepresentation>(node).machine_type(), "type",
-                type_matcher_, listener) &&
-            PrintMatchAndExplain(
-                OpParameter<StoreRepresentation>(node).write_barrier_kind(),
-                "write barrier", write_barrier_matcher_, listener) &&
+            PrintMatchAndExplain(OpParameter<StoreRepresentation>(node), "rep",
+                                 rep_matcher_, listener) &&
             PrintMatchAndExplain(NodeProperties::GetValueInput(node, 0), "base",
                                  base_matcher_, listener) &&
             PrintMatchAndExplain(NodeProperties::GetValueInput(node, 1),
@@ -723,8 +703,7 @@ class IsStoreMatcher FINAL : public NodeMatcher {
   }
 
  private:
-  const Matcher<MachineType> type_matcher_;
-  const Matcher<WriteBarrierKind> write_barrier_matcher_;
+  const Matcher<StoreRepresentation> rep_matcher_;
   const Matcher<Node*> base_matcher_;
   const Matcher<Node*> index_matcher_;
   const Matcher<Node*> value_matcher_;
@@ -939,16 +918,15 @@ Matcher<Node*> IsLoad(const Matcher<LoadRepresentation>& rep_matcher,
 }
 
 
-Matcher<Node*> IsStore(const Matcher<MachineType>& type_matcher,
-                       const Matcher<WriteBarrierKind>& write_barrier_matcher,
+Matcher<Node*> IsStore(const Matcher<StoreRepresentation>& rep_matcher,
                        const Matcher<Node*>& base_matcher,
                        const Matcher<Node*>& index_matcher,
                        const Matcher<Node*>& value_matcher,
                        const Matcher<Node*>& effect_matcher,
                        const Matcher<Node*>& control_matcher) {
-  return MakeMatcher(new IsStoreMatcher(
-      type_matcher, write_barrier_matcher, base_matcher, index_matcher,
-      value_matcher, effect_matcher, control_matcher));
+  return MakeMatcher(new IsStoreMatcher(rep_matcher, base_matcher,
+                                        index_matcher, value_matcher,
+                                        effect_matcher, control_matcher));
 }
 
 
@@ -963,6 +941,7 @@ IS_BINOP_MATCHER(NumberSubtract)
 IS_BINOP_MATCHER(Word32And)
 IS_BINOP_MATCHER(Word32Sar)
 IS_BINOP_MATCHER(Word32Shl)
+IS_BINOP_MATCHER(Word32Shr)
 IS_BINOP_MATCHER(Word32Ror)
 IS_BINOP_MATCHER(Word32Equal)
 IS_BINOP_MATCHER(Word64And)
@@ -970,7 +949,12 @@ IS_BINOP_MATCHER(Word64Sar)
 IS_BINOP_MATCHER(Word64Shl)
 IS_BINOP_MATCHER(Word64Equal)
 IS_BINOP_MATCHER(Int32AddWithOverflow)
+IS_BINOP_MATCHER(Int32Add)
+IS_BINOP_MATCHER(Int32Sub)
 IS_BINOP_MATCHER(Int32Mul)
+IS_BINOP_MATCHER(Int32MulHigh)
+IS_BINOP_MATCHER(Int32LessThan)
+IS_BINOP_MATCHER(Uint32LessThan)
 IS_BINOP_MATCHER(Uint32LessThanOrEqual)
 #undef IS_BINOP_MATCHER
 

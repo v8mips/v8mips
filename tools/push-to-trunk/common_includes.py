@@ -277,6 +277,12 @@ class VCInterface(object):
   def SvnGit(self, rev, branch=""):
     raise NotImplementedError()
 
+  def MasterBranch(self):
+    raise NotImplementedError()
+
+  def CandidateBranch(self):
+    raise NotImplementedError()
+
   def RemoteMasterBranch(self):
     raise NotImplementedError()
 
@@ -295,7 +301,11 @@ class VCInterface(object):
   # TODO(machenbach): There is some svn knowledge in this interface. In svn,
   # tag and commit are different remote commands, while in git we would commit
   # and tag locally and then push/land in one unique step.
-  def Tag(self, tag, remote):
+  def Tag(self, tag, remote, message):
+    """Sets a tag for the current commit.
+
+    Assumptions: The commit already landed and the commit message is unique.
+    """
     raise NotImplementedError()
 
 
@@ -327,6 +337,12 @@ class GitSvnInterface(VCInterface):
   def SvnGit(self, rev, branch=""):
     return self.step.GitSVNFindGitHash(rev, branch)
 
+  def MasterBranch(self):
+    return "bleeding_edge"
+
+  def CandidateBranch(self):
+    return "trunk"
+
   def RemoteMasterBranch(self):
     return "svn/bleeding_edge"
 
@@ -342,13 +358,13 @@ class GitSvnInterface(VCInterface):
   def CLLand(self):
     self.step.GitDCommit()
 
-  def Tag(self, tag, remote):
+  def Tag(self, tag, remote, _):
     self.step.GitSVNFetch()
     self.step.Git("rebase %s" % remote)
     self.step.GitSVNTag(tag)
 
 
-class GitReadOnlyMixin(VCInterface):
+class GitTagsOnlyMixin(VCInterface):
   def Pull(self):
     self.step.GitPull()
 
@@ -359,12 +375,18 @@ class GitReadOnlyMixin(VCInterface):
      return self.step.Git("tag").strip().splitlines()
 
   def GetBranches(self):
-    # Get relevant remote branches, e.g. "origin/branch-heads/3.25".
+    # Get relevant remote branches, e.g. "branch-heads/3.25".
     branches = filter(
-        lambda s: re.match(r"^origin/branch\-heads/\d+\.\d+$", s),
+        lambda s: re.match(r"^branch\-heads/\d+\.\d+$", s),
         self.step.GitRemotes())
-    # Remove 'origin/branch-heads/' prefix.
-    return map(lambda s: s[20:], branches)
+    # Remove 'branch-heads/' prefix.
+    return map(lambda s: s[13:], branches)
+
+  def MasterBranch(self):
+    return "master"
+
+  def CandidateBranch(self):
+    return "candidates"
 
   def RemoteMasterBranch(self):
     return "origin/master"
@@ -375,10 +397,30 @@ class GitReadOnlyMixin(VCInterface):
   def RemoteBranch(self, name):
     if name in ["candidates", "master"]:
       return "origin/%s" % name
-    return "origin/branch-heads/%s" % name
+    return "branch-heads/%s" % name
+
+  def Tag(self, tag, remote, message):
+    # Wait for the commit to appear. Assumes unique commit message titles (this
+    # is the case for all automated merge and push commits - also no title is
+    # the prefix of another title).
+    commit = None
+    for wait_interval in [3, 7, 15, 35]:
+      self.step.Git("fetch")
+      commit = self.step.GitLog(n=1, format="%H", grep=message, branch=remote)
+      if commit:
+        break
+      print("The commit has not replicated to git. Waiting for %s seconds." %
+            wait_interval)
+      self.step._side_effect_handler.Sleep(wait_interval)
+    else:
+      self.step.Die("Couldn't determine commit for setting the tag. Maybe the "
+                    "git updater is lagging behind?")
+
+    self.step.Git("tag %s %s" % (tag, commit))
+    self.step.Git("push origin %s" % tag)
 
 
-class GitReadSvnWriteInterface(GitReadOnlyMixin, GitSvnInterface):
+class GitReadSvnWriteInterface(GitTagsOnlyMixin, GitSvnInterface):
   pass
 
 
@@ -564,7 +606,10 @@ class Step(GitRecipesMixin):
     self.DeleteBranch(self._config["BRANCHNAME"])
 
   def CommonCleanup(self):
-    self.GitCheckout(self["current_branch"])
+    if ' ' in self["current_branch"]:
+      self.GitCheckout('master')
+    else:
+      self.GitCheckout(self["current_branch"])
     if self._config["BRANCHNAME"] != self["current_branch"]:
       self.GitDeleteBranch(self._config["BRANCHNAME"])
 

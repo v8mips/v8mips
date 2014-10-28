@@ -30,6 +30,17 @@ std::ostream& operator<<(std::ostream& os, const MachInst<T>& mi) {
 }
 
 
+struct Shift {
+  MachInst2 mi;
+  AddressingMode mode;
+};
+
+
+std::ostream& operator<<(std::ostream& os, const Shift& shift) {
+  return os << shift.mi;
+}
+
+
 // Helper to build Int32Constant or Int64Constant depending on the given
 // machine type.
 Node* BuildConstant(InstructionSelectorTest::StreamBuilder& m, MachineType type,
@@ -84,11 +95,26 @@ static const uint32_t kLogicalImmediates[] = {
 
 
 // ARM64 arithmetic instructions.
-static const MachInst2 kAddSubInstructions[] = {
-    {&RawMachineAssembler::Int32Add, "Int32Add", kArm64Add32, kMachInt32},
-    {&RawMachineAssembler::Int64Add, "Int64Add", kArm64Add, kMachInt64},
-    {&RawMachineAssembler::Int32Sub, "Int32Sub", kArm64Sub32, kMachInt32},
-    {&RawMachineAssembler::Int64Sub, "Int64Sub", kArm64Sub, kMachInt64}};
+struct AddSub {
+  MachInst2 mi;
+  ArchOpcode negate_arch_opcode;
+};
+
+
+std::ostream& operator<<(std::ostream& os, const AddSub& op) {
+  return os << op.mi;
+}
+
+
+static const AddSub kAddSubInstructions[] = {
+    {{&RawMachineAssembler::Int32Add, "Int32Add", kArm64Add32, kMachInt32},
+     kArm64Sub32},
+    {{&RawMachineAssembler::Int64Add, "Int64Add", kArm64Add, kMachInt64},
+     kArm64Sub},
+    {{&RawMachineAssembler::Int32Sub, "Int32Sub", kArm64Sub32, kMachInt32},
+     kArm64Add32},
+    {{&RawMachineAssembler::Int64Sub, "Int64Sub", kArm64Sub, kMachInt64},
+     kArm64Add}};
 
 
 // ARM64 Add/Sub immediates: 12-bit immediate optionally shifted by 12.
@@ -124,15 +150,23 @@ static const MachInst2 kOvfAddSubInstructions[] = {
 
 
 // ARM64 shift instructions.
-static const MachInst2 kShiftInstructions[] = {
-    {&RawMachineAssembler::Word32Shl, "Word32Shl", kArm64Shl32, kMachInt32},
-    {&RawMachineAssembler::Word64Shl, "Word64Shl", kArm64Shl, kMachInt64},
-    {&RawMachineAssembler::Word32Shr, "Word32Shr", kArm64Shr32, kMachInt32},
-    {&RawMachineAssembler::Word64Shr, "Word64Shr", kArm64Shr, kMachInt64},
-    {&RawMachineAssembler::Word32Sar, "Word32Sar", kArm64Sar32, kMachInt32},
-    {&RawMachineAssembler::Word64Sar, "Word64Sar", kArm64Sar, kMachInt64},
-    {&RawMachineAssembler::Word32Ror, "Word32Ror", kArm64Ror32, kMachInt32},
-    {&RawMachineAssembler::Word64Ror, "Word64Ror", kArm64Ror, kMachInt64}};
+static const Shift kShiftInstructions[] = {
+    {{&RawMachineAssembler::Word32Shl, "Word32Shl", kArm64Lsl32, kMachInt32},
+     kMode_Operand2_R_LSL_I},
+    {{&RawMachineAssembler::Word64Shl, "Word64Shl", kArm64Lsl, kMachInt64},
+     kMode_Operand2_R_LSL_I},
+    {{&RawMachineAssembler::Word32Shr, "Word32Shr", kArm64Lsr32, kMachInt32},
+     kMode_Operand2_R_LSR_I},
+    {{&RawMachineAssembler::Word64Shr, "Word64Shr", kArm64Lsr, kMachInt64},
+     kMode_Operand2_R_LSR_I},
+    {{&RawMachineAssembler::Word32Sar, "Word32Sar", kArm64Asr32, kMachInt32},
+     kMode_Operand2_R_ASR_I},
+    {{&RawMachineAssembler::Word64Sar, "Word64Sar", kArm64Asr, kMachInt64},
+     kMode_Operand2_R_ASR_I},
+    {{&RawMachineAssembler::Word32Ror, "Word32Ror", kArm64Ror32, kMachInt32},
+     kMode_Operand2_R_ROR_I},
+    {{&RawMachineAssembler::Word64Ror, "Word64Ror", kArm64Ror, kMachInt64},
+     kMode_Operand2_R_ROR_I}};
 
 
 // ARM64 Mul/Div instructions.
@@ -281,6 +315,46 @@ TEST_P(InstructionSelectorLogicalTest, Immediate) {
 }
 
 
+TEST_P(InstructionSelectorLogicalTest, ShiftByImmediate) {
+  const MachInst2 dpi = GetParam();
+  const MachineType type = dpi.machine_type;
+  TRACED_FOREACH(Shift, shift, kShiftInstructions) {
+    // Only test 64-bit shifted operands with 64-bit instructions.
+    if (shift.mi.machine_type != type) continue;
+
+    TRACED_FORRANGE(int, imm, 0, ((type == kMachInt32) ? 31 : 63)) {
+      StreamBuilder m(this, type, type, type);
+      m.Return((m.*dpi.constructor)(
+          m.Parameter(0),
+          (m.*shift.mi.constructor)(m.Parameter(1),
+                                    BuildConstant(m, type, imm))));
+      Stream s = m.Build();
+      ASSERT_EQ(1U, s.size());
+      EXPECT_EQ(dpi.arch_opcode, s[0]->arch_opcode());
+      EXPECT_EQ(shift.mode, s[0]->addressing_mode());
+      EXPECT_EQ(3U, s[0]->InputCount());
+      EXPECT_EQ(imm, s.ToInt64(s[0]->InputAt(2)));
+      EXPECT_EQ(1U, s[0]->OutputCount());
+    }
+
+    TRACED_FORRANGE(int, imm, 0, ((type == kMachInt32) ? 31 : 63)) {
+      StreamBuilder m(this, type, type, type);
+      m.Return((m.*dpi.constructor)(
+          (m.*shift.mi.constructor)(m.Parameter(1),
+                                    BuildConstant(m, type, imm)),
+          m.Parameter(0)));
+      Stream s = m.Build();
+      ASSERT_EQ(1U, s.size());
+      EXPECT_EQ(dpi.arch_opcode, s[0]->arch_opcode());
+      EXPECT_EQ(shift.mode, s[0]->addressing_mode());
+      EXPECT_EQ(3U, s[0]->InputCount());
+      EXPECT_EQ(imm, s.ToInt64(s[0]->InputAt(2)));
+      EXPECT_EQ(1U, s[0]->OutputCount());
+    }
+  }
+}
+
+
 INSTANTIATE_TEST_CASE_P(InstructionSelectorTest, InstructionSelectorLogicalTest,
                         ::testing::ValuesIn(kLogicalInstructions));
 
@@ -288,32 +362,32 @@ INSTANTIATE_TEST_CASE_P(InstructionSelectorTest, InstructionSelectorLogicalTest,
 // -----------------------------------------------------------------------------
 // Add and Sub instructions.
 
-typedef InstructionSelectorTestWithParam<MachInst2>
-    InstructionSelectorAddSubTest;
+typedef InstructionSelectorTestWithParam<AddSub> InstructionSelectorAddSubTest;
 
 
 TEST_P(InstructionSelectorAddSubTest, Parameter) {
-  const MachInst2 dpi = GetParam();
-  const MachineType type = dpi.machine_type;
+  const AddSub dpi = GetParam();
+  const MachineType type = dpi.mi.machine_type;
   StreamBuilder m(this, type, type, type);
-  m.Return((m.*dpi.constructor)(m.Parameter(0), m.Parameter(1)));
+  m.Return((m.*dpi.mi.constructor)(m.Parameter(0), m.Parameter(1)));
   Stream s = m.Build();
   ASSERT_EQ(1U, s.size());
-  EXPECT_EQ(dpi.arch_opcode, s[0]->arch_opcode());
+  EXPECT_EQ(dpi.mi.arch_opcode, s[0]->arch_opcode());
   EXPECT_EQ(2U, s[0]->InputCount());
   EXPECT_EQ(1U, s[0]->OutputCount());
 }
 
 
 TEST_P(InstructionSelectorAddSubTest, ImmediateOnRight) {
-  const MachInst2 dpi = GetParam();
-  const MachineType type = dpi.machine_type;
+  const AddSub dpi = GetParam();
+  const MachineType type = dpi.mi.machine_type;
   TRACED_FOREACH(int32_t, imm, kAddSubImmediates) {
     StreamBuilder m(this, type, type);
-    m.Return((m.*dpi.constructor)(m.Parameter(0), BuildConstant(m, type, imm)));
+    m.Return(
+        (m.*dpi.mi.constructor)(m.Parameter(0), BuildConstant(m, type, imm)));
     Stream s = m.Build();
     ASSERT_EQ(1U, s.size());
-    EXPECT_EQ(dpi.arch_opcode, s[0]->arch_opcode());
+    EXPECT_EQ(dpi.mi.arch_opcode, s[0]->arch_opcode());
     ASSERT_EQ(2U, s[0]->InputCount());
     EXPECT_TRUE(s[0]->InputAt(1)->IsImmediate());
     EXPECT_EQ(imm, s.ToInt64(s[0]->InputAt(1)));
@@ -322,23 +396,50 @@ TEST_P(InstructionSelectorAddSubTest, ImmediateOnRight) {
 }
 
 
-TEST_P(InstructionSelectorAddSubTest, ImmediateOnLeft) {
-  const MachInst2 dpi = GetParam();
-  const MachineType type = dpi.machine_type;
-
+TEST_P(InstructionSelectorAddSubTest, NegImmediateOnRight) {
+  const AddSub dpi = GetParam();
+  const MachineType type = dpi.mi.machine_type;
   TRACED_FOREACH(int32_t, imm, kAddSubImmediates) {
+    if (imm == 0) continue;
     StreamBuilder m(this, type, type);
-    m.Return((m.*dpi.constructor)(BuildConstant(m, type, imm), m.Parameter(0)));
+    m.Return(
+        (m.*dpi.mi.constructor)(m.Parameter(0), BuildConstant(m, type, -imm)));
     Stream s = m.Build();
+    ASSERT_EQ(1U, s.size());
+    EXPECT_EQ(dpi.negate_arch_opcode, s[0]->arch_opcode());
+    ASSERT_EQ(2U, s[0]->InputCount());
+    ASSERT_TRUE(s[0]->InputAt(1)->IsImmediate());
+    EXPECT_EQ(imm, s.ToInt32(s[0]->InputAt(1)));
+    EXPECT_EQ(1U, s[0]->OutputCount());
+  }
+}
 
-    // Add can support an immediate on the left by commuting, but Sub can't
-    // commute. We test zero-on-left Sub later.
-    if (strstr(dpi.constructor_name, "Add") != NULL) {
+
+TEST_P(InstructionSelectorAddSubTest, ShiftByImmediateOnRight) {
+  const AddSub dpi = GetParam();
+  const MachineType type = dpi.mi.machine_type;
+  TRACED_FOREACH(Shift, shift, kShiftInstructions) {
+    // Only test 64-bit shifted operands with 64-bit instructions.
+    if (shift.mi.machine_type != type) continue;
+
+    if ((shift.mi.arch_opcode == kArm64Ror32) ||
+        (shift.mi.arch_opcode == kArm64Ror)) {
+      // Not supported by add/sub instructions.
+      continue;
+    }
+
+    TRACED_FORRANGE(int, imm, 0, ((type == kMachInt32) ? 31 : 63)) {
+      StreamBuilder m(this, type, type, type);
+      m.Return((m.*dpi.mi.constructor)(
+          m.Parameter(0),
+          (m.*shift.mi.constructor)(m.Parameter(1),
+                                    BuildConstant(m, type, imm))));
+      Stream s = m.Build();
       ASSERT_EQ(1U, s.size());
-      EXPECT_EQ(dpi.arch_opcode, s[0]->arch_opcode());
-      ASSERT_EQ(2U, s[0]->InputCount());
-      EXPECT_TRUE(s[0]->InputAt(1)->IsImmediate());
-      EXPECT_EQ(imm, s.ToInt64(s[0]->InputAt(1)));
+      EXPECT_EQ(dpi.mi.arch_opcode, s[0]->arch_opcode());
+      EXPECT_EQ(shift.mode, s[0]->addressing_mode());
+      EXPECT_EQ(3U, s[0]->InputCount());
+      EXPECT_EQ(imm, s.ToInt64(s[0]->InputAt(2)));
       EXPECT_EQ(1U, s[0]->OutputCount());
     }
   }
@@ -347,6 +448,38 @@ TEST_P(InstructionSelectorAddSubTest, ImmediateOnLeft) {
 
 INSTANTIATE_TEST_CASE_P(InstructionSelectorTest, InstructionSelectorAddSubTest,
                         ::testing::ValuesIn(kAddSubInstructions));
+
+
+TEST_F(InstructionSelectorTest, AddImmediateOnLeft) {
+  {
+    // 32-bit add.
+    TRACED_FOREACH(int32_t, imm, kAddSubImmediates) {
+      StreamBuilder m(this, kMachInt32, kMachInt32);
+      m.Return(m.Int32Add(m.Int32Constant(imm), m.Parameter(0)));
+      Stream s = m.Build();
+      ASSERT_EQ(1U, s.size());
+      EXPECT_EQ(kArm64Add32, s[0]->arch_opcode());
+      ASSERT_EQ(2U, s[0]->InputCount());
+      EXPECT_TRUE(s[0]->InputAt(1)->IsImmediate());
+      EXPECT_EQ(imm, s.ToInt32(s[0]->InputAt(1)));
+      EXPECT_EQ(1U, s[0]->OutputCount());
+    }
+  }
+  {
+    // 64-bit add.
+    TRACED_FOREACH(int32_t, imm, kAddSubImmediates) {
+      StreamBuilder m(this, kMachInt64, kMachInt64);
+      m.Return(m.Int64Add(m.Int64Constant(imm), m.Parameter(0)));
+      Stream s = m.Build();
+      ASSERT_EQ(1U, s.size());
+      EXPECT_EQ(kArm64Add, s[0]->arch_opcode());
+      ASSERT_EQ(2U, s[0]->InputCount());
+      EXPECT_TRUE(s[0]->InputAt(1)->IsImmediate());
+      EXPECT_EQ(imm, s.ToInt64(s[0]->InputAt(1)));
+      EXPECT_EQ(1U, s[0]->OutputCount());
+    }
+  }
+}
 
 
 TEST_F(InstructionSelectorTest, SubZeroOnLeft) {
@@ -372,6 +505,87 @@ TEST_F(InstructionSelectorTest, SubZeroOnLeft) {
     EXPECT_EQ(kArm64Neg, s[0]->arch_opcode());
     EXPECT_EQ(1U, s[0]->InputCount());
     EXPECT_EQ(1U, s[0]->OutputCount());
+  }
+}
+
+
+TEST_F(InstructionSelectorTest, AddNegImmediateOnLeft) {
+  {
+    // 32-bit add.
+    TRACED_FOREACH(int32_t, imm, kAddSubImmediates) {
+      if (imm == 0) continue;
+      StreamBuilder m(this, kMachInt32, kMachInt32);
+      m.Return(m.Int32Add(m.Int32Constant(-imm), m.Parameter(0)));
+      Stream s = m.Build();
+
+      ASSERT_EQ(1U, s.size());
+      EXPECT_EQ(kArm64Sub32, s[0]->arch_opcode());
+      ASSERT_EQ(2U, s[0]->InputCount());
+      ASSERT_TRUE(s[0]->InputAt(1)->IsImmediate());
+      EXPECT_EQ(imm, s.ToInt32(s[0]->InputAt(1)));
+      EXPECT_EQ(1U, s[0]->OutputCount());
+    }
+  }
+  {
+    // 64-bit add.
+    TRACED_FOREACH(int32_t, imm, kAddSubImmediates) {
+      if (imm == 0) continue;
+      StreamBuilder m(this, kMachInt64, kMachInt64);
+      m.Return(m.Int64Add(m.Int64Constant(-imm), m.Parameter(0)));
+      Stream s = m.Build();
+
+      ASSERT_EQ(1U, s.size());
+      EXPECT_EQ(kArm64Sub, s[0]->arch_opcode());
+      ASSERT_EQ(2U, s[0]->InputCount());
+      ASSERT_TRUE(s[0]->InputAt(1)->IsImmediate());
+      EXPECT_EQ(imm, s.ToInt64(s[0]->InputAt(1)));
+      EXPECT_EQ(1U, s[0]->OutputCount());
+    }
+  }
+}
+
+
+TEST_F(InstructionSelectorTest, AddShiftByImmediateOnLeft) {
+  // 32-bit add.
+  TRACED_FOREACH(Shift, shift, kShiftInstructions) {
+    // Only test relevant shifted operands.
+    if (shift.mi.machine_type != kMachInt32) continue;
+    if (shift.mi.arch_opcode == kArm64Ror32) continue;
+
+    TRACED_FORRANGE(int, imm, 0, 31) {
+      StreamBuilder m(this, kMachInt32, kMachInt32, kMachInt32);
+      m.Return((m.Int32Add)(
+          (m.*shift.mi.constructor)(m.Parameter(1), m.Int32Constant(imm)),
+          m.Parameter(0)));
+      Stream s = m.Build();
+      ASSERT_EQ(1U, s.size());
+      EXPECT_EQ(kArm64Add32, s[0]->arch_opcode());
+      EXPECT_EQ(shift.mode, s[0]->addressing_mode());
+      EXPECT_EQ(3U, s[0]->InputCount());
+      EXPECT_EQ(imm, s.ToInt64(s[0]->InputAt(2)));
+      EXPECT_EQ(1U, s[0]->OutputCount());
+    }
+  }
+
+  // 64-bit add.
+  TRACED_FOREACH(Shift, shift, kShiftInstructions) {
+    // Only test relevant shifted operands.
+    if (shift.mi.machine_type != kMachInt64) continue;
+    if (shift.mi.arch_opcode == kArm64Ror) continue;
+
+    TRACED_FORRANGE(int, imm, 0, 63) {
+      StreamBuilder m(this, kMachInt64, kMachInt64, kMachInt64);
+      m.Return((m.Int64Add)(
+          (m.*shift.mi.constructor)(m.Parameter(1), m.Int64Constant(imm)),
+          m.Parameter(0)));
+      Stream s = m.Build();
+      ASSERT_EQ(1U, s.size());
+      EXPECT_EQ(kArm64Add, s[0]->arch_opcode());
+      EXPECT_EQ(shift.mode, s[0]->addressing_mode());
+      EXPECT_EQ(3U, s[0]->InputCount());
+      EXPECT_EQ(imm, s.ToInt64(s[0]->InputAt(2)));
+      EXPECT_EQ(1U, s[0]->OutputCount());
+    }
   }
 }
 
@@ -739,32 +953,31 @@ TEST_F(InstructionSelectorTest, OvfBranchWithImmediateOnLeft) {
 // Shift instructions.
 
 
-typedef InstructionSelectorTestWithParam<MachInst2>
-    InstructionSelectorShiftTest;
+typedef InstructionSelectorTestWithParam<Shift> InstructionSelectorShiftTest;
 
 
 TEST_P(InstructionSelectorShiftTest, Parameter) {
-  const MachInst2 dpi = GetParam();
-  const MachineType type = dpi.machine_type;
+  const Shift shift = GetParam();
+  const MachineType type = shift.mi.machine_type;
   StreamBuilder m(this, type, type, type);
-  m.Return((m.*dpi.constructor)(m.Parameter(0), m.Parameter(1)));
+  m.Return((m.*shift.mi.constructor)(m.Parameter(0), m.Parameter(1)));
   Stream s = m.Build();
   ASSERT_EQ(1U, s.size());
-  EXPECT_EQ(dpi.arch_opcode, s[0]->arch_opcode());
+  EXPECT_EQ(shift.mi.arch_opcode, s[0]->arch_opcode());
   EXPECT_EQ(2U, s[0]->InputCount());
   EXPECT_EQ(1U, s[0]->OutputCount());
 }
 
 
 TEST_P(InstructionSelectorShiftTest, Immediate) {
-  const MachInst2 dpi = GetParam();
-  const MachineType type = dpi.machine_type;
+  const Shift shift = GetParam();
+  const MachineType type = shift.mi.machine_type;
   TRACED_FORRANGE(int32_t, imm, 0, (ElementSizeOf(type) * 8) - 1) {
     StreamBuilder m(this, type, type);
-    m.Return((m.*dpi.constructor)(m.Parameter(0), m.Int32Constant(imm)));
+    m.Return((m.*shift.mi.constructor)(m.Parameter(0), m.Int32Constant(imm)));
     Stream s = m.Build();
     ASSERT_EQ(1U, s.size());
-    EXPECT_EQ(dpi.arch_opcode, s[0]->arch_opcode());
+    EXPECT_EQ(shift.mi.arch_opcode, s[0]->arch_opcode());
     EXPECT_EQ(2U, s[0]->InputCount());
     EXPECT_TRUE(s[0]->InputAt(1)->IsImmediate());
     EXPECT_EQ(imm, s.ToInt32(s[0]->InputAt(1)));
@@ -1406,6 +1619,166 @@ TEST_F(InstructionSelectorTest, Word64XorMinusOneWithParameter) {
     EXPECT_EQ(1U, s[0]->InputCount());
     EXPECT_EQ(1U, s[0]->OutputCount());
   }
+}
+
+
+TEST_F(InstructionSelectorTest, Word32ShrWithWord32AndWithImmediate) {
+  TRACED_FORRANGE(int32_t, lsb, 1, 31) {
+    TRACED_FORRANGE(int32_t, width, 1, 32 - lsb) {
+      uint32_t jnk = rng()->NextInt();
+      jnk >>= 32 - lsb;
+      uint32_t msk = ((0xffffffffu >> (32 - width)) << lsb) | jnk;
+      StreamBuilder m(this, kMachInt32, kMachInt32);
+      m.Return(m.Word32Shr(m.Word32And(m.Parameter(0), m.Int32Constant(msk)),
+                           m.Int32Constant(lsb)));
+      Stream s = m.Build();
+      ASSERT_EQ(1U, s.size());
+      EXPECT_EQ(kArm64Ubfx32, s[0]->arch_opcode());
+      ASSERT_EQ(3U, s[0]->InputCount());
+      EXPECT_EQ(lsb, s.ToInt32(s[0]->InputAt(1)));
+      EXPECT_EQ(width, s.ToInt32(s[0]->InputAt(2)));
+    }
+  }
+  TRACED_FORRANGE(int32_t, lsb, 1, 31) {
+    TRACED_FORRANGE(int32_t, width, 1, 32 - lsb) {
+      uint32_t jnk = rng()->NextInt();
+      jnk >>= 32 - lsb;
+      uint32_t msk = ((0xffffffffu >> (32 - width)) << lsb) | jnk;
+      StreamBuilder m(this, kMachInt32, kMachInt32);
+      m.Return(m.Word32Shr(m.Word32And(m.Int32Constant(msk), m.Parameter(0)),
+                           m.Int32Constant(lsb)));
+      Stream s = m.Build();
+      ASSERT_EQ(1U, s.size());
+      EXPECT_EQ(kArm64Ubfx32, s[0]->arch_opcode());
+      ASSERT_EQ(3U, s[0]->InputCount());
+      EXPECT_EQ(lsb, s.ToInt32(s[0]->InputAt(1)));
+      EXPECT_EQ(width, s.ToInt32(s[0]->InputAt(2)));
+    }
+  }
+}
+
+
+TEST_F(InstructionSelectorTest, Word64ShrWithWord64AndWithImmediate) {
+  TRACED_FORRANGE(int32_t, lsb, 1, 63) {
+    TRACED_FORRANGE(int32_t, width, 1, 64 - lsb) {
+      uint64_t jnk = rng()->NextInt64();
+      jnk >>= 64 - lsb;
+      uint64_t msk =
+          ((V8_UINT64_C(0xffffffffffffffff) >> (64 - width)) << lsb) | jnk;
+      StreamBuilder m(this, kMachInt64, kMachInt64);
+      m.Return(m.Word64Shr(m.Word64And(m.Parameter(0), m.Int64Constant(msk)),
+                           m.Int64Constant(lsb)));
+      Stream s = m.Build();
+      ASSERT_EQ(1U, s.size());
+      EXPECT_EQ(kArm64Ubfx, s[0]->arch_opcode());
+      ASSERT_EQ(3U, s[0]->InputCount());
+      EXPECT_EQ(lsb, s.ToInt64(s[0]->InputAt(1)));
+      EXPECT_EQ(width, s.ToInt64(s[0]->InputAt(2)));
+    }
+  }
+  TRACED_FORRANGE(int32_t, lsb, 1, 63) {
+    TRACED_FORRANGE(int32_t, width, 1, 64 - lsb) {
+      uint64_t jnk = rng()->NextInt64();
+      jnk >>= 64 - lsb;
+      uint64_t msk =
+          ((V8_UINT64_C(0xffffffffffffffff) >> (64 - width)) << lsb) | jnk;
+      StreamBuilder m(this, kMachInt64, kMachInt64);
+      m.Return(m.Word64Shr(m.Word64And(m.Int64Constant(msk), m.Parameter(0)),
+                           m.Int64Constant(lsb)));
+      Stream s = m.Build();
+      ASSERT_EQ(1U, s.size());
+      EXPECT_EQ(kArm64Ubfx, s[0]->arch_opcode());
+      ASSERT_EQ(3U, s[0]->InputCount());
+      EXPECT_EQ(lsb, s.ToInt64(s[0]->InputAt(1)));
+      EXPECT_EQ(width, s.ToInt64(s[0]->InputAt(2)));
+    }
+  }
+}
+
+
+TEST_F(InstructionSelectorTest, Word32AndWithImmediateWithWord32Shr) {
+  TRACED_FORRANGE(int32_t, lsb, 1, 31) {
+    TRACED_FORRANGE(int32_t, width, 1, 31) {
+      uint32_t msk = (1 << width) - 1;
+      StreamBuilder m(this, kMachInt32, kMachInt32);
+      m.Return(m.Word32And(m.Word32Shr(m.Parameter(0), m.Int32Constant(lsb)),
+                           m.Int32Constant(msk)));
+      Stream s = m.Build();
+      ASSERT_EQ(1U, s.size());
+      EXPECT_EQ(kArm64Ubfx32, s[0]->arch_opcode());
+      ASSERT_EQ(3U, s[0]->InputCount());
+      EXPECT_EQ(lsb, s.ToInt32(s[0]->InputAt(1)));
+      EXPECT_EQ(width, s.ToInt32(s[0]->InputAt(2)));
+    }
+  }
+  TRACED_FORRANGE(int32_t, lsb, 1, 31) {
+    TRACED_FORRANGE(int32_t, width, 1, 31) {
+      uint32_t msk = (1 << width) - 1;
+      StreamBuilder m(this, kMachInt32, kMachInt32);
+      m.Return(m.Word32And(m.Int32Constant(msk),
+                           m.Word32Shr(m.Parameter(0), m.Int32Constant(lsb))));
+      Stream s = m.Build();
+      ASSERT_EQ(1U, s.size());
+      EXPECT_EQ(kArm64Ubfx32, s[0]->arch_opcode());
+      ASSERT_EQ(3U, s[0]->InputCount());
+      EXPECT_EQ(lsb, s.ToInt32(s[0]->InputAt(1)));
+      EXPECT_EQ(width, s.ToInt32(s[0]->InputAt(2)));
+    }
+  }
+}
+
+
+TEST_F(InstructionSelectorTest, Word64AndWithImmediateWithWord64Shr) {
+  TRACED_FORRANGE(int32_t, lsb, 1, 31) {
+    TRACED_FORRANGE(int32_t, width, 1, 31) {
+      uint64_t msk = (V8_UINT64_C(1) << width) - 1;
+      StreamBuilder m(this, kMachInt64, kMachInt64);
+      m.Return(m.Word64And(m.Word64Shr(m.Parameter(0), m.Int64Constant(lsb)),
+                           m.Int64Constant(msk)));
+      Stream s = m.Build();
+      ASSERT_EQ(1U, s.size());
+      EXPECT_EQ(kArm64Ubfx, s[0]->arch_opcode());
+      ASSERT_EQ(3U, s[0]->InputCount());
+      EXPECT_EQ(lsb, s.ToInt64(s[0]->InputAt(1)));
+      EXPECT_EQ(width, s.ToInt64(s[0]->InputAt(2)));
+    }
+  }
+  TRACED_FORRANGE(int32_t, lsb, 1, 31) {
+    TRACED_FORRANGE(int32_t, width, 1, 31) {
+      uint64_t msk = (V8_UINT64_C(1) << width) - 1;
+      StreamBuilder m(this, kMachInt64, kMachInt64);
+      m.Return(m.Word64And(m.Int64Constant(msk),
+                           m.Word64Shr(m.Parameter(0), m.Int64Constant(lsb))));
+      Stream s = m.Build();
+      ASSERT_EQ(1U, s.size());
+      EXPECT_EQ(kArm64Ubfx, s[0]->arch_opcode());
+      ASSERT_EQ(3U, s[0]->InputCount());
+      EXPECT_EQ(lsb, s.ToInt64(s[0]->InputAt(1)));
+      EXPECT_EQ(width, s.ToInt64(s[0]->InputAt(2)));
+    }
+  }
+}
+
+
+TEST_F(InstructionSelectorTest, Int32MulHighWithParameters) {
+  StreamBuilder m(this, kMachInt32, kMachInt32, kMachInt32);
+  Node* const p0 = m.Parameter(0);
+  Node* const p1 = m.Parameter(1);
+  Node* const n = m.Int32MulHigh(p0, p1);
+  m.Return(n);
+  Stream s = m.Build();
+  ASSERT_EQ(2U, s.size());
+  EXPECT_EQ(kArm64Smull, s[0]->arch_opcode());
+  ASSERT_EQ(2U, s[0]->InputCount());
+  EXPECT_EQ(s.ToVreg(p0), s.ToVreg(s[0]->InputAt(0)));
+  EXPECT_EQ(s.ToVreg(p1), s.ToVreg(s[0]->InputAt(1)));
+  ASSERT_EQ(1U, s[0]->OutputCount());
+  EXPECT_EQ(kArm64Asr, s[1]->arch_opcode());
+  ASSERT_EQ(2U, s[1]->InputCount());
+  EXPECT_EQ(s.ToVreg(s[0]->Output()), s.ToVreg(s[1]->InputAt(0)));
+  EXPECT_EQ(32, s.ToInt64(s[1]->InputAt(1)));
+  ASSERT_EQ(1U, s[1]->OutputCount());
+  EXPECT_EQ(s.ToVreg(n), s.ToVreg(s[1]->Output()));
 }
 
 }  // namespace compiler

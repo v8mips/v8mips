@@ -229,56 +229,65 @@
       'target_name': 'v8_external_snapshot',
       'type': 'static_library',
       'conditions': [
-        ['want_separate_host_toolset==1', {
-          'toolsets': ['host', 'target'],
-          'dependencies': [
-            'mksnapshot#host',
-            'js2c#host',
-            'natives_blob',
-        ]}, {
-          'toolsets': ['target'],
-          'dependencies': [
-            'mksnapshot',
-            'js2c',
-            'natives_blob',
-          ],
-        }],
-        ['component=="shared_library"', {
-          'defines': [
-            'V8_SHARED',
-            'BUILDING_V8_SHARED',
-          ],
-          'direct_dependent_settings': {
-            'defines': [
-              'V8_SHARED',
-              'USING_V8_SHARED',
-            ],
-          },
-        }],
-      ],
-      'dependencies': [
-        'v8_base',
-      ],
-      'include_dirs+': [
-        '../..',
-      ],
-      'sources': [
-        '../../src/natives-external.cc',
-        '../../src/snapshot-external.cc',
-      ],
-      'actions': [
-        {
-          'action_name': 'run_mksnapshot (external)',
-          'inputs': [
-            '<(PRODUCT_DIR)/<(EXECUTABLE_PREFIX)mksnapshot<(EXECUTABLE_SUFFIX)',
-          ],
+        [ 'v8_use_external_startup_data==1', {
           'conditions': [
             ['want_separate_host_toolset==1', {
-              'target_conditions': [
-                ['_toolset=="host"', {
-                  'outputs': [
-                    '<(INTERMEDIATE_DIR)/snapshot.cc',
-                    '<(PRODUCT_DIR)/snapshot_blob_host.bin',
+              'toolsets': ['host', 'target'],
+              'dependencies': [
+                'mksnapshot#host',
+                'js2c#host',
+                'natives_blob',
+            ]}, {
+              'toolsets': ['target'],
+              'dependencies': [
+                'mksnapshot',
+                'js2c',
+                'natives_blob',
+              ],
+            }],
+            ['component=="shared_library"', {
+              'defines': [
+                'V8_SHARED',
+                'BUILDING_V8_SHARED',
+              ],
+              'direct_dependent_settings': {
+                'defines': [
+                  'V8_SHARED',
+                  'USING_V8_SHARED',
+                ],
+              },
+            }],
+          ],
+          'dependencies': [
+            'v8_base',
+          ],
+          'include_dirs+': [
+            '../..',
+          ],
+          'sources': [
+            '../../src/natives-external.cc',
+            '../../src/snapshot-external.cc',
+          ],
+          'actions': [
+            {
+              'action_name': 'run_mksnapshot (external)',
+              'inputs': [
+                '<(PRODUCT_DIR)/<(EXECUTABLE_PREFIX)mksnapshot<(EXECUTABLE_SUFFIX)',
+              ],
+              'conditions': [
+                ['want_separate_host_toolset==1', {
+                  'target_conditions': [
+                    ['_toolset=="host"', {
+                      'outputs': [
+                        '<(INTERMEDIATE_DIR)/snapshot.cc',
+                        '<(PRODUCT_DIR)/snapshot_blob_host.bin',
+                      ],
+                    }, {
+                      'outputs': [
+                        '<(INTERMEDIATE_DIR)/snapshot.cc',
+                        '<(PRODUCT_DIR)/snapshot_blob.bin',
+                      ],
+                    }],
                   ],
                 }, {
                   'outputs': [
@@ -287,31 +296,26 @@
                   ],
                 }],
               ],
-            }, {
-              'outputs': [
-                '<(INTERMEDIATE_DIR)/snapshot.cc',
-                '<(PRODUCT_DIR)/snapshot_blob.bin',
+              'variables': {
+                'mksnapshot_flags': [
+                  '--log-snapshot-positions',
+                  '--logfile', '<(INTERMEDIATE_DIR)/snapshot.log',
+                ],
+                'conditions': [
+                  ['v8_random_seed!=0', {
+                    'mksnapshot_flags': ['--random-seed', '<(v8_random_seed)'],
+                  }],
+                ],
+              },
+              'action': [
+                '<@(_inputs)',
+                '<@(mksnapshot_flags)',
+                '<@(INTERMEDIATE_DIR)/snapshot.cc',
+                '--startup_blob', '<(PRODUCT_DIR)/snapshot_blob.bin',
               ],
-            }],
+            },
           ],
-          'variables': {
-            'mksnapshot_flags': [
-              '--log-snapshot-positions',
-              '--logfile', '<(INTERMEDIATE_DIR)/snapshot.log',
-            ],
-            'conditions': [
-              ['v8_random_seed!=0', {
-                'mksnapshot_flags': ['--random-seed', '<(v8_random_seed)'],
-              }],
-            ],
-          },
-          'action': [
-            '<@(_inputs)',
-            '<@(mksnapshot_flags)',
-            '<@(INTERMEDIATE_DIR)/snapshot.cc',
-            '--startup_blob', '<(PRODUCT_DIR)/snapshot_blob.bin',
-          ],
-        },
+        }],
       ],
     },
     {
@@ -364,6 +368,7 @@
         '../../src/bytecodes-irregexp.h',
         '../../src/cached-powers.cc',
         '../../src/cached-powers.h',
+        '../../src/char-predicates.cc',
         '../../src/char-predicates-inl.h',
         '../../src/char-predicates.h',
         '../../src/checks.cc',
@@ -735,6 +740,8 @@
         '../../src/rewriter.h',
         '../../src/runtime-profiler.cc',
         '../../src/runtime-profiler.h',
+        '../../src/runtime/runtime-api.cc',
+        '../../src/runtime/runtime-array.cc',
         '../../src/runtime/runtime-classes.cc',
         '../../src/runtime/runtime-collections.cc',
         '../../src/runtime/runtime-compiler.cc',
@@ -743,11 +750,13 @@
         '../../src/runtime/runtime-function.cc',
         '../../src/runtime/runtime-generator.cc',
         '../../src/runtime/runtime-i18n.cc',
+        '../../src/runtime/runtime-internal.cc',
         '../../src/runtime/runtime-json.cc',
         '../../src/runtime/runtime-literals.cc',
         '../../src/runtime/runtime-liveedit.cc',
         '../../src/runtime/runtime-maths.cc',
         '../../src/runtime/runtime-numbers.cc',
+        '../../src/runtime/runtime-object.cc',
         '../../src/runtime/runtime-observe.cc',
         '../../src/runtime/runtime-proxy.cc',
         '../../src/runtime/runtime-regexp.cc',
@@ -808,6 +817,8 @@
         '../../src/unicode-inl.h',
         '../../src/unicode.cc',
         '../../src/unicode.h',
+        '../../src/unicode-decoder.cc',
+        '../../src/unicode-decoder.h',
         '../../src/unique.h',
         '../../src/uri.h',
         '../../src/utils-inl.h',
@@ -828,8 +839,8 @@
         '../../src/zone-inl.h',
         '../../src/zone.cc',
         '../../src/zone.h',
-        '../../third_party/fdlibm/fdlibm.cc',
-        '../../third_party/fdlibm/fdlibm.h',
+        '../../src/third_party/fdlibm/fdlibm.cc',
+        '../../src/third_party/fdlibm/fdlibm.h',
       ],
       'conditions': [
         ['want_separate_host_toolset==1', {
@@ -1221,6 +1232,8 @@
         '../../src/base/division-by-constant.cc',
         '../../src/base/division-by-constant.h',
         '../../src/base/flags.h',
+        '../../src/base/functional.cc',
+        '../../src/base/functional.h',
         '../../src/base/lazy-instance.h',
         '../../src/base/logging.cc',
         '../../src/base/logging.h',
@@ -1253,11 +1266,19 @@
           'toolsets': ['target'],
         }],
         ['OS=="linux"', {
-            'link_settings': {
-              'libraries': [
-                '-lrt'
-              ]
-            },
+            'conditions': [
+              ['nacl_target_arch=="none"', {
+                'link_settings': {
+                  'libraries': [
+                    '-lrt'
+                  ],
+                },
+              }, {
+                'defines': [
+                  'V8_LIBRT_NOT_AVAILABLE=1',
+                ],
+              }],
+            ],
             'sources': [
               '../../src/base/platform/platform-linux.cc',
               '../../src/base/platform/platform-posix.cc'
@@ -1559,7 +1580,7 @@
           '../../src/array.js',
           '../../src/string.js',
           '../../src/uri.js',
-          '../../third_party/fdlibm/fdlibm.js',
+          '../../src/third_party/fdlibm/fdlibm.js',
           '../../src/math.js',
           '../../src/apinatives.js',
           '../../src/date.js',
@@ -1688,6 +1709,12 @@
         '../../src/mksnapshot.cc',
       ],
       'conditions': [
+        ['v8_enable_i18n_support==1', {
+          'dependencies': [
+            '<(icu_gyp_path):icui18n',
+            '<(icu_gyp_path):icuuc',
+          ]
+        }],
         ['want_separate_host_toolset==1', {
           'toolsets': ['host'],
         }, {

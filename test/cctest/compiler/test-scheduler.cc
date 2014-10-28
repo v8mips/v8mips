@@ -5,6 +5,7 @@
 #include "src/v8.h"
 #include "test/cctest/cctest.h"
 
+#include "src/compiler/access-builder.h"
 #include "src/compiler/common-operator.h"
 #include "src/compiler/generic-node-inl.h"
 #include "src/compiler/generic-node.h"
@@ -16,6 +17,7 @@
 #include "src/compiler/operator.h"
 #include "src/compiler/schedule.h"
 #include "src/compiler/scheduler.h"
+#include "src/compiler/simplified-operator.h"
 #include "src/compiler/verifier.h"
 
 using namespace v8::internal;
@@ -680,9 +682,10 @@ TEST(BuildScheduleIfSplitWithEffects) {
   JSOperatorBuilder js_builder(scope.main_zone());
   const Operator* op;
 
-  Handle<Object> object =
-      Handle<Object>(isolate->heap()->undefined_value(), isolate);
-  Unique<Object> unique_constant = Unique<Object>::CreateUninitialized(object);
+  Handle<HeapObject> object =
+      Handle<HeapObject>(isolate->heap()->undefined_value(), isolate);
+  Unique<HeapObject> unique_constant =
+      Unique<HeapObject>::CreateUninitialized(object);
 
   // Manually transcripted code for:
   // function turbo_fan_test(a, b, c, y) {
@@ -825,9 +828,10 @@ TEST(BuildScheduleSimpleLoop) {
   JSOperatorBuilder js_builder(scope.main_zone());
   const Operator* op;
 
-  Handle<Object> object =
-      Handle<Object>(isolate->heap()->undefined_value(), isolate);
-  Unique<Object> unique_constant = Unique<Object>::CreateUninitialized(object);
+  Handle<HeapObject> object =
+      Handle<HeapObject>(isolate->heap()->undefined_value(), isolate);
+  Unique<HeapObject> unique_constant =
+      Unique<HeapObject>::CreateUninitialized(object);
 
   // Manually transcripted code for:
   // function turbo_fan_test(a, b) {
@@ -937,9 +941,10 @@ TEST(BuildScheduleComplexLoops) {
   JSOperatorBuilder js_builder(scope.main_zone());
   const Operator* op;
 
-  Handle<Object> object =
-      Handle<Object>(isolate->heap()->undefined_value(), isolate);
-  Unique<Object> unique_constant = Unique<Object>::CreateUninitialized(object);
+  Handle<HeapObject> object =
+      Handle<HeapObject>(isolate->heap()->undefined_value(), isolate);
+  Unique<HeapObject> unique_constant =
+      Unique<HeapObject>::CreateUninitialized(object);
 
   // Manually transcripted code for:
   // function turbo_fan_test(a, b, c) {
@@ -1184,9 +1189,10 @@ TEST(BuildScheduleBreakAndContinue) {
   JSOperatorBuilder js_builder(scope.main_zone());
   const Operator* op;
 
-  Handle<Object> object =
-      Handle<Object>(isolate->heap()->undefined_value(), isolate);
-  Unique<Object> unique_constant = Unique<Object>::CreateUninitialized(object);
+  Handle<HeapObject> object =
+      Handle<HeapObject>(isolate->heap()->undefined_value(), isolate);
+  Unique<HeapObject> unique_constant =
+      Unique<HeapObject>::CreateUninitialized(object);
 
   // Manually transcripted code for:
   // function turbo_fan_test(a, b, c) {
@@ -1514,9 +1520,10 @@ TEST(BuildScheduleSimpleLoopWithCodeMotion) {
   MachineOperatorBuilder machine_builder;
   const Operator* op;
 
-  Handle<Object> object =
-      Handle<Object>(isolate->heap()->undefined_value(), isolate);
-  Unique<Object> unique_constant = Unique<Object>::CreateUninitialized(object);
+  Handle<HeapObject> object =
+      Handle<HeapObject>(isolate->heap()->undefined_value(), isolate);
+  Unique<HeapObject> unique_constant =
+      Unique<HeapObject>::CreateUninitialized(object);
 
   // Manually transcripted code for:
   // function turbo_fan_test(a, b, c) {
@@ -1710,6 +1717,87 @@ TEST(FloatingDiamond3) {
   graph.SetEnd(end);
 
   ComputeAndVerifySchedule(33, &graph);
+}
+
+
+TEST(NestedFloatingDiamonds) {
+  HandleAndZoneScope scope;
+  Graph graph(scope.main_zone());
+  CommonOperatorBuilder common(scope.main_zone());
+  SimplifiedOperatorBuilder simplified(scope.main_zone());
+  MachineOperatorBuilder machine;
+
+  Node* start = graph.NewNode(common.Start(2));
+  graph.SetStart(start);
+
+  Node* p0 = graph.NewNode(common.Parameter(0), start);
+
+  Node* fv = graph.NewNode(common.Int32Constant(7));
+  Node* br = graph.NewNode(common.Branch(), p0, graph.start());
+  Node* t = graph.NewNode(common.IfTrue(), br);
+  Node* f = graph.NewNode(common.IfFalse(), br);
+
+  Node* map = graph.NewNode(
+      simplified.LoadElement(AccessBuilder::ForFixedArrayElement()), p0, p0, p0,
+      start, f);
+  Node* br1 = graph.NewNode(common.Branch(), map, graph.start());
+  Node* t1 = graph.NewNode(common.IfTrue(), br1);
+  Node* f1 = graph.NewNode(common.IfFalse(), br1);
+  Node* m1 = graph.NewNode(common.Merge(2), t1, f1);
+  Node* ttrue = graph.NewNode(common.Int32Constant(1));
+  Node* ffalse = graph.NewNode(common.Int32Constant(0));
+  Node* phi1 = graph.NewNode(common.Phi(kMachAnyTagged, 2), ttrue, ffalse, m1);
+
+
+  Node* m = graph.NewNode(common.Merge(2), t, f);
+  Node* phi = graph.NewNode(common.Phi(kMachAnyTagged, 2), fv, phi1, m);
+  Node* ephi1 = graph.NewNode(common.EffectPhi(2), start, map, m);
+
+  Node* ret = graph.NewNode(common.Return(), phi, ephi1, start);
+  Node* end = graph.NewNode(common.End(), ret, start);
+
+  graph.SetEnd(end);
+
+  ComputeAndVerifySchedule(23, &graph);
+}
+
+
+TEST(PhisPushedDownToDifferentBranches) {
+  HandleAndZoneScope scope;
+  Graph graph(scope.main_zone());
+  CommonOperatorBuilder common(scope.main_zone());
+  SimplifiedOperatorBuilder simplified(scope.main_zone());
+  MachineOperatorBuilder machine;
+
+  Node* start = graph.NewNode(common.Start(2));
+  graph.SetStart(start);
+
+  Node* p0 = graph.NewNode(common.Parameter(0), start);
+  Node* p1 = graph.NewNode(common.Parameter(1), start);
+
+  Node* v1 = graph.NewNode(common.Int32Constant(1));
+  Node* v2 = graph.NewNode(common.Int32Constant(2));
+  Node* v3 = graph.NewNode(common.Int32Constant(3));
+  Node* v4 = graph.NewNode(common.Int32Constant(4));
+  Node* br = graph.NewNode(common.Branch(), p0, graph.start());
+  Node* t = graph.NewNode(common.IfTrue(), br);
+  Node* f = graph.NewNode(common.IfFalse(), br);
+  Node* m = graph.NewNode(common.Merge(2), t, f);
+  Node* phi = graph.NewNode(common.Phi(kMachAnyTagged, 2), v1, v2, m);
+  Node* phi2 = graph.NewNode(common.Phi(kMachAnyTagged, 2), v3, v4, m);
+
+  Node* br2 = graph.NewNode(common.Branch(), p1, graph.start());
+  Node* t2 = graph.NewNode(common.IfTrue(), br2);
+  Node* f2 = graph.NewNode(common.IfFalse(), br2);
+  Node* m2 = graph.NewNode(common.Merge(2), t2, f2);
+  Node* phi3 = graph.NewNode(common.Phi(kMachAnyTagged, 2), phi, phi2, m2);
+
+  Node* ret = graph.NewNode(common.Return(), phi3, start, start);
+  Node* end = graph.NewNode(common.End(), ret, start);
+
+  graph.SetEnd(end);
+
+  ComputeAndVerifySchedule(24, &graph);
 }
 
 #endif

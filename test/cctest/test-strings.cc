@@ -37,6 +37,7 @@
 #include "src/api.h"
 #include "src/factory.h"
 #include "src/objects.h"
+#include "src/unicode-decoder.h"
 #include "test/cctest/cctest.h"
 
 // Adapted from http://en.wikipedia.org/wiki/Multiply-with-carry
@@ -1312,12 +1313,19 @@ TEST(CountBreakIterator) {
   CcTest::isolate()->SetUseCounterCallback(MockUseCounterCallback);
   CHECK_EQ(0, use_counts[v8::Isolate::kBreakIterator]);
   v8::Local<v8::Value> result = CompileRun(
-      "var iterator = Intl.v8BreakIterator(['en']);"
-      "iterator.adoptText('Now is the time');"
-      "iterator.next();"
-      "iterator.next();");
+      "(function() {"
+      "  if (!this.Intl) return 0;"
+      "  var iterator = Intl.v8BreakIterator(['en']);"
+      "  iterator.adoptText('Now is the time');"
+      "  iterator.next();"
+      "  return iterator.next();"
+      "})();");
   CHECK(result->IsNumber());
-  CHECK_EQ(1, use_counts[v8::Isolate::kBreakIterator]);
+  int uses = result->ToInt32()->Value() == 0 ? 0 : 1;
+  CHECK_EQ(uses, use_counts[v8::Isolate::kBreakIterator]);
+  // Make sure GC cleans up the break iterator, so we don't get a memory leak
+  // reported by ASAN.
+  CcTest::isolate()->LowMemoryNotification();
 }
 
 

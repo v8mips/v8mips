@@ -3,10 +3,16 @@
 // found in the LICENSE file.
 
 #include "src/base/bits.h"
+#include "src/base/division-by-constant.h"
 #include "src/compiler/js-graph.h"
 #include "src/compiler/machine-operator-reducer.h"
 #include "src/compiler/typer.h"
 #include "test/unittests/compiler/graph-unittest.h"
+#include "testing/gmock-support.h"
+
+using testing::AllOf;
+using testing::Capture;
+using testing::CaptureEq;
 
 namespace v8 {
 namespace internal {
@@ -24,6 +30,26 @@ class MachineOperatorReducerTest : public GraphTest {
     JSGraph jsgraph(graph(), common(), &javascript, &typer, &machine_);
     MachineOperatorReducer reducer(&jsgraph);
     return reducer.Reduce(node);
+  }
+
+  Matcher<Node*> IsTruncatingDiv(const Matcher<Node*>& dividend_matcher,
+                                 const int32_t divisor) {
+    base::MagicNumbersForDivision<uint32_t> const mag =
+        base::SignedDivisionByConstant(bit_cast<uint32_t>(divisor));
+    int32_t const multiplier = bit_cast<int32_t>(mag.multiplier);
+    int32_t const shift = bit_cast<int32_t>(mag.shift);
+    Matcher<Node*> quotient_matcher =
+        IsInt32MulHigh(dividend_matcher, IsInt32Constant(multiplier));
+    if (divisor > 0 && multiplier < 0) {
+      quotient_matcher = IsInt32Add(quotient_matcher, dividend_matcher);
+    } else if (divisor < 0 && multiplier > 0) {
+      quotient_matcher = IsInt32Sub(quotient_matcher, dividend_matcher);
+    }
+    if (shift) {
+      quotient_matcher = IsWord32Sar(quotient_matcher, IsInt32Constant(shift));
+    }
+    return IsInt32Add(quotient_matcher,
+                      IsWord32Shr(dividend_matcher, IsInt32Constant(31)));
   }
 
   MachineOperatorBuilder* machine() { return &machine_; }
@@ -46,7 +72,7 @@ class MachineOperatorReducerTestWithParam
 
 namespace {
 
-static const float kFloat32Values[] = {
+const float kFloat32Values[] = {
     -std::numeric_limits<float>::infinity(), -2.70497e+38f, -1.4698e+37f,
     -1.22813e+35f,                           -1.20555e+35f, -1.34584e+34f,
     -1.0079e+32f,                            -6.49364e+26f, -3.06077e+25f,
@@ -83,7 +109,7 @@ static const float kFloat32Values[] = {
     std::numeric_limits<float>::infinity()};
 
 
-static const double kFloat64Values[] = {
+const double kFloat64Values[] = {
     -V8_INFINITY,  -4.23878e+275, -5.82632e+265, -6.60355e+220, -6.26172e+212,
     -2.56222e+211, -4.82408e+201, -1.84106e+157, -1.63662e+127, -1.55772e+100,
     -1.67813e+72,  -2.3382e+55,   -3.179e+30,    -1.441e+09,    -1.0647e+09,
@@ -106,83 +132,97 @@ static const double kFloat64Values[] = {
     5.72883e+289,  8.5798e+290,   1.40256e+294,  1.79769e+308,  V8_INFINITY};
 
 
-static const int32_t kInt32Values[] = {
-    -2147483647 - 1, -1914954528, -1698749618, -1578693386, -1577976073,
-    -1573998034,     -1529085059, -1499540537, -1299205097, -1090814845,
-    -938186388,      -806828902,  -750927650,  -520676892,  -513661538,
-    -453036354,      -433622833,  -282638793,  -28375,      -27788,
-    -22770,          -18806,      -14173,      -11956,      -11200,
-    -10212,          -8160,       -3751,       -2758,       -1522,
-    -121,            -120,        -118,        -117,        -106,
-    -84,             -80,         -74,         -59,         -52,
-    -48,             -39,         -35,         -17,         -11,
-    -10,             -9,          -7,          -5,          0,
-    9,               12,          17,          23,          29,
-    31,              33,          35,          40,          47,
-    55,              56,          62,          64,          67,
-    68,              69,          74,          79,          84,
-    89,              90,          97,          104,         118,
-    124,             126,         127,         7278,        17787,
-    24136,           24202,       25570,       26680,       30242,
-    32399,           420886487,   642166225,   821912648,   822577803,
-    851385718,       1212241078,  1411419304,  1589626102,  1596437184,
-    1876245816,      1954730266,  2008792749,  2045320228,  2147483647};
+const int32_t kInt32Values[] = {
+    std::numeric_limits<int32_t>::min(), -1914954528, -1698749618,
+    -1578693386,                         -1577976073, -1573998034,
+    -1529085059,                         -1499540537, -1299205097,
+    -1090814845,                         -938186388,  -806828902,
+    -750927650,                          -520676892,  -513661538,
+    -453036354,                          -433622833,  -282638793,
+    -28375,                              -27788,      -22770,
+    -18806,                              -14173,      -11956,
+    -11200,                              -10212,      -8160,
+    -3751,                               -2758,       -1522,
+    -121,                                -120,        -118,
+    -117,                                -106,        -84,
+    -80,                                 -74,         -59,
+    -52,                                 -48,         -39,
+    -35,                                 -17,         -11,
+    -10,                                 -9,          -7,
+    -5,                                  0,           9,
+    12,                                  17,          23,
+    29,                                  31,          33,
+    35,                                  40,          47,
+    55,                                  56,          62,
+    64,                                  67,          68,
+    69,                                  74,          79,
+    84,                                  89,          90,
+    97,                                  104,         118,
+    124,                                 126,         127,
+    7278,                                17787,       24136,
+    24202,                               25570,       26680,
+    30242,                               32399,       420886487,
+    642166225,                           821912648,   822577803,
+    851385718,                           1212241078,  1411419304,
+    1589626102,                          1596437184,  1876245816,
+    1954730266,                          2008792749,  2045320228,
+    std::numeric_limits<int32_t>::max()};
 
 
-static const int64_t kInt64Values[] = {
-    V8_INT64_C(-9223372036854775807) - 1, V8_INT64_C(-8974392461363618006),
-    V8_INT64_C(-8874367046689588135),     V8_INT64_C(-8269197512118230839),
-    V8_INT64_C(-8146091527100606733),     V8_INT64_C(-7550917981466150848),
-    V8_INT64_C(-7216590251577894337),     V8_INT64_C(-6464086891160048440),
-    V8_INT64_C(-6365616494908257190),     V8_INT64_C(-6305630541365849726),
-    V8_INT64_C(-5982222642272245453),     V8_INT64_C(-5510103099058504169),
-    V8_INT64_C(-5496838675802432701),     V8_INT64_C(-4047626578868642657),
-    V8_INT64_C(-4033755046900164544),     V8_INT64_C(-3554299241457877041),
-    V8_INT64_C(-2482258764588614470),     V8_INT64_C(-1688515425526875335),
-    V8_INT64_C(-924784137176548532),      V8_INT64_C(-725316567157391307),
-    V8_INT64_C(-439022654781092241),      V8_INT64_C(-105545757668917080),
-    V8_INT64_C(-2088319373),              V8_INT64_C(-2073699916),
-    V8_INT64_C(-1844949911),              V8_INT64_C(-1831090548),
-    V8_INT64_C(-1756711933),              V8_INT64_C(-1559409497),
-    V8_INT64_C(-1281179700),              V8_INT64_C(-1211513985),
-    V8_INT64_C(-1182371520),              V8_INT64_C(-785934753),
-    V8_INT64_C(-767480697),               V8_INT64_C(-705745662),
-    V8_INT64_C(-514362436),               V8_INT64_C(-459916580),
-    V8_INT64_C(-312328082),               V8_INT64_C(-302949707),
-    V8_INT64_C(-285499304),               V8_INT64_C(-125701262),
-    V8_INT64_C(-95139843),                V8_INT64_C(-32768),
-    V8_INT64_C(-27542),                   V8_INT64_C(-23600),
-    V8_INT64_C(-18582),                   V8_INT64_C(-17770),
-    V8_INT64_C(-9086),                    V8_INT64_C(-9010),
-    V8_INT64_C(-8244),                    V8_INT64_C(-2890),
-    V8_INT64_C(-103),                     V8_INT64_C(-34),
-    V8_INT64_C(-27),                      V8_INT64_C(-25),
-    V8_INT64_C(-9),                       V8_INT64_C(-7),
-    V8_INT64_C(0),                        V8_INT64_C(2),
-    V8_INT64_C(38),                       V8_INT64_C(58),
-    V8_INT64_C(65),                       V8_INT64_C(93),
-    V8_INT64_C(111),                      V8_INT64_C(1003),
-    V8_INT64_C(1267),                     V8_INT64_C(12797),
-    V8_INT64_C(23122),                    V8_INT64_C(28200),
-    V8_INT64_C(30888),                    V8_INT64_C(42648848),
-    V8_INT64_C(116836693),                V8_INT64_C(263003643),
-    V8_INT64_C(571039860),                V8_INT64_C(1079398689),
-    V8_INT64_C(1145196402),               V8_INT64_C(1184846321),
-    V8_INT64_C(1758281648),               V8_INT64_C(1859991374),
-    V8_INT64_C(1960251588),               V8_INT64_C(2042443199),
-    V8_INT64_C(296220586027987448),       V8_INT64_C(1015494173071134726),
-    V8_INT64_C(1151237951914455318),      V8_INT64_C(1331941174616854174),
-    V8_INT64_C(2022020418667972654),      V8_INT64_C(2450251424374977035),
-    V8_INT64_C(3668393562685561486),      V8_INT64_C(4858229301215502171),
-    V8_INT64_C(4919426235170669383),      V8_INT64_C(5034286595330341762),
-    V8_INT64_C(5055797915536941182),      V8_INT64_C(6072389716149252074),
-    V8_INT64_C(6185309910199801210),      V8_INT64_C(6297328311011094138),
-    V8_INT64_C(6932372858072165827),      V8_INT64_C(8483640924987737210),
-    V8_INT64_C(8663764179455849203),      V8_INT64_C(8877197042645298254),
-    V8_INT64_C(8901543506779157333),      V8_INT64_C(9223372036854775807)};
+const int64_t kInt64Values[] = {
+    std::numeric_limits<int64_t>::min(), V8_INT64_C(-8974392461363618006),
+    V8_INT64_C(-8874367046689588135),    V8_INT64_C(-8269197512118230839),
+    V8_INT64_C(-8146091527100606733),    V8_INT64_C(-7550917981466150848),
+    V8_INT64_C(-7216590251577894337),    V8_INT64_C(-6464086891160048440),
+    V8_INT64_C(-6365616494908257190),    V8_INT64_C(-6305630541365849726),
+    V8_INT64_C(-5982222642272245453),    V8_INT64_C(-5510103099058504169),
+    V8_INT64_C(-5496838675802432701),    V8_INT64_C(-4047626578868642657),
+    V8_INT64_C(-4033755046900164544),    V8_INT64_C(-3554299241457877041),
+    V8_INT64_C(-2482258764588614470),    V8_INT64_C(-1688515425526875335),
+    V8_INT64_C(-924784137176548532),     V8_INT64_C(-725316567157391307),
+    V8_INT64_C(-439022654781092241),     V8_INT64_C(-105545757668917080),
+    V8_INT64_C(-2088319373),             V8_INT64_C(-2073699916),
+    V8_INT64_C(-1844949911),             V8_INT64_C(-1831090548),
+    V8_INT64_C(-1756711933),             V8_INT64_C(-1559409497),
+    V8_INT64_C(-1281179700),             V8_INT64_C(-1211513985),
+    V8_INT64_C(-1182371520),             V8_INT64_C(-785934753),
+    V8_INT64_C(-767480697),              V8_INT64_C(-705745662),
+    V8_INT64_C(-514362436),              V8_INT64_C(-459916580),
+    V8_INT64_C(-312328082),              V8_INT64_C(-302949707),
+    V8_INT64_C(-285499304),              V8_INT64_C(-125701262),
+    V8_INT64_C(-95139843),               V8_INT64_C(-32768),
+    V8_INT64_C(-27542),                  V8_INT64_C(-23600),
+    V8_INT64_C(-18582),                  V8_INT64_C(-17770),
+    V8_INT64_C(-9086),                   V8_INT64_C(-9010),
+    V8_INT64_C(-8244),                   V8_INT64_C(-2890),
+    V8_INT64_C(-103),                    V8_INT64_C(-34),
+    V8_INT64_C(-27),                     V8_INT64_C(-25),
+    V8_INT64_C(-9),                      V8_INT64_C(-7),
+    V8_INT64_C(0),                       V8_INT64_C(2),
+    V8_INT64_C(38),                      V8_INT64_C(58),
+    V8_INT64_C(65),                      V8_INT64_C(93),
+    V8_INT64_C(111),                     V8_INT64_C(1003),
+    V8_INT64_C(1267),                    V8_INT64_C(12797),
+    V8_INT64_C(23122),                   V8_INT64_C(28200),
+    V8_INT64_C(30888),                   V8_INT64_C(42648848),
+    V8_INT64_C(116836693),               V8_INT64_C(263003643),
+    V8_INT64_C(571039860),               V8_INT64_C(1079398689),
+    V8_INT64_C(1145196402),              V8_INT64_C(1184846321),
+    V8_INT64_C(1758281648),              V8_INT64_C(1859991374),
+    V8_INT64_C(1960251588),              V8_INT64_C(2042443199),
+    V8_INT64_C(296220586027987448),      V8_INT64_C(1015494173071134726),
+    V8_INT64_C(1151237951914455318),     V8_INT64_C(1331941174616854174),
+    V8_INT64_C(2022020418667972654),     V8_INT64_C(2450251424374977035),
+    V8_INT64_C(3668393562685561486),     V8_INT64_C(4858229301215502171),
+    V8_INT64_C(4919426235170669383),     V8_INT64_C(5034286595330341762),
+    V8_INT64_C(5055797915536941182),     V8_INT64_C(6072389716149252074),
+    V8_INT64_C(6185309910199801210),     V8_INT64_C(6297328311011094138),
+    V8_INT64_C(6932372858072165827),     V8_INT64_C(8483640924987737210),
+    V8_INT64_C(8663764179455849203),     V8_INT64_C(8877197042645298254),
+    V8_INT64_C(8901543506779157333),     std::numeric_limits<int64_t>::max()};
 
 
-static const uint32_t kUint32Values[] = {
+const uint32_t kUint32Values[] = {
     0x00000000, 0x00000001, 0xffffffff, 0x1b09788b, 0x04c5fce8, 0xcc0de5bf,
     0x273a798e, 0x187937a3, 0xece3af83, 0x5495a16b, 0x0b668ecc, 0x11223344,
     0x0000009e, 0x00000043, 0x0000af73, 0x0000116b, 0x00658ecc, 0x002b3b4c,
@@ -564,6 +604,161 @@ TEST_F(MachineOperatorReducerTest, Word32ShlWithWord32Shr) {
 
 
 // -----------------------------------------------------------------------------
+// Int32Div
+
+
+TEST_F(MachineOperatorReducerTest, Int32DivWithConstant) {
+  Node* const p0 = Parameter(0);
+  {
+    Reduction const r =
+        Reduce(graph()->NewNode(machine()->Int32Div(), p0, Int32Constant(0)));
+    ASSERT_TRUE(r.Changed());
+    EXPECT_THAT(r.replacement(), IsInt32Constant(0));
+  }
+  {
+    Reduction const r =
+        Reduce(graph()->NewNode(machine()->Int32Div(), p0, Int32Constant(1)));
+    ASSERT_TRUE(r.Changed());
+    EXPECT_EQ(r.replacement(), p0);
+  }
+  {
+    Reduction const r =
+        Reduce(graph()->NewNode(machine()->Int32Div(), p0, Int32Constant(-1)));
+    ASSERT_TRUE(r.Changed());
+    EXPECT_THAT(r.replacement(), IsInt32Sub(IsInt32Constant(0), p0));
+  }
+  {
+    Reduction const r =
+        Reduce(graph()->NewNode(machine()->Int32Div(), p0, Int32Constant(2)));
+    ASSERT_TRUE(r.Changed());
+    EXPECT_THAT(
+        r.replacement(),
+        IsWord32Sar(IsInt32Add(IsWord32Shr(p0, IsInt32Constant(31)), p0),
+                    IsInt32Constant(1)));
+  }
+  {
+    Reduction const r =
+        Reduce(graph()->NewNode(machine()->Int32Div(), p0, Int32Constant(-2)));
+    ASSERT_TRUE(r.Changed());
+    EXPECT_THAT(
+        r.replacement(),
+        IsInt32Sub(
+            IsInt32Constant(0),
+            IsWord32Sar(IsInt32Add(IsWord32Shr(p0, IsInt32Constant(31)), p0),
+                        IsInt32Constant(1))));
+  }
+  TRACED_FORRANGE(int32_t, shift, 2, 30) {
+    Reduction const r = Reduce(
+        graph()->NewNode(machine()->Int32Div(), p0, Int32Constant(1 << shift)));
+    ASSERT_TRUE(r.Changed());
+    EXPECT_THAT(
+        r.replacement(),
+        IsWord32Sar(IsInt32Add(IsWord32Shr(IsWord32Sar(p0, IsInt32Constant(31)),
+                                           IsInt32Constant(32 - shift)),
+                               p0),
+                    IsInt32Constant(shift)));
+  }
+  TRACED_FORRANGE(int32_t, shift, 2, 31) {
+    Reduction const r = Reduce(graph()->NewNode(
+        machine()->Int32Div(), p0,
+        Uint32Constant(bit_cast<uint32_t, int32_t>(-1) << shift)));
+    ASSERT_TRUE(r.Changed());
+    EXPECT_THAT(
+        r.replacement(),
+        IsInt32Sub(
+            IsInt32Constant(0),
+            IsWord32Sar(
+                IsInt32Add(IsWord32Shr(IsWord32Sar(p0, IsInt32Constant(31)),
+                                       IsInt32Constant(32 - shift)),
+                           p0),
+                IsInt32Constant(shift))));
+  }
+  TRACED_FOREACH(int32_t, divisor, kInt32Values) {
+    if (divisor < 0) {
+      if (base::bits::IsPowerOfTwo32(-divisor)) continue;
+      Reduction const r = Reduce(
+          graph()->NewNode(machine()->Int32Div(), p0, Int32Constant(divisor)));
+      ASSERT_TRUE(r.Changed());
+      EXPECT_THAT(r.replacement(), IsInt32Sub(IsInt32Constant(0),
+                                              IsTruncatingDiv(p0, -divisor)));
+    } else if (divisor > 0) {
+      if (base::bits::IsPowerOfTwo32(divisor)) continue;
+      Reduction const r = Reduce(
+          graph()->NewNode(machine()->Int32Div(), p0, Int32Constant(divisor)));
+      ASSERT_TRUE(r.Changed());
+      EXPECT_THAT(r.replacement(), IsTruncatingDiv(p0, divisor));
+    }
+  }
+}
+
+
+// -----------------------------------------------------------------------------
+// Int32Mod
+
+
+TEST_F(MachineOperatorReducerTest, Int32ModWithConstant) {
+  Node* const p0 = Parameter(0);
+  static const int32_t kOnes[] = {-1, 1};
+  TRACED_FOREACH(int32_t, one, kOnes) {
+    Reduction const r =
+        Reduce(graph()->NewNode(machine()->Int32Mod(), p0, Int32Constant(one)));
+    ASSERT_TRUE(r.Changed());
+    EXPECT_THAT(r.replacement(), IsInt32Constant(0));
+  }
+  TRACED_FORRANGE(int32_t, shift, 1, 30) {
+    Reduction const r = Reduce(
+        graph()->NewNode(machine()->Int32Mod(), p0, Int32Constant(1 << shift)));
+    ASSERT_TRUE(r.Changed());
+
+    Capture<Node*> branch;
+    Node* const phi = r.replacement();
+    int32_t const mask = (1 << shift) - 1;
+    EXPECT_THAT(
+        phi, IsPhi(kMachInt32,
+                   IsInt32Sub(IsInt32Constant(0),
+                              IsWord32And(IsInt32Sub(IsInt32Constant(0), p0),
+                                          IsInt32Constant(mask))),
+                   IsWord32And(p0, IsInt32Constant(mask)),
+                   IsMerge(IsIfTrue(CaptureEq(&branch)),
+                           IsIfFalse(AllOf(
+                               CaptureEq(&branch),
+                               IsBranch(IsInt32LessThan(p0, IsInt32Constant(0)),
+                                        graph()->start()))))));
+  }
+  TRACED_FORRANGE(int32_t, shift, 1, 31) {
+    Reduction const r = Reduce(graph()->NewNode(
+        machine()->Int32Mod(), p0,
+        Uint32Constant(bit_cast<uint32_t, int32_t>(-1) << shift)));
+    ASSERT_TRUE(r.Changed());
+
+    Capture<Node*> branch;
+    Node* const phi = r.replacement();
+    int32_t const mask = bit_cast<int32_t, uint32_t>((1U << shift) - 1);
+    EXPECT_THAT(
+        phi, IsPhi(kMachInt32,
+                   IsInt32Sub(IsInt32Constant(0),
+                              IsWord32And(IsInt32Sub(IsInt32Constant(0), p0),
+                                          IsInt32Constant(mask))),
+                   IsWord32And(p0, IsInt32Constant(mask)),
+                   IsMerge(IsIfTrue(CaptureEq(&branch)),
+                           IsIfFalse(AllOf(
+                               CaptureEq(&branch),
+                               IsBranch(IsInt32LessThan(p0, IsInt32Constant(0)),
+                                        graph()->start()))))));
+  }
+  TRACED_FOREACH(int32_t, divisor, kInt32Values) {
+    if (divisor == 0 || base::bits::IsPowerOfTwo32(Abs(divisor))) continue;
+    Reduction const r = Reduce(
+        graph()->NewNode(machine()->Int32Mod(), p0, Int32Constant(divisor)));
+    ASSERT_TRUE(r.Changed());
+    EXPECT_THAT(r.replacement(),
+                IsInt32Sub(p0, IsInt32Mul(IsTruncatingDiv(p0, Abs(divisor)),
+                                          IsInt32Constant(Abs(divisor)))));
+  }
+}
+
+
+// -----------------------------------------------------------------------------
 // Int32AddWithOverflow
 
 
@@ -651,6 +846,77 @@ TEST_F(MachineOperatorReducerTest, Int32SubWithOverflowWithConstant) {
       ASSERT_TRUE(r.Changed());
       EXPECT_THAT(r.replacement(), IsInt32Constant(z));
     }
+  }
+}
+
+
+// -----------------------------------------------------------------------------
+// Uint32LessThan
+
+
+TEST_F(MachineOperatorReducerTest, Uint32LessThanWithWord32Sar) {
+  Node* const p0 = Parameter(0);
+  TRACED_FORRANGE(uint32_t, shift, 1, 3) {
+    const uint32_t limit = (kMaxInt >> shift) - 1;
+    Node* const node = graph()->NewNode(
+        machine()->Uint32LessThan(),
+        graph()->NewNode(machine()->Word32Sar(), p0, Uint32Constant(shift)),
+        Uint32Constant(limit));
+
+    Reduction r = Reduce(node);
+    ASSERT_TRUE(r.Changed());
+    EXPECT_THAT(
+        r.replacement(),
+        IsUint32LessThan(p0, IsInt32Constant(bit_cast<int32_t>(
+                                 (limit << shift) | ((1u << shift) - 1)))));
+  }
+}
+
+
+// -----------------------------------------------------------------------------
+// Store
+
+
+TEST_F(MachineOperatorReducerTest, StoreRepWord8WithWord32And) {
+  const StoreRepresentation rep(kRepWord8, kNoWriteBarrier);
+  Node* const base = Parameter(0);
+  Node* const index = Parameter(1);
+  Node* const value = Parameter(2);
+  Node* const effect = graph()->start();
+  Node* const control = graph()->start();
+  TRACED_FOREACH(uint32_t, x, kUint32Values) {
+    Node* const node =
+        graph()->NewNode(machine()->Store(rep), base, index,
+                         graph()->NewNode(machine()->Word32And(), value,
+                                          Uint32Constant(x | 0xffu)),
+                         effect, control);
+
+    Reduction r = Reduce(node);
+    ASSERT_TRUE(r.Changed());
+    EXPECT_THAT(r.replacement(),
+                IsStore(rep, base, index, value, effect, control));
+  }
+}
+
+
+TEST_F(MachineOperatorReducerTest, StoreRepWord16WithWord32And) {
+  const StoreRepresentation rep(kRepWord16, kNoWriteBarrier);
+  Node* const base = Parameter(0);
+  Node* const index = Parameter(1);
+  Node* const value = Parameter(2);
+  Node* const effect = graph()->start();
+  Node* const control = graph()->start();
+  TRACED_FOREACH(uint32_t, x, kUint32Values) {
+    Node* const node =
+        graph()->NewNode(machine()->Store(rep), base, index,
+                         graph()->NewNode(machine()->Word32And(), value,
+                                          Uint32Constant(x | 0xffffu)),
+                         effect, control);
+
+    Reduction r = Reduce(node);
+    ASSERT_TRUE(r.Changed());
+    EXPECT_THAT(r.replacement(),
+                IsStore(rep, base, index, value, effect, control));
   }
 }
 

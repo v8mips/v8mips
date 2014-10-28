@@ -11,6 +11,7 @@
 #include "src/compiler/typer.h"
 #include "test/unittests/compiler/compiler-test-utils.h"
 #include "test/unittests/compiler/graph-unittest.h"
+#include "testing/gtest-support.h"
 
 namespace v8 {
 namespace internal {
@@ -56,6 +57,11 @@ class JSTypedLoweringTest : public GraphTest {
     return buffer;
   }
 
+  Matcher<Node*> IsIntPtrConstant(intptr_t value) {
+    return sizeof(value) == 4 ? IsInt32Constant(static_cast<int32_t>(value))
+                              : IsInt64Constant(static_cast<int64_t>(value));
+  }
+
   JSOperatorBuilder* javascript() { return &javascript_; }
 
  private:
@@ -72,16 +78,19 @@ TEST_F(JSTypedLoweringTest, JSLoadPropertyFromExternalTypedArray) {
   uint8_t backing_store[kLength * 8];
   Handle<JSArrayBuffer> buffer =
       NewArrayBuffer(backing_store, arraysize(backing_store));
+  VectorSlotPair feedback(Handle<TypeFeedbackVector>::null(),
+                          FeedbackVectorSlot::Invalid());
   TRACED_FOREACH(ExternalArrayType, type, kExternalArrayTypes) {
     Handle<JSTypedArray> array =
         factory()->NewJSTypedArray(type, buffer, kLength);
 
     Node* key = Parameter(Type::Integral32());
+    Node* base = HeapConstant(array);
     Node* context = UndefinedConstant();
     Node* effect = graph()->start();
     Node* control = graph()->start();
-    Node* node = graph()->NewNode(javascript()->LoadProperty(),
-                                  HeapConstant(array), key, context);
+    Node* node = graph()->NewNode(javascript()->LoadProperty(feedback), base,
+                                  key, context);
     if (FLAG_turbo_deoptimization) {
       node->AppendInput(zone(), UndefinedConstant());
     }
@@ -92,13 +101,10 @@ TEST_F(JSTypedLoweringTest, JSLoadPropertyFromExternalTypedArray) {
     ASSERT_TRUE(r.Changed());
     EXPECT_THAT(
         r.replacement(),
-        IsLoadElement(
-            AccessBuilder::ForTypedArrayElement(type, true),
-            IsLoadField(
-                AccessBuilder::ForJSArrayBufferBackingStore(),
-                IsHeapConstant(Unique<HeapObject>::CreateImmovable(buffer)),
-                effect),
-            key, IsInt32Constant(static_cast<int>(kLength)), effect, control));
+        IsLoadElement(AccessBuilder::ForTypedArrayElement(type, true),
+                      IsIntPtrConstant(bit_cast<intptr_t>(&backing_store[0])),
+                      key, IsInt32Constant(static_cast<int>(kLength)), effect,
+                      control));
   }
 }
 
@@ -118,12 +124,13 @@ TEST_F(JSTypedLoweringTest, JSStorePropertyToExternalTypedArray) {
           factory()->NewJSTypedArray(type, buffer, kLength);
 
       Node* key = Parameter(Type::Integral32());
+      Node* base = HeapConstant(array);
       Node* value = Parameter(Type::Any());
       Node* context = UndefinedConstant();
       Node* effect = graph()->start();
       Node* control = graph()->start();
       Node* node = graph()->NewNode(javascript()->StoreProperty(strict_mode),
-                                    HeapConstant(array), key, value, context);
+                                    base, key, value, context);
       if (FLAG_turbo_deoptimization) {
         node->AppendInput(zone(), UndefinedConstant());
       }
@@ -132,16 +139,12 @@ TEST_F(JSTypedLoweringTest, JSStorePropertyToExternalTypedArray) {
       Reduction r = Reduce(node);
 
       ASSERT_TRUE(r.Changed());
-      EXPECT_THAT(
-          r.replacement(),
-          IsStoreElement(
-              AccessBuilder::ForTypedArrayElement(type, true),
-              IsLoadField(
-                  AccessBuilder::ForJSArrayBufferBackingStore(),
-                  IsHeapConstant(Unique<HeapObject>::CreateImmovable(buffer)),
-                  effect),
-              key, IsInt32Constant(static_cast<int>(kLength)), value, effect,
-              control));
+      EXPECT_THAT(r.replacement(),
+                  IsStoreElement(
+                      AccessBuilder::ForTypedArrayElement(type, true),
+                      IsIntPtrConstant(bit_cast<intptr_t>(&backing_store[0])),
+                      key, IsInt32Constant(static_cast<int>(kLength)), value,
+                      effect, control));
     }
   }
 }

@@ -5,8 +5,10 @@
 #include <limits>
 
 #include "src/compiler/access-builder.h"
+#include "src/compiler/change-lowering.h"
 #include "src/compiler/control-builders.h"
 #include "src/compiler/generic-node-inl.h"
+#include "src/compiler/graph-reducer.h"
 #include "src/compiler/graph-visualizer.h"
 #include "src/compiler/node-properties-inl.h"
 #include "src/compiler/pipeline.h"
@@ -51,6 +53,31 @@ class SimplifiedLoweringTester : public GraphBuilderTester<ReturnType> {
     lowering.LowerAllNodes();
   }
 
+  void LowerAllNodesAndLowerChanges() {
+    this->End();
+    typer.Run(jsgraph.graph(), MaybeHandle<Context>());
+    lowering.LowerAllNodes();
+
+    Zone* zone = this->zone();
+    CompilationInfo info(zone->isolate(), zone);
+    Linkage linkage(
+        &info, Linkage::GetSimplifiedCDescriptor(zone, this->machine_sig_));
+    ChangeLowering lowering(&jsgraph, &linkage);
+    GraphReducer reducer(this->graph());
+    reducer.AddReducer(&lowering);
+    reducer.ReduceGraph();
+    Verifier::Run(this->graph());
+  }
+
+  void CheckNumberCall(double expected, double input) {
+    // TODO(titzer): make calls to NewNumber work in cctests.
+    if (expected <= Smi::kMinValue) return;
+    if (expected >= Smi::kMaxValue) return;
+    Handle<Object> num = factory()->NewNumber(input);
+    Object* result = this->Call(*num);
+    CHECK(factory()->NewNumber(expected)->SameValue(result));
+  }
+
   Factory* factory() { return this->isolate()->factory(); }
   Heap* heap() { return this->isolate()->heap(); }
 };
@@ -66,6 +93,7 @@ TEST(RunNumberToInt32_float64) {
   FieldAccess load = {kUntaggedBase, 0, Handle<Name>(), Type::Number(),
                       kMachFloat64};
   Node* loaded = t.LoadField(load, t.PointerConstant(&input));
+  NodeProperties::SetBounds(loaded, Bounds(Type::Number()));
   Node* convert = t.NumberToInt32(loaded);
   FieldAccess store = {kUntaggedBase, 0, Handle<Name>(), Type::Signed32(),
                        kMachInt32};
@@ -94,6 +122,7 @@ TEST(RunNumberToUint32_float64) {
   FieldAccess load = {kUntaggedBase, 0, Handle<Name>(), Type::Number(),
                       kMachFloat64};
   Node* loaded = t.LoadField(load, t.PointerConstant(&input));
+  NodeProperties::SetBounds(loaded, Bounds(Type::Number()));
   Node* convert = t.NumberToUint32(loaded);
   FieldAccess store = {kUntaggedBase, 0, Handle<Name>(), Type::Unsigned32(),
                        kMachUint32};
@@ -1004,6 +1033,8 @@ TEST(LowerNumberToInt32_to_TruncateFloat64ToInt32) {
   // NumberToInt32(x: kRepFloat64) used as kMachInt32
   TestingGraph t(Type::Number());
   Node* p0 = t.ExampleWithOutput(kMachFloat64);
+  // TODO(titzer): run the typer here, or attach machine type to param.
+  NodeProperties::SetBounds(p0, Bounds(Type::Number()));
   Node* trunc = t.graph()->NewNode(t.simplified()->NumberToInt32(), p0);
   Node* use = t.Use(trunc, kMachInt32);
   t.Return(use);
@@ -1075,6 +1106,8 @@ TEST(LowerNumberToUint32_to_TruncateFloat64ToInt32) {
   // NumberToUint32(x: kRepFloat64) used as kMachUint32
   TestingGraph t(Type::Number());
   Node* p0 = t.ExampleWithOutput(kMachFloat64);
+  // TODO(titzer): run the typer here, or attach machine type to param.
+  NodeProperties::SetBounds(p0, Bounds(Type::Number()));
   Node* trunc = t.graph()->NewNode(t.simplified()->NumberToUint32(), p0);
   Node* use = t.Use(trunc, kMachUint32);
   t.Return(use);
@@ -1524,5 +1557,377 @@ TEST(UpdatePhi) {
     CHECK_EQ(IrOpcode::kPhi, phi->opcode());
     CHECK_EQ(RepresentationOf(kMachineTypes[i]),
              RepresentationOf(OpParameter<MachineType>(phi)));
+  }
+}
+
+
+TEST(RunNumberDivide_minus_1_TruncatingToInt32) {
+  SimplifiedLoweringTester<Object*> t(kMachAnyTagged);
+  Node* num = t.NumberToInt32(t.Parameter(0));
+  Node* div = t.NumberDivide(num, t.jsgraph.Constant(-1));
+  Node* trunc = t.NumberToInt32(div);
+  t.Return(trunc);
+
+  if (Pipeline::SupportedTarget()) {
+    t.LowerAllNodesAndLowerChanges();
+    t.GenerateCode();
+
+    FOR_INT32_INPUTS(i) {
+      int32_t x = 0 - *i;
+      t.CheckNumberCall(static_cast<double>(x), static_cast<double>(*i));
+    }
+  }
+}
+
+
+TEST(NumberMultiply_TruncatingToInt32) {
+  int32_t constants[] = {-100, -10, -1, 0, 1, 100, 1000};
+
+  for (size_t i = 0; i < arraysize(constants); i++) {
+    TestingGraph t(Type::Signed32());
+    Node* k = t.jsgraph.Constant(constants[i]);
+    Node* mul = t.graph()->NewNode(t.simplified()->NumberMultiply(), t.p0, k);
+    Node* trunc = t.graph()->NewNode(t.simplified()->NumberToInt32(), mul);
+    t.Return(trunc);
+    t.Lower();
+
+    CHECK_EQ(IrOpcode::kInt32Mul, mul->opcode());
+  }
+}
+
+
+TEST(RunNumberMultiply_TruncatingToInt32) {
+  int32_t constants[] = {-100, -10, -1, 0, 1, 100, 1000, 3000999};
+
+  for (size_t i = 0; i < arraysize(constants); i++) {
+    double k = static_cast<double>(constants[i]);
+    SimplifiedLoweringTester<Object*> t(kMachAnyTagged);
+    Node* num = t.NumberToInt32(t.Parameter(0));
+    Node* mul = t.NumberMultiply(num, t.jsgraph.Constant(k));
+    Node* trunc = t.NumberToInt32(mul);
+    t.Return(trunc);
+
+    if (Pipeline::SupportedTarget()) {
+      t.LowerAllNodesAndLowerChanges();
+      t.GenerateCode();
+
+      FOR_INT32_INPUTS(i) {
+        int32_t x = DoubleToInt32(static_cast<double>(*i) * k);
+        t.CheckNumberCall(static_cast<double>(x), static_cast<double>(*i));
+      }
+    }
+  }
+}
+
+
+TEST(RunNumberMultiply_TruncatingToUint32) {
+  uint32_t constants[] = {0, 1, 2, 3, 4, 100, 1000, 1024, 2048, 3000999};
+
+  for (size_t i = 0; i < arraysize(constants); i++) {
+    double k = static_cast<double>(constants[i]);
+    SimplifiedLoweringTester<Object*> t(kMachAnyTagged);
+    Node* num = t.NumberToUint32(t.Parameter(0));
+    Node* mul = t.NumberMultiply(num, t.jsgraph.Constant(k));
+    Node* trunc = t.NumberToUint32(mul);
+    t.Return(trunc);
+
+    if (Pipeline::SupportedTarget()) {
+      t.LowerAllNodesAndLowerChanges();
+      t.GenerateCode();
+
+      FOR_UINT32_INPUTS(i) {
+        uint32_t x = DoubleToUint32(static_cast<double>(*i) * k);
+        t.CheckNumberCall(static_cast<double>(x), static_cast<double>(*i));
+      }
+    }
+  }
+}
+
+
+TEST(RunNumberDivide_2_TruncatingToUint32) {
+  SimplifiedLoweringTester<Object*> t(kMachAnyTagged);
+  Node* num = t.NumberToUint32(t.Parameter(0));
+  Node* div = t.NumberDivide(num, t.jsgraph.Constant(2));
+  Node* trunc = t.NumberToUint32(div);
+  t.Return(trunc);
+
+  if (Pipeline::SupportedTarget()) {
+    t.LowerAllNodesAndLowerChanges();
+    t.GenerateCode();
+
+    FOR_UINT32_INPUTS(i) {
+      uint32_t x = DoubleToUint32(static_cast<double>(*i / 2.0));
+      t.CheckNumberCall(static_cast<double>(x), static_cast<double>(*i));
+    }
+  }
+}
+
+
+TEST(NumberMultiply_ConstantOutOfRange) {
+  TestingGraph t(Type::Signed32());
+  Node* k = t.jsgraph.Constant(1000000023);
+  Node* mul = t.graph()->NewNode(t.simplified()->NumberMultiply(), t.p0, k);
+  Node* trunc = t.graph()->NewNode(t.simplified()->NumberToInt32(), mul);
+  t.Return(trunc);
+  t.Lower();
+
+  CHECK_EQ(IrOpcode::kFloat64Mul, mul->opcode());
+}
+
+
+TEST(NumberMultiply_NonTruncating) {
+  TestingGraph t(Type::Signed32());
+  Node* k = t.jsgraph.Constant(111);
+  Node* mul = t.graph()->NewNode(t.simplified()->NumberMultiply(), t.p0, k);
+  t.Return(mul);
+  t.Lower();
+
+  CHECK_EQ(IrOpcode::kFloat64Mul, mul->opcode());
+}
+
+
+TEST(NumberDivide_TruncatingToInt32) {
+  int32_t constants[] = {-100, -10, 1, 4, 100, 1000};
+
+  for (size_t i = 0; i < arraysize(constants); i++) {
+    TestingGraph t(Type::Signed32());
+    Node* k = t.jsgraph.Constant(constants[i]);
+    Node* div = t.graph()->NewNode(t.simplified()->NumberDivide(), t.p0, k);
+    Node* trunc = t.graph()->NewNode(t.simplified()->NumberToInt32(), div);
+    t.Return(trunc);
+    t.Lower();
+
+    CHECK_EQ(IrOpcode::kInt32Div, div->opcode());
+  }
+}
+
+
+TEST(RunNumberDivide_TruncatingToInt32) {
+  int32_t constants[] = {-100, -10, -1, 1, 2, 100, 1000, 1024, 2048};
+
+  for (size_t i = 0; i < arraysize(constants); i++) {
+    int32_t k = constants[i];
+    SimplifiedLoweringTester<Object*> t(kMachAnyTagged);
+    Node* num = t.NumberToInt32(t.Parameter(0));
+    Node* div = t.NumberDivide(num, t.jsgraph.Constant(k));
+    Node* trunc = t.NumberToInt32(div);
+    t.Return(trunc);
+
+    if (Pipeline::SupportedTarget()) {
+      t.LowerAllNodesAndLowerChanges();
+      t.GenerateCode();
+
+      FOR_INT32_INPUTS(i) {
+        if (*i == INT_MAX) continue;  // exclude max int.
+        int32_t x = DoubleToInt32(static_cast<double>(*i) / k);
+        t.CheckNumberCall(static_cast<double>(x), static_cast<double>(*i));
+      }
+    }
+  }
+}
+
+
+TEST(NumberDivide_TruncatingToUint32) {
+  double constants[] = {1, 3, 100, 1000, 100998348};
+
+  for (size_t i = 0; i < arraysize(constants); i++) {
+    TestingGraph t(Type::Unsigned32());
+    Node* k = t.jsgraph.Constant(constants[i]);
+    Node* div = t.graph()->NewNode(t.simplified()->NumberDivide(), t.p0, k);
+    Node* trunc = t.graph()->NewNode(t.simplified()->NumberToUint32(), div);
+    t.Return(trunc);
+    t.Lower();
+
+    CHECK_EQ(IrOpcode::kUint32Div, div->opcode());
+  }
+}
+
+
+TEST(RunNumberDivide_TruncatingToUint32) {
+  uint32_t constants[] = {100, 10, 1, 1, 2, 4, 1000, 1024, 2048};
+
+  for (size_t i = 0; i < arraysize(constants); i++) {
+    uint32_t k = constants[i];
+    SimplifiedLoweringTester<Object*> t(kMachAnyTagged);
+    Node* num = t.NumberToUint32(t.Parameter(0));
+    Node* div = t.NumberDivide(num, t.jsgraph.Constant(static_cast<double>(k)));
+    Node* trunc = t.NumberToUint32(div);
+    t.Return(trunc);
+
+    if (Pipeline::SupportedTarget()) {
+      t.LowerAllNodesAndLowerChanges();
+      t.GenerateCode();
+
+      FOR_UINT32_INPUTS(i) {
+        uint32_t x = *i / k;
+        t.CheckNumberCall(static_cast<double>(x), static_cast<double>(*i));
+      }
+    }
+  }
+}
+
+
+TEST(NumberDivide_BadConstants) {
+  int32_t constants[] = {-1, 0};
+
+  for (size_t i = 0; i < arraysize(constants); i++) {
+    TestingGraph t(Type::Signed32());
+    Node* k = t.jsgraph.Constant(constants[i]);
+    Node* div = t.graph()->NewNode(t.simplified()->NumberDivide(), t.p0, k);
+    Node* trunc = t.graph()->NewNode(t.simplified()->NumberToInt32(), div);
+    t.Return(trunc);
+    t.Lower();
+
+    CHECK_EQ(IrOpcode::kFloat64Div, div->opcode());
+  }
+
+  {
+    TestingGraph t(Type::Unsigned32());
+    Node* k = t.jsgraph.Constant(0);
+    Node* div = t.graph()->NewNode(t.simplified()->NumberDivide(), t.p0, k);
+    Node* trunc = t.graph()->NewNode(t.simplified()->NumberToUint32(), div);
+    t.Return(trunc);
+    t.Lower();
+
+    CHECK_EQ(IrOpcode::kFloat64Div, div->opcode());
+  }
+}
+
+
+TEST(NumberModulus_TruncatingToInt32) {
+  int32_t constants[] = {-100, -10, 1, 4, 100, 1000};
+
+  for (size_t i = 0; i < arraysize(constants); i++) {
+    TestingGraph t(Type::Signed32());
+    Node* k = t.jsgraph.Constant(constants[i]);
+    Node* mod = t.graph()->NewNode(t.simplified()->NumberModulus(), t.p0, k);
+    Node* trunc = t.graph()->NewNode(t.simplified()->NumberToInt32(), mod);
+    t.Return(trunc);
+    t.Lower();
+
+    CHECK_EQ(IrOpcode::kInt32Mod, mod->opcode());
+  }
+}
+
+
+TEST(RunNumberModulus_TruncatingToInt32) {
+  int32_t constants[] = {-100, -10, -1, 1, 2, 100, 1000, 1024, 2048};
+
+  for (size_t i = 0; i < arraysize(constants); i++) {
+    int32_t k = constants[i];
+    SimplifiedLoweringTester<Object*> t(kMachAnyTagged);
+    Node* num = t.NumberToInt32(t.Parameter(0));
+    Node* mod = t.NumberModulus(num, t.jsgraph.Constant(k));
+    Node* trunc = t.NumberToInt32(mod);
+    t.Return(trunc);
+
+    if (Pipeline::SupportedTarget()) {
+      t.LowerAllNodesAndLowerChanges();
+      t.GenerateCode();
+
+      FOR_INT32_INPUTS(i) {
+        if (*i == INT_MAX) continue;  // exclude max int.
+        int32_t x = DoubleToInt32(std::fmod(static_cast<double>(*i), k));
+        t.CheckNumberCall(static_cast<double>(x), static_cast<double>(*i));
+      }
+    }
+  }
+}
+
+
+TEST(NumberModulus_TruncatingToUint32) {
+  double constants[] = {1, 3, 100, 1000, 100998348};
+
+  for (size_t i = 0; i < arraysize(constants); i++) {
+    TestingGraph t(Type::Unsigned32());
+    Node* k = t.jsgraph.Constant(constants[i]);
+    Node* mod = t.graph()->NewNode(t.simplified()->NumberModulus(), t.p0, k);
+    Node* trunc = t.graph()->NewNode(t.simplified()->NumberToUint32(), mod);
+    t.Return(trunc);
+    t.Lower();
+
+    CHECK_EQ(IrOpcode::kUint32Mod, mod->opcode());
+  }
+}
+
+
+TEST(RunNumberModulus_TruncatingToUint32) {
+  uint32_t constants[] = {1, 2, 100, 1000, 1024, 2048};
+
+  for (size_t i = 0; i < arraysize(constants); i++) {
+    uint32_t k = constants[i];
+    SimplifiedLoweringTester<Object*> t(kMachAnyTagged);
+    Node* num = t.NumberToUint32(t.Parameter(0));
+    Node* mod =
+        t.NumberModulus(num, t.jsgraph.Constant(static_cast<double>(k)));
+    Node* trunc = t.NumberToUint32(mod);
+    t.Return(trunc);
+
+    if (Pipeline::SupportedTarget()) {
+      t.LowerAllNodesAndLowerChanges();
+      t.GenerateCode();
+
+      FOR_UINT32_INPUTS(i) {
+        uint32_t x = *i % k;
+        t.CheckNumberCall(static_cast<double>(x), static_cast<double>(*i));
+      }
+    }
+  }
+}
+
+
+TEST(NumberModulus_Int32) {
+  int32_t constants[] = {-100, -10, 1, 4, 100, 1000};
+
+  for (size_t i = 0; i < arraysize(constants); i++) {
+    TestingGraph t(Type::Signed32());
+    Node* k = t.jsgraph.Constant(constants[i]);
+    Node* mod = t.graph()->NewNode(t.simplified()->NumberModulus(), t.p0, k);
+    t.Return(mod);
+    t.Lower();
+
+    CHECK_EQ(IrOpcode::kFloat64Mod, mod->opcode());  // Pesky -0 behavior.
+  }
+}
+
+
+TEST(NumberModulus_Uint32) {
+  double constants[] = {1, 3, 100, 1000, 100998348};
+
+  for (size_t i = 0; i < arraysize(constants); i++) {
+    TestingGraph t(Type::Unsigned32());
+    Node* k = t.jsgraph.Constant(constants[i]);
+    Node* mod = t.graph()->NewNode(t.simplified()->NumberModulus(), t.p0, k);
+    t.Return(mod);
+    t.Lower();
+
+    CHECK_EQ(IrOpcode::kUint32Mod, mod->opcode());
+  }
+}
+
+
+TEST(NumberModulus_BadConstants) {
+  int32_t constants[] = {-1, 0};
+
+  for (size_t i = 0; i < arraysize(constants); i++) {
+    TestingGraph t(Type::Signed32());
+    Node* k = t.jsgraph.Constant(constants[i]);
+    Node* mod = t.graph()->NewNode(t.simplified()->NumberModulus(), t.p0, k);
+    Node* trunc = t.graph()->NewNode(t.simplified()->NumberToInt32(), mod);
+    t.Return(trunc);
+    t.Lower();
+
+    CHECK_EQ(IrOpcode::kFloat64Mod, mod->opcode());
+  }
+
+  {
+    TestingGraph t(Type::Unsigned32());
+    Node* k = t.jsgraph.Constant(0);
+    Node* mod = t.graph()->NewNode(t.simplified()->NumberModulus(), t.p0, k);
+    Node* trunc = t.graph()->NewNode(t.simplified()->NumberToUint32(), mod);
+    t.Return(trunc);
+    t.Lower();
+
+    CHECK_EQ(IrOpcode::kFloat64Mod, mod->opcode());
   }
 }
