@@ -362,8 +362,8 @@ void InstructionSelector::VisitInt32Mul(Node* node) {
 
 
 void InstructionSelector::VisitInt32MulHigh(Node* node) {
-  MipsOperandGenerator g(this);
-  Emit(kMipsMulHigh, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)),
+  Mips64OperandGenerator g(this);
+  Emit(kMips64MulHigh, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)),
        g.UseRegister(node->InputAt(1)));
 }
 
@@ -555,21 +555,20 @@ void InstructionSelector::VisitFloat64Sqrt(Node* node) {
   Emit(kMips64SqrtD, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
 }
 
-void InstructionSelector::VisitCall(Node* call, BasicBlock* continuation,
-                                    BasicBlock* deoptimization) {
+void InstructionSelector::VisitCall(Node* node) {
   Mips64OperandGenerator g(this);
-  CallDescriptor* descriptor = OpParameter<CallDescriptor*>(call);
+  CallDescriptor* descriptor = OpParameter<CallDescriptor*>(node);
 
   FrameStateDescriptor* frame_state_descriptor = NULL;
   if (descriptor->NeedsFrameState()) {
     frame_state_descriptor =
-        GetFrameStateDescriptor(call->InputAt(descriptor->InputCount()));
+        GetFrameStateDescriptor(node->InputAt(descriptor->InputCount()));
   }
 
   CallBuffer buffer(zone(), descriptor, frame_state_descriptor);
 
   // Compute InstructionOperands for inputs and outputs.
-  InitializeCallBuffer(call, &buffer, true, false);
+  InitializeCallBuffer(node, &buffer, true, false);
 
   // TODO(dcarney): might be possible to use claim/poke instead
   // Push any stack arguments.
@@ -603,24 +602,10 @@ void InstructionSelector::VisitCall(Node* call, BasicBlock* continuation,
            buffer.instruction_args.size(), &buffer.instruction_args.front());
 
   call_instr->MarkAsCall();
-  if (deoptimization != NULL) {
-    DCHECK(continuation != NULL);
-    call_instr->MarkAsControl();
-  }
 }
 
 
-void InstructionSelector::VisitInt32AddWithOverflow(Node* node,
-                                                    FlagsContinuation* cont) {
-  VisitBinop(this, node, kMips64Dadd, cont);
-}
-
-
-void InstructionSelector::VisitInt32SubWithOverflow(Node* node,
-                                                    FlagsContinuation* cont) {
-  VisitBinop(this, node, kMips64Dsub, cont);
-}
-
+namespace {
 
 // Shared routine for multiple compare operations.
 static void VisitCompare(InstructionSelector* selector, InstructionCode opcode,
@@ -639,10 +624,21 @@ static void VisitCompare(InstructionSelector* selector, InstructionCode opcode,
 }
 
 
+// Shared routine for multiple float compare operations.
+void VisitFloat64Compare(InstructionSelector* selector, Node* node,
+                         FlagsContinuation* cont) {
+  Mips64OperandGenerator g(selector);
+  Node* left = node->InputAt(0);
+  Node* right = node->InputAt(1);
+  VisitCompare(selector, kMips64CmpD, g.UseRegister(left), g.UseRegister(right),
+               cont);
+}
+
+
 // Shared routine for multiple word compare operations.
-static void VisitWordCompare(InstructionSelector* selector, Node* node,
-                             InstructionCode opcode, FlagsContinuation* cont,
-                             bool commutative) {
+void VisitWordCompare(InstructionSelector* selector, Node* node,
+                      InstructionCode opcode, FlagsContinuation* cont,
+                      bool commutative) {
   Mips64OperandGenerator g(selector);
   Node* left = node->InputAt(0);
   Node* right = node->InputAt(1);
@@ -662,59 +658,202 @@ static void VisitWordCompare(InstructionSelector* selector, Node* node,
 }
 
 
-void InstructionSelector::VisitWord32Test(Node* node, FlagsContinuation* cont) {
-  switch (node->opcode()) {
-    case IrOpcode::kWord32And:
-      // TODO(plind): understand the significance of 'IR and' special case.
-      return VisitWordCompare(this, node, kMips64Tst32, cont, true);
-    default:
-      break;
-  }
+void VisitWord32Compare(InstructionSelector* selector, Node* node,
+                      FlagsContinuation* cont) {
+  VisitWordCompare(selector, node, kMips64Cmp32, cont, false);
+}
 
-  Mips64OperandGenerator g(this);
+
+void VisitWord32Test(InstructionSelector* selector, Node* node,
+                   FlagsContinuation* cont) {
+  Mips64OperandGenerator g(selector);
   // kMips64Tst is a pseudo-instruction to do logical 'and' and leave the result
   // in a dedicated tmp register.
-  VisitCompare(this, kMips64Tst32, g.UseRegister(node),g.UseRegister(node),
+  VisitCompare(selector, kMips64Tst32, g.UseRegister(node), g.UseRegister(node),
                cont);
 }
 
 
-void InstructionSelector::VisitWord64Test(Node* node, FlagsContinuation* cont) {
-    switch (node->opcode()) {
-    case IrOpcode::kWord64And:
-      // TODO(plind): understand the significance of 'IR and' special case.
-      return VisitWordCompare(this, node, kMips64Tst, cont, true);
-    default:
-      break;
-  }
+void VisitWord64Compare(InstructionSelector* selector, Node* node,
+                      FlagsContinuation* cont) {
+  VisitWordCompare(selector, node, kMips64Cmp, cont, false);
+}
 
-  Mips64OperandGenerator g(this);
+
+void VisitWord64Test(InstructionSelector* selector,
+                                          Node* node, FlagsContinuation* cont) {
+
+  Mips64OperandGenerator g(selector);
   // kMips64Tst is a pseudo-instruction to do logical 'and' and leave the result
   // in a dedicated tmp register.
-  VisitCompare(this, kMips64Tst, g.UseRegister(node), g.UseRegister(node),
+  VisitCompare(selector, kMips64Tst, g.UseRegister(node), g.UseRegister(node),
                cont);
 }
 
-
-void InstructionSelector::VisitWord32Compare(Node* node,
-                                             FlagsContinuation* cont) {
-  VisitWordCompare(this, node, kMips64Cmp32, cont, false);
-}
+}  // namespace
 
 
-void InstructionSelector::VisitWord64Compare(Node* node,
-                                             FlagsContinuation* cont) {
-  VisitWordCompare(this, node, kMips64Cmp, cont, false);
-}
-
-
-void InstructionSelector::VisitFloat64Compare(Node* node,
-                                              FlagsContinuation* cont) {
+void InstructionSelector::VisitBranch(Node* branch, BasicBlock* tbranch,
+                                      BasicBlock* fbranch) {
   Mips64OperandGenerator g(this);
-  Node* left = node->InputAt(0);
-  Node* right = node->InputAt(1);
-  VisitCompare(this, kMips64CmpD, g.UseRegister(left), g.UseRegister(right),
-               cont);
+  Node* user = branch;
+  Node* value = branch->InputAt(0);
+
+  FlagsContinuation cont(kNotEqual, tbranch, fbranch);
+
+  // If we can fall through to the true block, invert the branch.
+  if (IsNextInAssemblyOrder(tbranch)) {
+    cont.Negate();
+    cont.SwapBlocks();
+  }
+
+  // Try to combine with comparisons against 0 by simply inverting the branch.
+  while (CanCover(user, value)) {
+    if (value->opcode() == IrOpcode::kWord32Equal) {
+      Int32BinopMatcher m(value);
+      if (m.right().Is(0)) {
+        user = value;
+        value = m.left().node();
+        cont.Negate();
+      } else {
+        break;
+      }
+    } else if (value->opcode() == IrOpcode::kWord64Equal) {
+      Int64BinopMatcher m(value);
+      if (m.right().Is(0)) {
+        user = value;
+        value = m.left().node();
+        cont.Negate();
+      } else {
+        break;
+      }
+    } else {
+      break;
+    }
+  }
+
+  // Try to combine the branch with a comparison.
+  if (CanCover(user, value)) {
+    switch (value->opcode()) {
+      case IrOpcode::kWord32And:
+        // TODO(plind): understand the significance of 'IR and' special case.
+        return VisitWordCompare(this, value, kMips64Tst32, &cont, true);
+      case IrOpcode::kWord64And:
+        // TODO(plind): understand the significance of 'IR and' special case.
+        return VisitWordCompare(this, value, kMips64Tst, &cont, true);
+      default:
+        break;
+    }
+  }
+
+  // Branch could not be combined with a compare, emit compare against 0.
+  return VisitWord32Test(this, value, &cont);
+}
+
+
+void InstructionSelector::VisitWord32Equal(Node* const node) {
+  Node* const user = node;
+  FlagsContinuation cont(kEqual, node);
+  Int32BinopMatcher m(user);
+  if (m.right().Is(0)) {
+    Node* const value = m.left().node();
+    return VisitWord32Test(this, value, &cont);
+  }
+
+  VisitWord32Compare(this, node, &cont);
+}
+
+
+void InstructionSelector::VisitInt32LessThan(Node* node) {
+  FlagsContinuation cont(kSignedLessThan, node);
+  VisitWord32Compare(this, node, &cont);
+}
+
+
+void InstructionSelector::VisitInt32LessThanOrEqual(Node* node) {
+  FlagsContinuation cont(kSignedLessThanOrEqual, node);
+  VisitWord32Compare(this, node, &cont);
+}
+
+
+void InstructionSelector::VisitUint32LessThan(Node* node) {
+  FlagsContinuation cont(kUnsignedLessThan, node);
+  VisitWord32Compare(this, node, &cont);
+}
+
+
+void InstructionSelector::VisitUint32LessThanOrEqual(Node* node) {
+  FlagsContinuation cont(kUnsignedLessThanOrEqual, node);
+  VisitWord32Compare(this, node, &cont);
+}
+
+
+void InstructionSelector::VisitInt32AddWithOverflow(Node* node) {
+  if (Node* ovf = node->FindProjection(1)) {
+    FlagsContinuation cont(kOverflow, ovf);
+    return VisitBinop(this, node, kMips64Dadd, &cont);
+  }
+  FlagsContinuation cont;
+  VisitBinop(this, node, kMips64Dadd, &cont);
+}
+
+
+void InstructionSelector::VisitInt32SubWithOverflow(Node* node) {
+  if (Node* ovf = node->FindProjection(1)) {
+    FlagsContinuation cont(kOverflow, ovf);
+    return VisitBinop(this, node, kMips64Dsub, &cont);
+  }
+  FlagsContinuation cont;
+  VisitBinop(this, node, kMips64Dsub, &cont);
+}
+
+
+void InstructionSelector::VisitWord64Equal(Node* const node) {
+  Node* const user = node;
+  FlagsContinuation cont(kEqual, node);
+  Int64BinopMatcher m(user);
+  if (m.right().Is(0)) {
+    Node* const value = m.left().node();
+    return VisitWord64Test(this, value, &cont);
+  }
+
+  VisitWord64Compare(this, node, &cont);
+}
+
+
+void InstructionSelector::VisitInt64LessThan(Node* node) {
+  FlagsContinuation cont(kSignedLessThan, node);
+  VisitWord64Compare(this, node, &cont);
+}
+
+
+void InstructionSelector::VisitInt64LessThanOrEqual(Node* node) {
+  FlagsContinuation cont(kSignedLessThanOrEqual, node);
+  VisitWord64Compare(this, node, &cont);
+}
+
+
+void InstructionSelector::VisitUint64LessThan(Node* node) {
+  FlagsContinuation cont(kUnsignedLessThan, node);
+  VisitWord64Compare(this, node, &cont);
+}
+
+
+void InstructionSelector::VisitFloat64Equal(Node* node) {
+  FlagsContinuation cont(kUnorderedEqual, node);
+  VisitFloat64Compare(this, node, &cont);
+}
+
+
+void InstructionSelector::VisitFloat64LessThan(Node* node) {
+  FlagsContinuation cont(kUnorderedLessThan, node);
+  VisitFloat64Compare(this, node, &cont);
+}
+
+
+void InstructionSelector::VisitFloat64LessThanOrEqual(Node* node) {
+  FlagsContinuation cont(kUnorderedLessThanOrEqual, node);
+  VisitFloat64Compare(this, node, &cont);
 }
 
 }  // namespace compiler
