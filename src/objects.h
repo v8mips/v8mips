@@ -2415,7 +2415,7 @@ class IncrementalMarking;
 class FixedArray: public FixedArrayBase {
  public:
   // Setter and getter for elements.
-  inline Object* get(int index);
+  inline Object* get(int index) const;
   static inline Handle<Object> get(Handle<FixedArray> array, int index);
   // Setter that uses write barrier.
   inline void set(int index, Object* value);
@@ -5380,8 +5380,7 @@ class Code: public HeapObject {
   static const int kMaxLoopNestingMarker = 6;
 
   // Layout description.
-  static const int kInstructionSizeOffset = HeapObject::kHeaderSize;
-  static const int kRelocationInfoOffset = kInstructionSizeOffset + kIntSize;
+  static const int kRelocationInfoOffset = HeapObject::kHeaderSize;
   static const int kHandlerTableOffset = kRelocationInfoOffset + kPointerSize;
   static const int kDeoptimizationDataOffset =
       kHandlerTableOffset + kPointerSize;
@@ -5390,8 +5389,8 @@ class Code: public HeapObject {
       kDeoptimizationDataOffset + kPointerSize;
   static const int kNextCodeLinkOffset = kTypeFeedbackInfoOffset + kPointerSize;
   static const int kGCMetadataOffset = kNextCodeLinkOffset + kPointerSize;
-  static const int kICAgeOffset =
-      kGCMetadataOffset + kPointerSize;
+  static const int kInstructionSizeOffset = kGCMetadataOffset + kPointerSize;
+  static const int kICAgeOffset = kInstructionSizeOffset + kIntSize;
   static const int kFlagsOffset = kICAgeOffset + kIntSize;
   static const int kKindSpecificFlags1Offset = kFlagsOffset + kIntSize;
   static const int kKindSpecificFlags2Offset =
@@ -7944,15 +7943,16 @@ class CompilationCacheTable: public HashTable<CompilationCacheTable,
  public:
   // Find cached value for a string key, otherwise return null.
   Handle<Object> Lookup(Handle<String> src, Handle<Context> context);
-  Handle<Object> LookupEval(Handle<String> src, Handle<Context> context,
-                     StrictMode strict_mode, int scope_position);
+  Handle<Object> LookupEval(Handle<String> src,
+                            Handle<SharedFunctionInfo> shared,
+                            StrictMode strict_mode, int scope_position);
   Handle<Object> LookupRegExp(Handle<String> source, JSRegExp::Flags flags);
   static Handle<CompilationCacheTable> Put(
       Handle<CompilationCacheTable> cache, Handle<String> src,
       Handle<Context> context, Handle<Object> value);
   static Handle<CompilationCacheTable> PutEval(
       Handle<CompilationCacheTable> cache, Handle<String> src,
-      Handle<Context> context, Handle<SharedFunctionInfo> value,
+      Handle<SharedFunctionInfo> context, Handle<SharedFunctionInfo> value,
       int scope_position);
   static Handle<CompilationCacheTable> PutRegExp(
       Handle<CompilationCacheTable> cache, Handle<String> src,
