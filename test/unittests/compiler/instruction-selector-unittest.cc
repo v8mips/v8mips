@@ -38,9 +38,10 @@ InstructionSelectorTest::Stream InstructionSelectorTest::StreamBuilder::Build(
   int initial_node_count = graph()->NodeCount();
   CompilationInfo info(test_->isolate(), test_->zone());
   Linkage linkage(&info, call_descriptor());
-  InstructionSequence sequence(&linkage, graph(), schedule);
+  InstructionSequence sequence(test_->zone(), graph(), schedule);
   SourcePositionTable source_position_table(graph());
-  InstructionSelector selector(&sequence, &source_position_table, features);
+  InstructionSelector selector(test_->zone(), &linkage, &sequence, schedule,
+                               &source_position_table, features);
   selector.SelectInstructions();
   if (FLAG_trace_turbo) {
     OFStream out(stdout);
@@ -50,9 +51,9 @@ InstructionSelectorTest::Stream InstructionSelectorTest::StreamBuilder::Build(
   Stream s;
   // Map virtual registers.
   {
-    const int* node_map = sequence.GetNodeMapForTesting();
+    const NodeToVregMap& node_map = sequence.GetNodeMapForTesting();
     for (int i = 0; i < initial_node_count; ++i) {
-      if (node_map[i] >= 0) {
+      if (node_map[i] != InstructionSequence::kNodeUnmapped) {
         s.virtual_registers_.insert(std::make_pair(i, node_map[i]));
       }
     }
@@ -125,6 +126,24 @@ int InstructionSelectorTest::Stream::ToVreg(const Node* node) const {
   VirtualRegisters::const_iterator i = virtual_registers_.find(node->id());
   CHECK(i != virtual_registers_.end());
   return i->second;
+}
+
+
+bool InstructionSelectorTest::Stream::IsFixed(const InstructionOperand* operand,
+                                              Register reg) const {
+  if (!operand->IsUnallocated()) return false;
+  const UnallocatedOperand* unallocated = UnallocatedOperand::cast(operand);
+  if (!unallocated->HasFixedRegisterPolicy()) return false;
+  const int index = Register::ToAllocationIndex(reg);
+  return unallocated->fixed_register_index() == index;
+}
+
+
+bool InstructionSelectorTest::Stream::IsUsedAtStart(
+    const InstructionOperand* operand) const {
+  if (!operand->IsUnallocated()) return false;
+  const UnallocatedOperand* unallocated = UnallocatedOperand::cast(operand);
+  return unallocated->IsUsedAtStart();
 }
 
 

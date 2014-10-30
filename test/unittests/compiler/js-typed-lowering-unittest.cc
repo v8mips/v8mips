@@ -11,7 +11,7 @@
 #include "src/compiler/typer.h"
 #include "test/unittests/compiler/compiler-test-utils.h"
 #include "test/unittests/compiler/graph-unittest.h"
-#include "testing/gtest-support.h"
+#include "test/unittests/compiler/node-test-utils.h"
 
 namespace v8 {
 namespace internal {
@@ -31,16 +31,15 @@ const StrictMode kStrictModes[] = {SLOPPY, STRICT};
 }  // namespace
 
 
-class JSTypedLoweringTest : public GraphTest {
+class JSTypedLoweringTest : public TypedGraphTest {
  public:
-  JSTypedLoweringTest() : GraphTest(3), javascript_(zone()) {}
+  JSTypedLoweringTest() : TypedGraphTest(3), javascript_(zone()) {}
   virtual ~JSTypedLoweringTest() {}
 
  protected:
   Reduction Reduce(Node* node) {
-    Typer typer(zone());
     MachineOperatorBuilder machine;
-    JSGraph jsgraph(graph(), common(), javascript(), &typer, &machine);
+    JSGraph jsgraph(graph(), common(), javascript(), &machine);
     JSTypedLowering reducer(&jsgraph);
     return reducer.Reduce(node);
   }
@@ -79,10 +78,10 @@ TEST_F(JSTypedLoweringTest, JSLoadPropertyFromExternalTypedArray) {
   Handle<JSArrayBuffer> buffer =
       NewArrayBuffer(backing_store, arraysize(backing_store));
   VectorSlotPair feedback(Handle<TypeFeedbackVector>::null(),
-                          FeedbackVectorSlot::Invalid());
+                          FeedbackVectorICSlot::Invalid());
   TRACED_FOREACH(ExternalArrayType, type, kExternalArrayTypes) {
     Handle<JSTypedArray> array =
-        factory()->NewJSTypedArray(type, buffer, kLength);
+        factory()->NewJSTypedArray(type, buffer, 0, kLength);
 
     Node* key = Parameter(Type::Integral32());
     Node* base = HeapConstant(array);
@@ -121,7 +120,7 @@ TEST_F(JSTypedLoweringTest, JSStorePropertyToExternalTypedArray) {
   TRACED_FOREACH(ExternalArrayType, type, kExternalArrayTypes) {
     TRACED_FOREACH(StrictMode, strict_mode, kStrictModes) {
       Handle<JSTypedArray> array =
-          factory()->NewJSTypedArray(type, buffer, kLength);
+          factory()->NewJSTypedArray(type, buffer, 0, kLength);
 
       Node* key = Parameter(Type::Integral32());
       Node* base = HeapConstant(array);

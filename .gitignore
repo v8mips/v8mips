@@ -83,5 +83,6 @@ GRTAGS
 GSYMS
 GPATH
 gtags.files
+turbo*.cfg
 turbo*.dot
 turbo*.json

@@ -2021,6 +2021,19 @@ void SymbolAccessorSetter(Local<Name> name, Local<Value> value,
   SimpleAccessorSetter(Local<String>::Cast(sym->Name()), value, info);
 }
 
+void SymbolAccessorGetterReturnsDefault(
+    Local<Name> name, const v8::PropertyCallbackInfo<v8::Value>& info) {
+  CHECK(name->IsSymbol());
+  Local<Symbol> sym = Local<Symbol>::Cast(name);
+  if (sym->Name()->IsUndefined()) return;
+  info.GetReturnValue().Set(info.Data());
+}
+
+static void ThrowingSymbolAccessorGetter(
+    Local<Name> name, const v8::PropertyCallbackInfo<v8::Value>& info) {
+  info.GetReturnValue().Set(info.GetIsolate()->ThrowException(name));
+}
+
 void EmptyInterceptorGetter(Local<String> name,
                             const v8::PropertyCallbackInfo<v8::Value>& info) {
 }
@@ -8504,6 +8517,47 @@ THREADED_TEST(ErrorConstruction) {
 }
 
 
+static void ThrowV8Exception(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  ApiTestFuzzer::Fuzz();
+  v8::Handle<String> foo = v8_str("foo");
+  v8::Handle<String> message = v8_str("message");
+  v8::Handle<Value> error = v8::Exception::Error(foo);
+  CHECK(error->IsObject());
+  CHECK(error.As<v8::Object>()->Get(message)->Equals(foo));
+  info.GetIsolate()->ThrowException(error);
+  info.GetReturnValue().SetUndefined();
+}
+
+
+THREADED_TEST(ExceptionGetStackTrace) {
+  LocalContext context;
+  v8::HandleScope scope(context->GetIsolate());
+
+  v8::V8::SetCaptureStackTraceForUncaughtExceptions(true);
+
+  Local<v8::FunctionTemplate> fun =
+      v8::FunctionTemplate::New(context->GetIsolate(), ThrowV8Exception);
+  v8::Local<v8::Object> global = context->Global();
+  global->Set(v8_str("throwV8Exception"), fun->GetFunction());
+
+  TryCatch try_catch;
+  CompileRun("function f1() { throwV8Exception(); }; f1();");
+  CHECK(try_catch.HasCaught());
+
+  v8::Handle<v8::Value> error = try_catch.Exception();
+  v8::Handle<String> foo = v8_str("foo");
+  v8::Handle<String> message = v8_str("message");
+  CHECK(error->IsObject());
+  CHECK(error.As<v8::Object>()->Get(message)->Equals(foo));
+
+  v8::Handle<v8::StackTrace> stackTrace = v8::Exception::GetStackTrace(error);
+  CHECK(!stackTrace.IsEmpty());
+  CHECK_EQ(2, stackTrace->GetFrameCount());
+
+  v8::V8::SetCaptureStackTraceForUncaughtExceptions(false);
+}
+
+
 static void YGetter(Local<String> name,
                     const v8::PropertyCallbackInfo<v8::Value>& info) {
   ApiTestFuzzer::Fuzz();
@@ -13451,6 +13505,123 @@ THREADED_TEST(ObjectProtoToString) {
 }
 
 
+TEST(ObjectProtoToStringES6) {
+  // TODO(dslomov, caitp): merge into ObjectProtoToString test once shipped.
+  i::FLAG_harmony_tostring = true;
+  LocalContext context;
+  v8::Isolate* isolate = CcTest::isolate();
+  v8::HandleScope scope(isolate);
+  Local<v8::FunctionTemplate> templ = v8::FunctionTemplate::New(isolate);
+  templ->SetClassName(v8_str("MyClass"));
+
+  Local<String> customized_tostring = v8_str("customized toString");
+
+  // Replace Object.prototype.toString
+  CompileRun(
+      "Object.prototype.toString = function() {"
+      "  return 'customized toString';"
+      "}");
+
+  // Normal ToString call should call replaced Object.prototype.toString
+  Local<v8::Object> instance = templ->GetFunction()->NewInstance();
+  Local<String> value = instance->ToString();
+  CHECK(value->IsString() && value->Equals(customized_tostring));
+
+  // ObjectProtoToString should not call replace toString function.
+  value = instance->ObjectProtoToString();
+  CHECK(value->IsString() && value->Equals(v8_str("[object MyClass]")));
+
+  // Check global
+  value = context->Global()->ObjectProtoToString();
+  CHECK(value->IsString() && value->Equals(v8_str("[object global]")));
+
+  // Check ordinary object
+  Local<Value> object = CompileRun("new Object()");
+  value = object.As<v8::Object>()->ObjectProtoToString();
+  CHECK(value->IsString() && value->Equals(v8_str("[object Object]")));
+
+  // Check that ES6 semantics using @@toStringTag work
+  Local<v8::Symbol> toStringTag = v8::Symbol::GetToStringTag(isolate);
+
+#define TEST_TOSTRINGTAG(type, tag, expected)                \
+  do {                                                       \
+    object = CompileRun("new " #type "()");                  \
+    object.As<v8::Object>()->Set(toStringTag, v8_str(#tag)); \
+    value = object.As<v8::Object>()->ObjectProtoToString();  \
+    CHECK(value->IsString() &&                               \
+          value->Equals(v8_str("[object " #expected "]")));  \
+  } while (0)
+
+  TEST_TOSTRINGTAG(Array, Object, Object);
+  TEST_TOSTRINGTAG(Object, Arguments, ~Arguments);
+  TEST_TOSTRINGTAG(Object, Array, ~Array);
+  TEST_TOSTRINGTAG(Object, Boolean, ~Boolean);
+  TEST_TOSTRINGTAG(Object, Date, ~Date);
+  TEST_TOSTRINGTAG(Object, Error, ~Error);
+  TEST_TOSTRINGTAG(Object, Function, ~Function);
+  TEST_TOSTRINGTAG(Object, Number, ~Number);
+  TEST_TOSTRINGTAG(Object, RegExp, ~RegExp);
+  TEST_TOSTRINGTAG(Object, String, ~String);
+  TEST_TOSTRINGTAG(Object, Foo, Foo);
+
+#undef TEST_TOSTRINGTAG
+
+  // @@toStringTag getter throws
+  Local<Value> obj = v8::Object::New(isolate);
+  obj.As<v8::Object>()->SetAccessor(toStringTag, ThrowingSymbolAccessorGetter);
+  {
+    TryCatch try_catch;
+    value = obj.As<v8::Object>()->ObjectProtoToString();
+    CHECK(value.IsEmpty());
+    CHECK(try_catch.HasCaught());
+  }
+
+  // @@toStringTag getter does not throw
+  obj = v8::Object::New(isolate);
+  obj.As<v8::Object>()->SetAccessor(
+      toStringTag, SymbolAccessorGetterReturnsDefault, 0, v8_str("Test"));
+  {
+    TryCatch try_catch;
+    value = obj.As<v8::Object>()->ObjectProtoToString();
+    CHECK(value->IsString() && value->Equals(v8_str("[object Test]")));
+    CHECK(!try_catch.HasCaught());
+  }
+
+  // JS @@toStringTag value
+  obj = CompileRun("obj = {}; obj[Symbol.toStringTag] = 'Test'; obj");
+  {
+    TryCatch try_catch;
+    value = obj.As<v8::Object>()->ObjectProtoToString();
+    CHECK(value->IsString() && value->Equals(v8_str("[object Test]")));
+    CHECK(!try_catch.HasCaught());
+  }
+
+  // JS @@toStringTag getter throws
+  obj = CompileRun(
+      "obj = {}; Object.defineProperty(obj, Symbol.toStringTag, {"
+      "  get: function() { throw 'Test'; }"
+      "}); obj");
+  {
+    TryCatch try_catch;
+    value = obj.As<v8::Object>()->ObjectProtoToString();
+    CHECK(value.IsEmpty());
+    CHECK(try_catch.HasCaught());
+  }
+
+  // JS @@toStringTag getter does not throw
+  obj = CompileRun(
+      "obj = {}; Object.defineProperty(obj, Symbol.toStringTag, {"
+      "  get: function() { return 'Test'; }"
+      "}); obj");
+  {
+    TryCatch try_catch;
+    value = obj.As<v8::Object>()->ObjectProtoToString();
+    CHECK(value->IsString() && value->Equals(v8_str("[object Test]")));
+    CHECK(!try_catch.HasCaught());
+  }
+}
+
+
 THREADED_TEST(ObjectGetConstructorName) {
   LocalContext context;
   v8::HandleScope scope(context->GetIsolate());
@@ -18293,40 +18464,6 @@ TEST(IdleNotificationWithLargeHint) {
 }
 
 
-TEST(Regress2107) {
-  const intptr_t MB = 1024 * 1024;
-  const int kIdlePauseInMs = 10000;
-  LocalContext env;
-  v8::Isolate* isolate = env->GetIsolate();
-  v8::HandleScope scope(env->GetIsolate());
-  intptr_t initial_size = CcTest::heap()->SizeOfObjects();
-  // Send idle notification to start a round of incremental GCs.
-  env->GetIsolate()->IdleNotification(kIdlePauseInMs);
-  // Emulate 7 page reloads.
-  for (int i = 0; i < 7; i++) {
-    {
-      v8::HandleScope inner_scope(env->GetIsolate());
-      v8::Local<v8::Context> ctx = v8::Context::New(isolate);
-      ctx->Enter();
-      CreateGarbageInOldSpace();
-      ctx->Exit();
-    }
-    env->GetIsolate()->ContextDisposedNotification();
-    env->GetIsolate()->IdleNotification(kIdlePauseInMs);
-  }
-  // Create garbage and check that idle notification still collects it.
-  CreateGarbageInOldSpace();
-  intptr_t size_with_garbage = CcTest::heap()->SizeOfObjects();
-  CHECK_GT(size_with_garbage, initial_size + MB);
-  bool finished = false;
-  for (int i = 0; i < 200 && !finished; i++) {
-    finished = env->GetIsolate()->IdleNotification(kIdlePauseInMs);
-  }
-  intptr_t final_size = CcTest::heap()->SizeOfObjects();
-  CHECK_LT(final_size, initial_size + 1);
-}
-
-
 TEST(Regress2333) {
   LocalContext env;
   for (int i = 0; i < 3; i++) {
@@ -20318,7 +20455,7 @@ TEST(PersistentHandleVisitor) {
   CHECK_EQ(42, object.WrapperClassId());
 
   Visitor42 visitor(&object);
-  v8::V8::VisitHandlesWithClassIds(&visitor);
+  v8::V8::VisitHandlesWithClassIds(isolate, &visitor);
   CHECK_EQ(1, visitor.counter_);
 
   object.Reset();
@@ -23629,14 +23766,14 @@ TEST(StreamingScriptWithParseError) {
 
 
 TEST(StreamingUtf8Script) {
-  // We'd want to write \uc481 instead of \xeb\x91\x80, but Windows compilers
+  // We'd want to write \uc481 instead of \xec\x92\x81, but Windows compilers
   // don't like it.
   const char* chunk1 =
       "function foo() {\n"
       "  // This function will contain an UTF-8 character which is not in\n"
       "  // ASCII.\n"
-      "  var foob\xeb\x91\x80r = 13;\n"
-      "  return foob\xeb\x91\x80r;\n"
+      "  var foob\xec\x92\x81r = 13;\n"
+      "  return foob\xec\x92\x81r;\n"
       "}\n";
   const char* chunks[] = {chunk1, "foo(); ", NULL};
   RunStreamingTest(chunks, v8::ScriptCompiler::StreamedSource::UTF8);
@@ -23647,7 +23784,7 @@ TEST(StreamingUtf8ScriptWithSplitCharactersSanityCheck) {
   // A sanity check to prove that the approach of splitting UTF-8
   // characters is correct. Here is an UTF-8 character which will take three
   // bytes.
-  const char* reference = "\xeb\x91\x80";
+  const char* reference = "\xec\x92\x81";
   CHECK(3u == strlen(reference));  // NOLINT - no CHECK_EQ for unsigned.
 
   char chunk1[] =
@@ -23657,7 +23794,7 @@ TEST(StreamingUtf8ScriptWithSplitCharactersSanityCheck) {
       "  var foob";
   char chunk2[] =
       "XXXr = 13;\n"
-      "  return foob\xeb\x91\x80r;\n"
+      "  return foob\xec\x92\x81r;\n"
       "}\n";
   for (int i = 0; i < 3; ++i) {
     chunk2[i] = reference[i];
@@ -23670,7 +23807,7 @@ TEST(StreamingUtf8ScriptWithSplitCharactersSanityCheck) {
 TEST(StreamingUtf8ScriptWithSplitCharacters) {
   // Stream data where a multi-byte UTF-8 character is split between two data
   // chunks.
-  const char* reference = "\xeb\x91\x80";
+  const char* reference = "\xec\x92\x81";
   char chunk1[] =
       "function foo() {\n"
       "  // This function will contain an UTF-8 character which is not in\n"
@@ -23678,7 +23815,7 @@ TEST(StreamingUtf8ScriptWithSplitCharacters) {
       "  var foobX";
   char chunk2[] =
       "XXr = 13;\n"
-      "  return foob\xeb\x91\x80r;\n"
+      "  return foob\xec\x92\x81r;\n"
       "}\n";
   chunk1[strlen(chunk1) - 1] = reference[0];
   chunk2[0] = reference[1];
@@ -23694,7 +23831,7 @@ TEST(StreamingUtf8ScriptWithSplitCharactersValidEdgeCases) {
   // Case 1: a chunk contains only bytes for a split character (and no other
   // data). This kind of a chunk would be exceptionally small, but we should
   // still decode it correctly.
-  const char* reference = "\xeb\x91\x80";
+  const char* reference = "\xec\x92\x81";
   // The small chunk is at the beginning of the split character
   {
     char chunk1[] =
@@ -23705,7 +23842,7 @@ TEST(StreamingUtf8ScriptWithSplitCharactersValidEdgeCases) {
     char chunk2[] = "XX";
     char chunk3[] =
         "Xr = 13;\n"
-        "  return foob\xeb\x91\x80r;\n"
+        "  return foob\xec\x92\x81r;\n"
         "}\n";
     chunk2[0] = reference[0];
     chunk2[1] = reference[1];
@@ -23723,7 +23860,7 @@ TEST(StreamingUtf8ScriptWithSplitCharactersValidEdgeCases) {
     char chunk2[] = "XX";
     char chunk3[] =
         "r = 13;\n"
-        "  return foob\xeb\x91\x80r;\n"
+        "  return foob\xec\x92\x81r;\n"
         "}\n";
     chunk1[strlen(chunk1) - 1] = reference[0];
     chunk2[0] = reference[1];
@@ -23735,8 +23872,8 @@ TEST(StreamingUtf8ScriptWithSplitCharactersValidEdgeCases) {
   // decoded correctly and not just ignored.
   {
     char chunk1[] =
-        "var foob\xeb\x91\x80 = 13;\n"
-        "foob\xeb\x91\x80";
+        "var foob\xec\x92\x81 = 13;\n"
+        "foob\xec\x92\x81";
     const char* chunks[] = {chunk1, NULL};
     RunStreamingTest(chunks, v8::ScriptCompiler::StreamedSource::UTF8);
   }
@@ -23747,7 +23884,7 @@ TEST(StreamingUtf8ScriptWithSplitCharactersInvalidEdgeCases) {
   // Test cases where a UTF-8 character is split over several chunks. Those
   // cases are not supported (the embedder should give the data in big enough
   // chunks), but we shouldn't crash, just produce a parse error.
-  const char* reference = "\xeb\x91\x80";
+  const char* reference = "\xec\x92\x81";
   char chunk1[] =
       "function foo() {\n"
       "  // This function will contain an UTF-8 character which is not in\n"
@@ -23756,7 +23893,7 @@ TEST(StreamingUtf8ScriptWithSplitCharactersInvalidEdgeCases) {
   char chunk2[] = "X";
   char chunk3[] =
       "Xr = 13;\n"
-      "  return foob\xeb\x91\x80r;\n"
+      "  return foob\xec\x92\x81r;\n"
       "}\n";
   chunk1[strlen(chunk1) - 1] = reference[0];
   chunk2[0] = reference[1];
@@ -23798,7 +23935,7 @@ TEST(StreamingProducesParserCache) {
 TEST(StreamingScriptWithInvalidUtf8) {
   // Regression test for a crash: test that invalid UTF-8 bytes in the end of a
   // chunk don't produce a crash.
-  const char* reference = "\xeb\x91\x80\x80\x80";
+  const char* reference = "\xec\x92\x81\x80\x80";
   char chunk1[] =
       "function foo() {\n"
       "  // This function will contain an UTF-8 character which is not in\n"
@@ -23806,7 +23943,7 @@ TEST(StreamingScriptWithInvalidUtf8) {
       "  var foobXXXXX";  // Too many bytes which look like incomplete chars!
   char chunk2[] =
       "r = 13;\n"
-      "  return foob\xeb\x91\x80\x80\x80r;\n"
+      "  return foob\xec\x92\x81\x80\x80r;\n"
       "}\n";
   for (int i = 0; i < 5; ++i) chunk1[strlen(chunk1) - 5 + i] = reference[i];
 
@@ -23818,15 +23955,36 @@ TEST(StreamingScriptWithInvalidUtf8) {
 TEST(StreamingUtf8ScriptWithMultipleMultibyteCharactersSomeSplit) {
   // Regression test: Stream data where there are several multi-byte UTF-8
   // characters in a sequence and one of them is split between two data chunks.
-  const char* reference = "\xeb\x91\x80";
+  const char* reference = "\xec\x92\x81";
   char chunk1[] =
       "function foo() {\n"
       "  // This function will contain an UTF-8 character which is not in\n"
       "  // ASCII.\n"
-      "  var foob\xeb\x91\x80X";
+      "  var foob\xec\x92\x81X";
   char chunk2[] =
       "XXr = 13;\n"
-      "  return foob\xeb\x91\x80\xeb\x91\x80r;\n"
+      "  return foob\xec\x92\x81\xec\x92\x81r;\n"
+      "}\n";
+  chunk1[strlen(chunk1) - 1] = reference[0];
+  chunk2[0] = reference[1];
+  chunk2[1] = reference[2];
+  const char* chunks[] = {chunk1, chunk2, "foo();", NULL};
+  RunStreamingTest(chunks, v8::ScriptCompiler::StreamedSource::UTF8);
+}
+
+
+TEST(StreamingUtf8ScriptWithMultipleMultibyteCharactersSomeSplit2) {
+  // Another regression test, similar to the previous one. The difference is
+  // that the split character is not the last one in the sequence.
+  const char* reference = "\xec\x92\x81";
+  char chunk1[] =
+      "function foo() {\n"
+      "  // This function will contain an UTF-8 character which is not in\n"
+      "  // ASCII.\n"
+      "  var foobX";
+  char chunk2[] =
+      "XX\xec\x92\x81r = 13;\n"
+      "  return foob\xec\x92\x81\xec\x92\x81r;\n"
       "}\n";
   chunk1[strlen(chunk1) - 1] = reference[0];
   chunk2[0] = reference[1];

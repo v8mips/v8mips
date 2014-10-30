@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "test/unittests/compiler/graph-unittest.h"
-
 #include "src/compiler/js-builtin-reducer.h"
 #include "src/compiler/js-graph.h"
 #include "src/compiler/node-properties-inl.h"
 #include "src/compiler/typer.h"
+#include "test/unittests/compiler/graph-unittest.h"
+#include "test/unittests/compiler/node-test-utils.h"
 #include "testing/gmock-support.h"
 
 using testing::Capture;
@@ -16,15 +16,14 @@ namespace v8 {
 namespace internal {
 namespace compiler {
 
-class JSBuiltinReducerTest : public GraphTest {
+class JSBuiltinReducerTest : public TypedGraphTest {
  public:
   JSBuiltinReducerTest() : javascript_(zone()) {}
 
  protected:
   Reduction Reduce(Node* node) {
-    Typer typer(zone());
     MachineOperatorBuilder machine;
-    JSGraph jsgraph(graph(), common(), javascript(), &typer, &machine);
+    JSGraph jsgraph(graph(), common(), javascript(), &machine);
     JSBuiltinReducer reducer(&jsgraph);
     return reducer.Reduce(node);
   }

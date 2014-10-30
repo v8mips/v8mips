@@ -447,10 +447,11 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       break;
     case kSSEUint32ToFloat64:
       if (instr->InputAt(0)->IsRegister()) {
-        __ cvtqsi2sd(i.OutputDoubleRegister(), i.InputRegister(0));
+        __ movl(kScratchRegister, i.InputRegister(0));
       } else {
-        __ cvtqsi2sd(i.OutputDoubleRegister(), i.InputOperand(0));
+        __ movl(kScratchRegister, i.InputOperand(0));
       }
+      __ cvtqsi2sd(i.OutputDoubleRegister(), kScratchRegister);
       break;
     case kX64Movsxbl:
       __ movsxbl(i.OutputRegister(), i.MemoryOperand());
@@ -568,9 +569,8 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       __ movsxlq(index, index);
       __ movq(Operand(object, index, times_1, 0), value);
       __ leaq(index, Operand(object, index, times_1, 0));
-      SaveFPRegsMode mode = code_->frame()->DidAllocateDoubleRegisters()
-                                ? kSaveFPRegs
-                                : kDontSaveFPRegs;
+      SaveFPRegsMode mode =
+          frame()->DidAllocateDoubleRegisters() ? kSaveFPRegs : kDontSaveFPRegs;
       __ RecordWrite(object, index, value, mode);
       break;
     }
@@ -870,7 +870,7 @@ void CodeGenerator::AssembleMove(InstructionOperand* source,
       switch (src.type()) {
         case Constant::kInt32:
           // TODO(dcarney): don't need scratch in this case.
-          __ movq(dst, Immediate(src.ToInt32()));
+          __ Set(dst, src.ToInt32());
           break;
         case Constant::kInt64:
           __ Set(dst, src.ToInt64());
@@ -895,22 +895,22 @@ void CodeGenerator::AssembleMove(InstructionOperand* source,
       }
     } else if (src.type() == Constant::kFloat32) {
       // TODO(turbofan): Can we do better here?
-      __ movl(kScratchRegister, Immediate(bit_cast<int32_t>(src.ToFloat32())));
+      uint32_t src_const = bit_cast<uint32_t>(src.ToFloat32());
       if (destination->IsDoubleRegister()) {
-        XMMRegister dst = g.ToDoubleRegister(destination);
-        __ movq(dst, kScratchRegister);
+        __ Move(g.ToDoubleRegister(destination), src_const);
       } else {
         DCHECK(destination->IsDoubleStackSlot());
         Operand dst = g.ToOperand(destination);
-        __ movl(dst, kScratchRegister);
+        __ movl(dst, Immediate(src_const));
       }
     } else {
       DCHECK_EQ(Constant::kFloat64, src.type());
-      __ movq(kScratchRegister, bit_cast<int64_t>(src.ToFloat64()));
+      uint64_t src_const = bit_cast<uint64_t>(src.ToFloat64());
       if (destination->IsDoubleRegister()) {
-        __ movq(g.ToDoubleRegister(destination), kScratchRegister);
+        __ Move(g.ToDoubleRegister(destination), src_const);
       } else {
         DCHECK(destination->IsDoubleStackSlot());
+        __ movq(kScratchRegister, src_const);
         __ movq(g.ToOperand(destination), kScratchRegister);
       }
     }

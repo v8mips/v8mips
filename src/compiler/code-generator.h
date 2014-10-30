@@ -20,16 +20,16 @@ namespace compiler {
 // Generates native code for a sequence of instructions.
 class CodeGenerator FINAL : public GapResolver::Assembler {
  public:
-  explicit CodeGenerator(InstructionSequence* code);
+  explicit CodeGenerator(Frame* frame, Linkage* linkage,
+                         InstructionSequence* code);
 
   // Generate native code.
   Handle<Code> GenerateCode();
 
   InstructionSequence* code() const { return code_; }
-  Frame* frame() const { return code()->frame(); }
+  Frame* frame() const { return frame_; }
   Isolate* isolate() const { return zone()->isolate(); }
-  Linkage* linkage() const { return code()->linkage(); }
-  Schedule* schedule() const { return code()->schedule(); }
+  Linkage* linkage() const { return linkage_; }
 
  private:
   MacroAssembler* masm() { return &masm_; }
@@ -39,9 +39,7 @@ class CodeGenerator FINAL : public GapResolver::Assembler {
 
   // Checks if {block} will appear directly after {current_block_} when
   // assembling code, in which case, a fall-through can be used.
-  bool IsNextInAssemblyOrder(BasicBlock::RpoNumber block) const {
-    return current_block_.IsNext(block);
-  }
+  bool IsNextInAssemblyOrder(BasicBlock::RpoNumber block) const;
 
   // Record a safepoint with the given pointer map.
   void RecordSafepoint(PointerMap* pointers, Safepoint::Kind kind,
@@ -117,7 +115,9 @@ class CodeGenerator FINAL : public GapResolver::Assembler {
     int pc_offset_;
   };
 
-  InstructionSequence* code_;
+  Frame* const frame_;
+  Linkage* const linkage_;
+  InstructionSequence* const code_;
   BasicBlock::RpoNumber current_block_;
   SourcePosition current_source_position_;
   MacroAssembler masm_;

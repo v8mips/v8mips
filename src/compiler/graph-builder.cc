@@ -19,12 +19,12 @@ namespace internal {
 namespace compiler {
 
 
-StructuredGraphBuilder::StructuredGraphBuilder(Graph* graph,
+StructuredGraphBuilder::StructuredGraphBuilder(Zone* local_zone, Graph* graph,
                                                CommonOperatorBuilder* common)
     : GraphBuilder(graph),
       common_(common),
       environment_(NULL),
-      local_zone_(isolate()),
+      local_zone_(local_zone),
       current_context_(NULL),
       exit_control_(NULL) {}
 
@@ -167,7 +167,7 @@ Node* StructuredGraphBuilder::NewPhi(int count, Node* input, Node* control) {
   Node** buffer = local_zone()->NewArray<Node*>(count + 1);
   MemsetPointer(buffer, input, count);
   buffer[count] = control;
-  return graph()->NewNode(phi_op, count + 1, buffer);
+  return graph()->NewNode(phi_op, count + 1, buffer, true);
 }
 
 
@@ -178,7 +178,7 @@ Node* StructuredGraphBuilder::NewEffectPhi(int count, Node* input,
   Node** buffer = local_zone()->NewArray<Node*>(count + 1);
   MemsetPointer(buffer, input, count);
   buffer[count] = control;
-  return graph()->NewNode(phi_op, count + 1, buffer);
+  return graph()->NewNode(phi_op, count + 1, buffer, true);
 }
 
 

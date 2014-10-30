@@ -1930,13 +1930,12 @@ void PropertyCell::set_type_raw(Object* val, WriteBarrierMode ignored) {
 }
 
 
-HeapObject* WeakCell::value() const {
-  return HeapObject::cast(READ_FIELD(this, kValueOffset));
-}
+Object* WeakCell::value() const { return READ_FIELD(this, kValueOffset); }
 
 
-void WeakCell::clear(HeapObject* undefined) {
-  WRITE_FIELD(this, kValueOffset, undefined);
+void WeakCell::clear() {
+  DCHECK(GetHeap()->gc_state() == Heap::MARK_COMPACT);
+  WRITE_FIELD(this, kValueOffset, Smi::FromInt(0));
 }
 
 
@@ -1944,6 +1943,9 @@ void WeakCell::initialize(HeapObject* val) {
   WRITE_FIELD(this, kValueOffset, val);
   WRITE_BARRIER(GetHeap(), this, kValueOffset, val);
 }
+
+
+bool WeakCell::cleared() const { return value() == Smi::FromInt(0); }
 
 
 Object* WeakCell::next() const { return READ_FIELD(this, kNextOffset); }
@@ -3691,28 +3693,26 @@ const uint16_t* ExternalTwoByteString::ExternalTwoByteStringGetData(
 }
 
 
-int ConsStringIteratorOp::OffsetForDepth(int depth) {
-  return depth & kDepthMask;
-}
+int ConsStringIterator::OffsetForDepth(int depth) { return depth & kDepthMask; }
 
 
-void ConsStringIteratorOp::PushLeft(ConsString* string) {
+void ConsStringIterator::PushLeft(ConsString* string) {
   frames_[depth_++ & kDepthMask] = string;
 }
 
 
-void ConsStringIteratorOp::PushRight(ConsString* string) {
+void ConsStringIterator::PushRight(ConsString* string) {
   // Inplace update.
   frames_[(depth_-1) & kDepthMask] = string;
 }
 
 
-void ConsStringIteratorOp::AdjustMaximumDepth() {
+void ConsStringIterator::AdjustMaximumDepth() {
   if (depth_ > maximum_depth_) maximum_depth_ = depth_;
 }
 
 
-void ConsStringIteratorOp::Pop() {
+void ConsStringIterator::Pop() {
   DCHECK(depth_ > 0);
   DCHECK(depth_ <= maximum_depth_);
   depth_--;
@@ -3728,11 +3728,8 @@ uint16_t StringCharacterStream::GetNext() {
 }
 
 
-StringCharacterStream::StringCharacterStream(String* string,
-                                             ConsStringIteratorOp* op,
-                                             int offset)
-  : is_one_byte_(false),
-    op_(op) {
+StringCharacterStream::StringCharacterStream(String* string, int offset)
+    : is_one_byte_(false) {
   Reset(string, offset);
 }
 
@@ -3741,9 +3738,9 @@ void StringCharacterStream::Reset(String* string, int offset) {
   buffer8_ = NULL;
   end_ = NULL;
   ConsString* cons_string = String::VisitFlat(this, string, offset);
-  op_->Reset(cons_string, offset);
+  iter_.Reset(cons_string, offset);
   if (cons_string != NULL) {
-    string = op_->Next(&offset);
+    string = iter_.Next(&offset);
     if (string != NULL) String::VisitFlat(this, string, offset);
   }
 }
@@ -3752,7 +3749,7 @@ void StringCharacterStream::Reset(String* string, int offset) {
 bool StringCharacterStream::HasMore() {
   if (buffer8_ != end_) return true;
   int offset;
-  String* string = op_->Next(&offset);
+  String* string = iter_.Next(&offset);
   DCHECK_EQ(offset, 0);
   if (string == NULL) return false;
   String::VisitFlat(this, string);
@@ -4171,7 +4168,8 @@ typename Traits::ElementType FixedTypedArray<Traits>::from_double(
 
 template<> inline
 uint8_t FixedTypedArray<Uint8ClampedArrayTraits>::from_double(double value) {
-  if (value < 0) return 0;
+  // Handle NaNs and less than zero values which clamp to zero.
+  if (!(value > 0)) return 0;
   if (value > 0xFF) return 0xFF;
   return static_cast<uint8_t>(lrint(value));
 }
@@ -4833,13 +4831,11 @@ void Code::set_profiler_ticks(int ticks) {
 
 
 int Code::builtin_index() {
-  DCHECK_EQ(BUILTIN, kind());
   return READ_INT32_FIELD(this, kKindSpecificFlags1Offset);
 }
 
 
 void Code::set_builtin_index(int index) {
-  DCHECK_EQ(BUILTIN, kind());
   WRITE_INT32_FIELD(this, kKindSpecificFlags1Offset, index);
 }
 
@@ -5207,9 +5203,8 @@ Map* Map::elements_transition_map() {
 
 bool Map::CanHaveMoreTransitions() {
   if (!HasTransitionArray()) return true;
-  return FixedArray::SizeFor(transitions()->length() +
-                             TransitionArray::kTransitionSize)
-      <= Page::kMaxRegularHeapObjectSize;
+  return transitions()->number_of_transitions() <=
+         TransitionArray::kMaxNumberOfTransitions;
 }
 
 
@@ -5407,7 +5402,7 @@ ACCESSORS(Script, id, Smi, kIdOffset)
 ACCESSORS_TO_SMI(Script, line_offset, kLineOffsetOffset)
 ACCESSORS_TO_SMI(Script, column_offset, kColumnOffsetOffset)
 ACCESSORS(Script, context_data, Object, kContextOffset)
-ACCESSORS(Script, wrapper, Foreign, kWrapperOffset)
+ACCESSORS(Script, wrapper, HeapObject, kWrapperOffset)
 ACCESSORS_TO_SMI(Script, type, kTypeOffset)
 ACCESSORS(Script, line_ends, Object, kLineEndsOffset)
 ACCESSORS(Script, eval_from_shared, Object, kEvalFromSharedOffset)
@@ -6629,9 +6624,9 @@ uint32_t IteratingStringHasher::Hash(String* string, uint32_t seed) {
   // The string was flat.
   if (cons_string == NULL) return hasher.GetHashField();
   // This is a ConsString, iterate across it.
-  ConsStringIteratorOp op(cons_string);
+  ConsStringIterator iter(cons_string);
   int offset;
-  while (NULL != (string = op.Next(&offset))) {
+  while (NULL != (string = iter.Next(&offset))) {
     String::VisitFlat(&hasher, string, offset);
   }
   return hasher.GetHashField();
@@ -6687,11 +6682,6 @@ String* String::GetForwardedInternalizedString() {
   DCHECK(SlowEquals(canonical));
   DCHECK(canonical->HasHashCode());
   return canonical;
-}
-
-
-Object* JSReceiver::GetConstructor() {
-  return map()->constructor();
 }
 
 
@@ -7001,6 +6991,14 @@ void Map::ClearCodeCache(Heap* heap) {
   //  - IncrementalMarking::Step
   DCHECK(!heap->InNewSpace(heap->empty_fixed_array()));
   WRITE_FIELD(this, kCodeCacheOffset, heap->empty_fixed_array());
+}
+
+
+int Map::SlackForArraySize(int old_size, int size_limit) {
+  const int max_slack = size_limit - old_size;
+  DCHECK(max_slack >= 0);
+  if (old_size < 4) return Min(max_slack, 1);
+  return Min(max_slack, old_size / 2);
 }
 
 

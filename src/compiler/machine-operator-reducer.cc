@@ -173,6 +173,12 @@ Reduction MachineOperatorReducer::Reduce(Node* node) {
         return ReplaceInt32(m.left().Value() ^ m.right().Value());
       }
       if (m.LeftEqualsRight()) return ReplaceInt32(0);  // x ^ x => 0
+      if (m.left().IsWord32Xor() && m.right().Is(-1)) {
+        Int32BinopMatcher mleft(m.left().node());
+        if (mleft.right().Is(-1)) {  // (x ^ -1) ^ -1 => x
+          return Replace(mleft.left().node());
+        }
+      }
       break;
     }
     case IrOpcode::kWord32Shl: {
@@ -229,6 +235,21 @@ Reduction MachineOperatorReducer::Reduce(Node* node) {
       }
       if (m.left().IsInt32Sub() && m.right().Is(0)) {  // x - y == 0 => x == y
         Int32BinopMatcher msub(m.left().node());
+        node->ReplaceInput(0, msub.left().node());
+        node->ReplaceInput(1, msub.right().node());
+        return Changed(node);
+      }
+      // TODO(turbofan): fold HeapConstant, ExternalReference, pointer compares
+      if (m.LeftEqualsRight()) return ReplaceBool(true);  // x == x => true
+      break;
+    }
+    case IrOpcode::kWord64Equal: {
+      Int64BinopMatcher m(node);
+      if (m.IsFoldable()) {  // K == K => K
+        return ReplaceBool(m.left().Value() == m.right().Value());
+      }
+      if (m.left().IsInt64Sub() && m.right().Is(0)) {  // x - y == 0 => x == y
+        Int64BinopMatcher msub(m.left().node());
         node->ReplaceInput(0, msub.left().node());
         node->ReplaceInput(1, msub.right().node());
         return Changed(node);

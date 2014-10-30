@@ -1149,7 +1149,8 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
 
   // No need for a write barrier, we are storing a Smi in the feedback vector.
   __ Move(rbx, FeedbackVector());
-  __ Move(FieldOperand(rbx, FixedArray::OffsetOfElementAt(slot.ToInt())),
+  int vector_index = FeedbackVector()->GetIndex(slot);
+  __ Move(FieldOperand(rbx, FixedArray::OffsetOfElementAt(vector_index)),
           TypeFeedbackVector::MegamorphicSentinel(isolate()));
   __ Move(rbx, Smi::FromInt(1));  // Smi indicates slow check
   __ movp(rcx, Operand(rsp, 0 * kPointerSize));  // Get enumerated object
@@ -1690,6 +1691,8 @@ void FullCodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
         DCHECK(!CompileTimeValue::IsCompileTimeValue(value));
         // Fall through.
       case ObjectLiteral::Property::COMPUTED:
+        // It is safe to use [[Put]] here because the boilerplate already
+        // contains computed properties with an uninitialized value.
         if (key->value()->IsInternalizedString()) {
           if (property->emit_store()) {
             VisitForAccumulatorValue(value);
@@ -1717,7 +1720,7 @@ void FullCodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
         __ Push(Operand(rsp, 0));  // Duplicate receiver.
         VisitForStackValue(value);
         if (property->emit_store()) {
-          __ CallRuntime(Runtime::kSetPrototype, 2);
+          __ CallRuntime(Runtime::kInternalSetPrototype, 2);
         } else {
           __ Drop(2);
         }
@@ -2864,6 +2867,13 @@ void FullCodeGenerator::EmitResolvePossiblyDirectEval(int arg_count) {
 }
 
 
+void FullCodeGenerator::EmitLoadSuperConstructor(SuperReference* super_ref) {
+  DCHECK(super_ref != NULL);
+  __ Push(Operand(rbp, JavaScriptFrameConstants::kFunctionOffset));
+  __ CallRuntime(Runtime::kGetPrototype, 1);
+}
+
+
 void FullCodeGenerator::VisitCall(Call* expr) {
 #ifdef DEBUG
   // We want to verify that RecordJSReturnSite gets called on all paths
@@ -2971,6 +2981,12 @@ void FullCodeGenerator::VisitCall(Call* expr) {
         EmitKeyedCallWithLoadIC(expr, property->key());
       }
     }
+  } else if (call_type == Call::SUPER_CALL) {
+    SuperReference* super_ref = callee->AsSuperReference();
+    EmitLoadSuperConstructor(super_ref);
+    __ Push(result_register());
+    VisitForStackValue(super_ref->this_var());
+    EmitCall(expr, CallICState::METHOD);
   } else {
     DCHECK(call_type == Call::OTHER_CALL);
     // Call to an arbitrary expression not handled specially above.
@@ -2998,7 +3014,12 @@ void FullCodeGenerator::VisitCallNew(CallNew* expr) {
   // Push constructor on the stack.  If it's not a function it's used as
   // receiver for CALL_NON_FUNCTION, otherwise the value on the stack is
   // ignored.
-  VisitForStackValue(expr->expression());
+  if (expr->expression()->IsSuperReference()) {
+    EmitLoadSuperConstructor(expr->expression()->AsSuperReference());
+    __ Push(result_register());
+  } else {
+    VisitForStackValue(expr->expression());
+  }
 
   // Push the arguments ("left-to-right") on the stack.
   ZoneList<Expression*>* args = expr->arguments();
@@ -3329,6 +3350,31 @@ void FullCodeGenerator::EmitIsRegExp(CallRuntime* expr) {
   context()->Plug(if_true, if_false);
 }
 
+
+void FullCodeGenerator::EmitIsJSProxy(CallRuntime* expr) {
+  ZoneList<Expression*>* args = expr->arguments();
+  DCHECK(args->length() == 1);
+
+  VisitForAccumulatorValue(args->at(0));
+
+  Label materialize_true, materialize_false;
+  Label* if_true = NULL;
+  Label* if_false = NULL;
+  Label* fall_through = NULL;
+  context()->PrepareTest(&materialize_true, &materialize_false, &if_true,
+                         &if_false, &fall_through);
+
+  __ JumpIfSmi(rax, if_false);
+  Register map = rbx;
+  __ movp(map, FieldOperand(rax, HeapObject::kMapOffset));
+  __ CmpInstanceType(map, FIRST_JS_PROXY_TYPE);
+  __ j(less, if_false);
+  __ CmpInstanceType(map, LAST_JS_PROXY_TYPE);
+  PrepareForBailoutBeforeSplit(expr, true, if_true, if_false);
+  Split(less_equal, if_true, if_false, fall_through);
+
+  context()->Plug(if_true, if_false);
+}
 
 
 void FullCodeGenerator::EmitIsConstructCall(CallRuntime* expr) {

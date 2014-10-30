@@ -12,8 +12,11 @@ namespace v8 {
 namespace internal {
 namespace compiler {
 
-CodeGenerator::CodeGenerator(InstructionSequence* code)
-    : code_(code),
+CodeGenerator::CodeGenerator(Frame* frame, Linkage* linkage,
+                             InstructionSequence* code)
+    : frame_(frame),
+      linkage_(linkage),
+      code_(code),
       current_block_(BasicBlock::RpoNumber::Invalid()),
       current_source_position_(SourcePosition::Invalid()),
       masm_(code->zone()->isolate(), NULL, 0),
@@ -41,10 +44,20 @@ Handle<Code> CodeGenerator::GenerateCode() {
   info->set_prologue_offset(masm()->pc_offset());
   AssemblePrologue();
 
-  // Assemble all instructions.
-  for (InstructionSequence::const_iterator i = code()->begin();
-       i != code()->end(); ++i) {
-    AssembleInstruction(*i);
+  // Assemble all non-deferred instructions.
+  for (auto const block : code()->instruction_blocks()) {
+    if (block->IsDeferred()) continue;
+    for (int i = block->code_start(); i < block->code_end(); ++i) {
+      AssembleInstruction(code()->InstructionAt(i));
+    }
+  }
+
+  // Assemble all deferred instructions.
+  for (auto const block : code()->instruction_blocks()) {
+    if (!block->IsDeferred()) continue;
+    for (int i = block->code_start(); i < block->code_end(); ++i) {
+      AssembleInstruction(code()->InstructionAt(i));
+    }
   }
 
   FinishCode(masm());
@@ -80,6 +93,12 @@ Handle<Code> CodeGenerator::GenerateCode() {
 }
 
 
+bool CodeGenerator::IsNextInAssemblyOrder(BasicBlock::RpoNumber block) const {
+  return code()->InstructionBlockAt(current_block_)->ao_number().IsNext(
+      code()->InstructionBlockAt(block)->ao_number());
+}
+
+
 void CodeGenerator::RecordSafepoint(PointerMap* pointers, Safepoint::Kind kind,
                                     int arguments,
                                     Safepoint::DeoptMode deopt_mode) {
@@ -107,8 +126,7 @@ void CodeGenerator::AssembleInstruction(Instruction* instr) {
     if (FLAG_code_comments) {
       // TODO(titzer): these code comments are a giant memory leak.
       Vector<char> buffer = Vector<char>::New(32);
-      // TODO(dcarney): should not be rpo number there
-      SNPrintF(buffer, "-- B%d (rpo) start --", current_block_.ToInt());
+      SNPrintF(buffer, "-- B%d start --", block_start->id().ToInt());
       masm()->RecordComment(buffer.start());
     }
     masm()->bind(block_start->label());

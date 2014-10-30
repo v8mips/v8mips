@@ -13,7 +13,9 @@ namespace internal {
 namespace compiler {
 
 BasicBlock::BasicBlock(Zone* zone, Id id)
-    : rpo_number_(-1),
+    : ao_number_(-1),
+      rpo_number_(-1),
+      deferred_(false),
       dominator_(NULL),
       loop_header_(NULL),
       loop_depth_(0),
@@ -32,12 +34,6 @@ bool BasicBlock::LoopContains(BasicBlock* block) const {
   DCHECK(block->rpo_number_ >= 0);
   if (loop_end_ < 0) return false;  // This is not a loop.
   return block->rpo_number_ >= rpo_number_ && block->rpo_number_ < loop_end_;
-}
-
-
-BasicBlock* BasicBlock::ContainingLoop() {
-  if (IsLoopHeader()) return this;
-  return loop_header();
 }
 
 
@@ -88,16 +84,6 @@ void BasicBlock::set_loop_header(BasicBlock* loop_header) {
 }
 
 
-size_t BasicBlock::PredecessorIndexOf(BasicBlock* predecessor) {
-  size_t j = 0;
-  for (BasicBlock::Predecessors::iterator i = predecessors_.begin();
-       i != predecessors_.end(); ++i, ++j) {
-    if (*i == predecessor) break;
-  }
-  return j;
-}
-
-
 std::ostream& operator<<(std::ostream& os, const BasicBlock::Control& c) {
   switch (c) {
     case BasicBlock::kNone:
@@ -118,6 +104,11 @@ std::ostream& operator<<(std::ostream& os, const BasicBlock::Control& c) {
 
 std::ostream& operator<<(std::ostream& os, const BasicBlock::Id& id) {
   return os << id.ToSize();
+}
+
+
+std::ostream& operator<<(std::ostream& os, const BasicBlock::RpoNumber& rpo) {
+  return os << rpo.ToSize();
 }
 
 
@@ -205,10 +196,6 @@ void Schedule::AddBranch(BasicBlock* block, Node* branch, BasicBlock* tblock,
   AddSuccessor(block, tblock);
   AddSuccessor(block, fblock);
   SetControlInput(block, branch);
-  if (branch->opcode() == IrOpcode::kBranch) {
-    // TODO(titzer): require a Branch node here. (sloppy tests).
-    SetBlockForNode(block, branch);
-  }
 }
 
 
@@ -216,13 +203,7 @@ void Schedule::AddReturn(BasicBlock* block, Node* input) {
   DCHECK(block->control() == BasicBlock::kNone);
   block->set_control(BasicBlock::kReturn);
   SetControlInput(block, input);
-  if (block != end()) {
-    AddSuccessor(block, end());
-  }
-  if (input->opcode() == IrOpcode::kReturn) {
-    // TODO(titzer): require a Return node here. (sloppy tests).
-    SetBlockForNode(block, input);
-  }
+  if (block != end()) AddSuccessor(block, end());
 }
 
 
@@ -261,6 +242,7 @@ std::ostream& operator<<(std::ostream& os, const Schedule& s) {
   for (BasicBlockVectorIter i = rpo->begin(); i != rpo->end(); ++i) {
     BasicBlock* block = *i;
     os << "--- BLOCK B" << block->id();
+    if (block->deferred()) os << " (deferred)";
     if (block->PredecessorCount() != 0) os << " <- ";
     bool comma = false;
     for (BasicBlock::Predecessors::iterator j = block->predecessors_begin();
@@ -274,7 +256,7 @@ std::ostream& operator<<(std::ostream& os, const Schedule& s) {
          ++j) {
       Node* node = *j;
       os << "  " << *node;
-      if (!NodeProperties::IsControl(node)) {
+      if (NodeProperties::IsTyped(node)) {
         Bounds bounds = NodeProperties::GetBounds(node);
         os << " : ";
         bounds.lower->PrintTo(os);

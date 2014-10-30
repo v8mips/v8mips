@@ -17,8 +17,9 @@ namespace v8 {
 namespace internal {
 namespace compiler {
 
-AstGraphBuilder::AstGraphBuilder(CompilationInfo* info, JSGraph* jsgraph)
-    : StructuredGraphBuilder(jsgraph->graph(), jsgraph->common()),
+AstGraphBuilder::AstGraphBuilder(Zone* local_zone, CompilationInfo* info,
+                                 JSGraph* jsgraph)
+    : StructuredGraphBuilder(local_zone, jsgraph->graph(), jsgraph->common()),
       info_(info),
       jsgraph_(jsgraph),
       globals_(0, info->zone()),
@@ -610,6 +611,8 @@ void AstGraphBuilder::VisitForStatement(ForStatement* stmt) {
     VisitForTest(stmt->cond());
     Node* condition = environment()->Pop();
     for_loop.BreakUnless(condition);
+  } else {
+    for_loop.BreakUnless(jsgraph()->TrueConstant());
   }
   VisitIterationBody(stmt, &for_loop, 0);
   for_loop.EndBody();
@@ -939,7 +942,7 @@ void AstGraphBuilder::VisitObjectLiteral(ObjectLiteral* expr) {
         Node* receiver = environment()->Pop();
         if (property->emit_store()) {
           const Operator* op =
-              javascript()->CallRuntime(Runtime::kSetPrototype, 2);
+              javascript()->CallRuntime(Runtime::kInternalSetPrototype, 2);
           NewNode(op, receiver, value);
         }
         break;
@@ -1259,6 +1262,11 @@ void AstGraphBuilder::VisitCall(Call* expr) {
       // object for sloppy callees. This could also be modeled explicitly here,
       // thereby obsoleting the need for a flag to the call operator.
       flags = CALL_AS_METHOD;
+      break;
+    }
+    case Call::SUPER_CALL: {
+      // todo(dslomov): implement super calls in turbofan.
+      UNIMPLEMENTED();
       break;
     }
     case Call::POSSIBLY_EVAL_CALL:
@@ -1712,7 +1720,7 @@ StrictMode AstGraphBuilder::strict_mode() const {
 
 
 VectorSlotPair AstGraphBuilder::CreateVectorSlotPair(
-    FeedbackVectorSlot slot) const {
+    FeedbackVectorICSlot slot) const {
   return VectorSlotPair(handle(info()->shared_info()->feedback_vector()), slot);
 }
 

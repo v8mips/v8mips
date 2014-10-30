@@ -4,6 +4,7 @@
 
 #include "src/compiler/pipeline.h"
 
+#include <fstream>  // NOLINT(readability/streams)
 #include <sstream>
 
 #include "src/base/platform/elapsed-timer.h"
@@ -11,6 +12,7 @@
 #include "src/compiler/basic-block-instrumentor.h"
 #include "src/compiler/change-lowering.h"
 #include "src/compiler/code-generator.h"
+#include "src/compiler/control-reducer.h"
 #include "src/compiler/graph-replay.h"
 #include "src/compiler/graph-visualizer.h"
 #include "src/compiler/instruction.h"
@@ -21,6 +23,7 @@
 #include "src/compiler/js-typed-lowering.h"
 #include "src/compiler/machine-operator-reducer.h"
 #include "src/compiler/phi-reducer.h"
+#include "src/compiler/pipeline-statistics.h"
 #include "src/compiler/register-allocator.h"
 #include "src/compiler/schedule.h"
 #include "src/compiler/scheduler.h"
@@ -29,57 +32,13 @@
 #include "src/compiler/typer.h"
 #include "src/compiler/value-numbering-reducer.h"
 #include "src/compiler/verifier.h"
-#include "src/hydrogen.h"
+#include "src/compiler/zone-pool.h"
 #include "src/ostreams.h"
 #include "src/utils.h"
 
 namespace v8 {
 namespace internal {
 namespace compiler {
-
-class PhaseStats {
- public:
-  enum PhaseKind { CREATE_GRAPH, OPTIMIZATION, CODEGEN };
-
-  PhaseStats(CompilationInfo* info, PhaseKind kind, const char* name)
-      : info_(info),
-        kind_(kind),
-        name_(name),
-        size_(info->zone()->allocation_size()) {
-    if (FLAG_turbo_stats) {
-      timer_.Start();
-    }
-  }
-
-  ~PhaseStats() {
-    if (FLAG_turbo_stats) {
-      base::TimeDelta delta = timer_.Elapsed();
-      size_t bytes = info_->zone()->allocation_size() - size_;
-      HStatistics* stats = info_->isolate()->GetTStatistics();
-      stats->SaveTiming(name_, delta, static_cast<int>(bytes));
-
-      switch (kind_) {
-        case CREATE_GRAPH:
-          stats->IncrementCreateGraph(delta);
-          break;
-        case OPTIMIZATION:
-          stats->IncrementOptimizeGraph(delta);
-          break;
-        case CODEGEN:
-          stats->IncrementGenerateCode(delta);
-          break;
-      }
-    }
-  }
-
- private:
-  CompilationInfo* info_;
-  PhaseKind kind_;
-  const char* name_;
-  size_t size_;
-  base::ElapsedTimer timer_;
-};
-
 
 static inline bool VerifyGraphs() {
 #ifdef DEBUG
@@ -90,22 +49,15 @@ static inline bool VerifyGraphs() {
 }
 
 
-void Pipeline::PrintCompilationStart() {
-  std::ofstream turbo_cfg_stream;
-  OpenTurboCfgFile(&turbo_cfg_stream);
-  turbo_cfg_stream << AsC1VCompilation(info());
-}
+struct TurboCfgFile : public std::ofstream {
+  explicit TurboCfgFile(Isolate* isolate)
+      : std::ofstream(isolate->GetTurboCfgFileName().c_str(),
+                      std::ios_base::app) {}
+};
 
 
-void Pipeline::OpenTurboCfgFile(std::ofstream* stream) {
-  char buffer[512];
-  Vector<char> filename(buffer, sizeof(buffer));
-  isolate()->GetTurboCfgFileName(filename);
-  stream->open(filename.start(), std::fstream::out | std::fstream::app);
-}
-
-
-void Pipeline::VerifyAndPrintGraph(Graph* graph, const char* phase) {
+void Pipeline::VerifyAndPrintGraph(
+    Graph* graph, const char* phase, bool untyped) {
   if (FLAG_trace_turbo) {
     char buffer[256];
     Vector<char> filename(buffer, sizeof(buffer));
@@ -143,33 +95,20 @@ void Pipeline::VerifyAndPrintGraph(Graph* graph, const char* phase) {
     os << "-- " << phase << " graph printed to file " << filename.start()
        << "\n";
   }
-  if (VerifyGraphs()) Verifier::Run(graph);
-}
-
-
-void Pipeline::PrintScheduleAndInstructions(
-    const char* phase, const Schedule* schedule,
-    const SourcePositionTable* positions,
-    const InstructionSequence* instructions) {
-  std::ofstream turbo_cfg_stream;
-  OpenTurboCfgFile(&turbo_cfg_stream);
-  turbo_cfg_stream << AsC1V(phase, schedule, positions, instructions);
-}
-
-
-void Pipeline::PrintAllocator(const char* phase,
-                              const RegisterAllocator* allocator) {
-  std::ofstream turbo_cfg_stream;
-  OpenTurboCfgFile(&turbo_cfg_stream);
-  turbo_cfg_stream << AsC1VAllocator(phase, allocator);
+  if (VerifyGraphs()) {
+    Verifier::Run(graph,
+        FLAG_turbo_types && !untyped ? Verifier::TYPED : Verifier::UNTYPED);
+  }
 }
 
 
 class AstGraphBuilderWithPositions : public AstGraphBuilder {
  public:
-  explicit AstGraphBuilderWithPositions(CompilationInfo* info, JSGraph* jsgraph,
+  explicit AstGraphBuilderWithPositions(Zone* local_zone, CompilationInfo* info,
+                                        JSGraph* jsgraph,
                                         SourcePositionTable* source_positions)
-      : AstGraphBuilder(info, jsgraph), source_positions_(source_positions) {}
+      : AstGraphBuilder(local_zone, info, jsgraph),
+        source_positions_(source_positions) {}
 
   bool CreateGraph() {
     SourcePositionTable::Scope pos(source_positions_,
@@ -213,7 +152,13 @@ Handle<Code> Pipeline::GenerateCode() {
     return Handle<Code>::null();
   }
 
-  if (FLAG_turbo_stats) isolate()->GetTStatistics()->Initialize(info_);
+  ZonePool zone_pool(isolate());
+
+  SmartPointer<PipelineStatistics> pipeline_statistics;
+  if (FLAG_turbo_stats) {
+    pipeline_statistics.Reset(new PipelineStatistics(info(), &zone_pool));
+    pipeline_statistics->BeginPhaseKind("create graph");
+  }
 
   if (FLAG_trace_turbo) {
     OFStream os(stdout);
@@ -221,7 +166,8 @@ Handle<Code> Pipeline::GenerateCode() {
        << "Begin compiling method "
        << info()->function()->debug_name()->ToCString().get()
        << " using Turbofan" << std::endl;
-    PrintCompilationStart();
+    TurboCfgFile tcf(isolate());
+    tcf << AsC1VCompilation(info());
   }
 
   // Build the graph.
@@ -231,23 +177,23 @@ Handle<Code> Pipeline::GenerateCode() {
   // TODO(turbofan): there is no need to type anything during initial graph
   // construction.  This is currently only needed for the node cache, which the
   // typer could sweep over later.
-  Typer typer(zone());
-  MachineOperatorBuilder machine;
+  Typer typer(&graph, info()->context());
+  MachineOperatorBuilder machine(
+      kMachPtr, InstructionSelector::SupportedMachineOperatorFlags());
   CommonOperatorBuilder common(zone());
   JSOperatorBuilder javascript(zone());
-  JSGraph jsgraph(&graph, &common, &javascript, &typer, &machine);
+  JSGraph jsgraph(&graph, &common, &javascript, &machine);
   Node* context_node;
   {
-    PhaseStats graph_builder_stats(info(), PhaseStats::CREATE_GRAPH,
-                                   "graph builder");
-    AstGraphBuilderWithPositions graph_builder(info(), &jsgraph,
-                                               &source_positions);
+    PhaseScope phase_scope(pipeline_statistics.get(), "graph builder");
+    ZonePool::Scope zone_scope(&zone_pool);
+    AstGraphBuilderWithPositions graph_builder(zone_scope.zone(), info(),
+                                               &jsgraph, &source_positions);
     graph_builder.CreateGraph();
     context_node = graph_builder.GetFunctionContext();
   }
   {
-    PhaseStats phi_reducer_stats(info(), PhaseStats::CREATE_GRAPH,
-                                 "phi reduction");
+    PhaseScope phase_scope(pipeline_statistics.get(), "phi reduction");
     PhiReducer phi_reducer;
     GraphReducer graph_reducer(&graph);
     graph_reducer.AddReducer(&phi_reducer);
@@ -257,7 +203,7 @@ Handle<Code> Pipeline::GenerateCode() {
     graph_reducer.ReduceGraph();
   }
 
-  VerifyAndPrintGraph(&graph, "Initial untyped");
+  VerifyAndPrintGraph(&graph, "Initial untyped", true);
 
   if (info()->is_context_specializing()) {
     SourcePositionTable::Scope pos(&source_positions,
@@ -265,15 +211,17 @@ Handle<Code> Pipeline::GenerateCode() {
     // Specialize the code to the context as aggressively as possible.
     JSContextSpecializer spec(info(), &jsgraph, context_node);
     spec.SpecializeToContext();
-    VerifyAndPrintGraph(&graph, "Context specialized");
+    VerifyAndPrintGraph(&graph, "Context specialized", true);
   }
 
   if (info()->is_inlining_enabled()) {
+    PhaseScope phase_scope(pipeline_statistics.get(), "inlining");
     SourcePositionTable::Scope pos(&source_positions,
                                    SourcePosition::Unknown());
-    JSInliner inliner(info(), &jsgraph);
+    ZonePool::Scope zone_scope(&zone_pool);
+    JSInliner inliner(zone_scope.zone(), info(), &jsgraph);
     inliner.Inline();
-    VerifyAndPrintGraph(&graph, "Inlined");
+    VerifyAndPrintGraph(&graph, "Inlined", true);
   }
 
   // Print a replay of the initial graph.
@@ -287,40 +235,52 @@ Handle<Code> Pipeline::GenerateCode() {
   if (info()->is_typing_enabled()) {
     {
       // Type the graph.
-      PhaseStats typer_stats(info(), PhaseStats::CREATE_GRAPH, "typer");
-      typer.Run(&graph, info()->context());
+      PhaseScope phase_scope(pipeline_statistics.get(), "typer");
+      typer.Run();
       VerifyAndPrintGraph(&graph, "Typed");
     }
-    // All new nodes must be typed.
-    typer.DecorateGraph(&graph);
+  }
+
+  if (!pipeline_statistics.is_empty()) {
+    pipeline_statistics->BeginPhaseKind("lowering");
+  }
+
+  if (info()->is_typing_enabled()) {
     {
       // Lower JSOperators where we can determine types.
-      PhaseStats lowering_stats(info(), PhaseStats::CREATE_GRAPH,
-                                "typed lowering");
+      PhaseScope phase_scope(pipeline_statistics.get(), "typed lowering");
       SourcePositionTable::Scope pos(&source_positions,
                                      SourcePosition::Unknown());
+      ValueNumberingReducer vn_reducer(zone());
       JSTypedLowering lowering(&jsgraph);
+      SimplifiedOperatorReducer simple_reducer(&jsgraph);
       GraphReducer graph_reducer(&graph);
+      graph_reducer.AddReducer(&vn_reducer);
       graph_reducer.AddReducer(&lowering);
+      graph_reducer.AddReducer(&simple_reducer);
       graph_reducer.ReduceGraph();
 
       VerifyAndPrintGraph(&graph, "Lowered typed");
     }
     {
       // Lower simplified operators and insert changes.
-      PhaseStats lowering_stats(info(), PhaseStats::CREATE_GRAPH,
-                                "simplified lowering");
+      PhaseScope phase_scope(pipeline_statistics.get(), "simplified lowering");
       SourcePositionTable::Scope pos(&source_positions,
                                      SourcePosition::Unknown());
       SimplifiedLowering lowering(&jsgraph);
       lowering.LowerAllNodes();
+      ValueNumberingReducer vn_reducer(zone());
+      SimplifiedOperatorReducer simple_reducer(&jsgraph);
+      GraphReducer graph_reducer(&graph);
+      graph_reducer.AddReducer(&vn_reducer);
+      graph_reducer.AddReducer(&simple_reducer);
+      graph_reducer.ReduceGraph();
 
       VerifyAndPrintGraph(&graph, "Lowered simplified");
     }
     {
       // Lower changes that have been inserted before.
-      PhaseStats lowering_stats(info(), PhaseStats::OPTIMIZATION,
-                                "change lowering");
+      PhaseScope phase_scope(pipeline_statistics.get(), "change lowering");
       SourcePositionTable::Scope pos(&source_positions,
                                      SourcePosition::Unknown());
       Linkage linkage(info());
@@ -336,14 +296,24 @@ Handle<Code> Pipeline::GenerateCode() {
       graph_reducer.AddReducer(&mach_reducer);
       graph_reducer.ReduceGraph();
 
-      VerifyAndPrintGraph(&graph, "Lowered changes");
+      // TODO(jarin, rossberg): Remove UNTYPED once machine typing works.
+      VerifyAndPrintGraph(&graph, "Lowered changes", true);
+    }
+
+    {
+      PhaseScope phase_scope(pipeline_statistics.get(), "control reduction");
+      SourcePositionTable::Scope pos(&source_positions,
+                                     SourcePosition::Unknown());
+      ZonePool::Scope zone_scope(&zone_pool);
+      ControlReducer::ReduceGraph(zone_scope.zone(), &jsgraph, &common);
+
+      VerifyAndPrintGraph(&graph, "Control reduced");
     }
   }
 
   {
     // Lower any remaining generic JSOperators.
-    PhaseStats lowering_stats(info(), PhaseStats::CREATE_GRAPH,
-                              "generic lowering");
+    PhaseScope phase_scope(pipeline_statistics.get(), "generic lowering");
     SourcePositionTable::Scope pos(&source_positions,
                                    SourcePosition::Unknown());
     JSGenericLowering lowering(info(), &jsgraph);
@@ -351,19 +321,29 @@ Handle<Code> Pipeline::GenerateCode() {
     graph_reducer.AddReducer(&lowering);
     graph_reducer.ReduceGraph();
 
-    VerifyAndPrintGraph(&graph, "Lowered generic");
+    // TODO(jarin, rossberg): Remove UNTYPED once machine typing works.
+    VerifyAndPrintGraph(&graph, "Lowered generic", true);
+  }
+
+  if (!pipeline_statistics.is_empty()) {
+    pipeline_statistics->BeginPhaseKind("code generation");
   }
 
   source_positions.RemoveDecorator();
 
+  Schedule* schedule;
+  {
+    PhaseScope phase_scope(pipeline_statistics.get(), "scheduling");
+    // Compute a schedule.
+    schedule = ComputeSchedule(&zone_pool, &graph);
+  }
+
   Handle<Code> code = Handle<Code>::null();
   {
-    // Compute a schedule.
-    Schedule* schedule = ComputeSchedule(&graph);
     // Generate optimized code.
-    PhaseStats codegen_stats(info(), PhaseStats::CODEGEN, "codegen");
     Linkage linkage(info());
-    code = GenerateCode(&linkage, &graph, schedule, &source_positions);
+    code = GenerateCode(pipeline_statistics.get(), &zone_pool, &linkage, &graph,
+                        schedule, &source_positions);
     info()->SetCode(code);
   }
 
@@ -382,9 +362,8 @@ Handle<Code> Pipeline::GenerateCode() {
 }
 
 
-Schedule* Pipeline::ComputeSchedule(Graph* graph) {
-  PhaseStats schedule_stats(info(), PhaseStats::CODEGEN, "scheduling");
-  Schedule* schedule = Scheduler::ComputeSchedule(graph);
+Schedule* Pipeline::ComputeSchedule(ZonePool* zone_pool, Graph* graph) {
+  Schedule* schedule = Scheduler::ComputeSchedule(zone_pool, graph);
   TraceSchedule(schedule);
   if (VerifyGraphs()) ScheduleVerifier::Run(schedule);
   return schedule;
@@ -394,15 +373,18 @@ Schedule* Pipeline::ComputeSchedule(Graph* graph) {
 Handle<Code> Pipeline::GenerateCodeForMachineGraph(Linkage* linkage,
                                                    Graph* graph,
                                                    Schedule* schedule) {
+  ZonePool zone_pool(isolate());
   CHECK(SupportedBackend());
   if (schedule == NULL) {
-    VerifyAndPrintGraph(graph, "Machine");
-    schedule = ComputeSchedule(graph);
+    // TODO(rossberg): Should this really be untyped?
+    VerifyAndPrintGraph(graph, "Machine", true);
+    schedule = ComputeSchedule(&zone_pool, graph);
   }
   TraceSchedule(schedule);
 
   SourcePositionTable source_positions(graph);
-  Handle<Code> code = GenerateCode(linkage, graph, schedule, &source_positions);
+  Handle<Code> code = GenerateCode(NULL, &zone_pool, linkage, graph, schedule,
+                                   &source_positions);
 #if ENABLE_DISASSEMBLER
   if (!code.is_null() && FLAG_print_opt_code) {
     CodeTracer::Scope tracing_scope(isolate()->GetCodeTracer());
@@ -414,8 +396,9 @@ Handle<Code> Pipeline::GenerateCodeForMachineGraph(Linkage* linkage,
 }
 
 
-Handle<Code> Pipeline::GenerateCode(Linkage* linkage, Graph* graph,
-                                    Schedule* schedule,
+Handle<Code> Pipeline::GenerateCode(PipelineStatistics* pipeline_statistics,
+                                    ZonePool* zone_pool, Linkage* linkage,
+                                    Graph* graph, Schedule* schedule,
                                     SourcePositionTable* source_positions) {
   DCHECK_NOT_NULL(graph);
   DCHECK_NOT_NULL(linkage);
@@ -427,11 +410,15 @@ Handle<Code> Pipeline::GenerateCode(Linkage* linkage, Graph* graph,
     profiler_data = BasicBlockInstrumentor::Instrument(info_, graph, schedule);
   }
 
-  InstructionSequence sequence(linkage, graph, schedule);
+  Zone* instruction_zone = schedule->zone();
+  InstructionSequence sequence(instruction_zone, graph, schedule);
 
   // Select and schedule instructions covering the scheduled graph.
   {
-    InstructionSelector selector(&sequence, source_positions);
+    PhaseScope phase_scope(pipeline_statistics, "select instructions");
+    ZonePool::Scope zone_scope(zone_pool);
+    InstructionSelector selector(zone_scope.zone(), linkage, &sequence,
+                                 schedule, source_positions);
     selector.SelectInstructions();
   }
 
@@ -439,24 +426,28 @@ Handle<Code> Pipeline::GenerateCode(Linkage* linkage, Graph* graph,
     OFStream os(stdout);
     os << "----- Instruction sequence before register allocation -----\n"
        << sequence;
-    PrintScheduleAndInstructions("CodeGen", schedule, source_positions,
-                                 &sequence);
+    TurboCfgFile tcf(isolate());
+    tcf << AsC1V("CodeGen", schedule, source_positions, &sequence);
   }
 
   // Allocate registers.
+  Frame frame;
   {
     int node_count = graph->NodeCount();
     if (node_count > UnallocatedOperand::kMaxVirtualRegisters) {
       linkage->info()->AbortOptimization(kNotEnoughVirtualRegistersForValues);
       return Handle<Code>::null();
     }
-    RegisterAllocator allocator(&sequence);
-    if (!allocator.Allocate()) {
+    ZonePool::Scope zone_scope(zone_pool);
+    RegisterAllocator allocator(zone_scope.zone(), &frame, linkage->info(),
+                                &sequence);
+    if (!allocator.Allocate(pipeline_statistics)) {
       linkage->info()->AbortOptimization(kNotEnoughVirtualRegistersRegalloc);
       return Handle<Code>::null();
     }
     if (FLAG_trace_turbo) {
-      PrintAllocator("CodeGen", &allocator);
+      TurboCfgFile tcf(isolate());
+      tcf << AsC1VAllocator("CodeGen", &allocator);
     }
   }
 
@@ -467,8 +458,12 @@ Handle<Code> Pipeline::GenerateCode(Linkage* linkage, Graph* graph,
   }
 
   // Generate native sequence.
-  CodeGenerator generator(&sequence);
-  Handle<Code> code = generator.GenerateCode();
+  Handle<Code> code;
+  {
+    PhaseScope phase_scope(pipeline_statistics, "generate code");
+    CodeGenerator generator(&frame, linkage, &sequence);
+    code = generator.GenerateCode();
+  }
   if (profiler_data != NULL) {
 #if ENABLE_DISASSEMBLER
     std::ostringstream os;

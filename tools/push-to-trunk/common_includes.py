@@ -370,6 +370,7 @@ class GitTagsOnlyMixin(VCInterface):
 
   def Fetch(self):
     self.step.Git("fetch")
+    self.step.GitSVNFetch()
 
   def GetTags(self):
      return self.step.Git("tag").strip().splitlines()
@@ -867,7 +868,7 @@ class ScriptsBase(object):
       return None
 
     if not options.vc_interface:
-      options.vc_interface = "git_svn"
+      options.vc_interface = "git_read_svn_write"
     return options
 
   def RunSteps(self, step_classes, args=None):
