@@ -555,6 +555,23 @@ void InstructionSelector::VisitFloat64Sqrt(Node* node) {
   Emit(kMips64SqrtD, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)));
 }
 
+
+void InstructionSelector::VisitFloat64Floor(Node* node) { UNREACHABLE(); }
+
+
+void InstructionSelector::VisitFloat64Ceil(Node* node) { UNREACHABLE(); }
+
+
+void InstructionSelector::VisitFloat64RoundTruncate(Node* node) {
+  UNREACHABLE();
+}
+
+
+void InstructionSelector::VisitFloat64RoundTiesAway(Node* node) {
+  UNREACHABLE();
+}
+
+
 void InstructionSelector::VisitCall(Node* node) {
   Mips64OperandGenerator g(this);
   CallDescriptor* descriptor = OpParameter<CallDescriptor*>(node);
