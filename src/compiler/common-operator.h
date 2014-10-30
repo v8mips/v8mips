@@ -67,6 +67,10 @@ class OutputFrameStateCombine {
     return kind_ == kPushOutput && parameter_ == 0;
   }
 
+  size_t ConsumedOutputCount() const {
+    return kind_ == kPushOutput ? GetPushCount() : 1;
+  }
+
   bool operator==(OutputFrameStateCombine const& other) const {
     return kind_ == other.kind_ && parameter_ == other.parameter_;
   }
@@ -127,7 +131,7 @@ std::ostream& operator<<(std::ostream&, FrameStateCallInfo const&);
 
 // Interface for building common operators that can be used at any level of IR,
 // including JavaScript, mid-level, and low-level.
-class CommonOperatorBuilder FINAL {
+class CommonOperatorBuilder FINAL : public ZoneObject {
  public:
   explicit CommonOperatorBuilder(Zone* zone);
 
@@ -170,6 +174,8 @@ class CommonOperatorBuilder FINAL {
 
   const CommonOperatorBuilderImpl& impl_;
   Zone* const zone_;
+
+  DISALLOW_COPY_AND_ASSIGN(CommonOperatorBuilder);
 };
 
 }  // namespace compiler

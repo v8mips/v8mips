@@ -3551,7 +3551,7 @@ class Dictionary: public HashTable<Derived, Shape, Key> {
   int NumberOfEnumElements();
 
   // Returns true if the dictionary contains any elements that are non-writable,
-  // non-configurable, or have getters/setters.
+  // non-configurable, non-enumerable, or have getters/setters.
   bool HasComplexElements();
 
   enum SortMode { UNSORTED, SORTED };
@@ -6118,8 +6118,6 @@ class Map: public HeapObject {
   // In case of duplicates, the latest descriptor is used.
   static void AppendCallbackDescriptors(Handle<Map> map,
                                         Handle<Object> descriptors);
-
-  static inline int SlackForArraySize(int old_size, int size_limit);
 
   static void EnsureDescriptorSlack(Handle<Map> map, int slack);
 
