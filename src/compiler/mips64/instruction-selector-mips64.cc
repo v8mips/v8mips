@@ -735,6 +735,67 @@ void InstructionSelector::VisitBranch(Node* branch, BasicBlock* tbranch,
   // Try to combine the branch with a comparison.
   if (CanCover(user, value)) {
     switch (value->opcode()) {
+      case IrOpcode::kWord32Equal:
+        cont.OverwriteAndNegateIfEqual(kEqual);
+        return VisitWord32Compare(this, value, &cont);
+      case IrOpcode::kInt32LessThan:
+        cont.OverwriteAndNegateIfEqual(kSignedLessThan);
+        return VisitWord32Compare(this, value, &cont);
+      case IrOpcode::kInt32LessThanOrEqual:
+        cont.OverwriteAndNegateIfEqual(kSignedLessThanOrEqual);
+        return VisitWord32Compare(this, value, &cont);
+      case IrOpcode::kUint32LessThan:
+        cont.OverwriteAndNegateIfEqual(kUnsignedLessThan);
+        return VisitWord32Compare(this, value, &cont);
+      case IrOpcode::kUint32LessThanOrEqual:
+        cont.OverwriteAndNegateIfEqual(kUnsignedLessThanOrEqual);
+        return VisitWord32Compare(this, value, &cont);
+      case IrOpcode::kWord64Equal:
+        cont.OverwriteAndNegateIfEqual(kEqual);
+        return VisitWordCompare(this, value, kMips64Cmp, &cont, false);
+      case IrOpcode::kInt64LessThan:
+        cont.OverwriteAndNegateIfEqual(kSignedLessThan);
+        return VisitWordCompare(this, value, kMips64Cmp, &cont, false);
+      case IrOpcode::kInt64LessThanOrEqual:
+        cont.OverwriteAndNegateIfEqual(kSignedLessThanOrEqual);
+        return VisitWordCompare(this, value, kMips64Cmp, &cont, false);
+      case IrOpcode::kUint64LessThan:
+        cont.OverwriteAndNegateIfEqual(kUnsignedLessThan);
+        return VisitWordCompare(this, value, kMips64Cmp, &cont, false);
+      case IrOpcode::kFloat64Equal:
+        cont.OverwriteAndNegateIfEqual(kUnorderedEqual);
+        return VisitFloat64Compare(this, value, &cont);
+      case IrOpcode::kFloat64LessThan:
+        cont.OverwriteAndNegateIfEqual(kUnorderedLessThan);
+        return VisitFloat64Compare(this, value, &cont);
+      case IrOpcode::kFloat64LessThanOrEqual:
+        cont.OverwriteAndNegateIfEqual(kUnorderedLessThanOrEqual);
+        return VisitFloat64Compare(this, value, &cont);
+      case IrOpcode::kProjection:
+        // Check if this is the overflow output projection of an
+        // <Operation>WithOverflow node.
+        if (OpParameter<size_t>(value) == 1u) {
+          // We cannot combine the <Operation>WithOverflow with this branch
+          // unless the 0th projection (the use of the actual value of the
+          // <Operation> is either NULL, which means there's no use of the
+          // actual value, or was already defined, which means it is scheduled
+          // *AFTER* this branch).
+          Node* node = value->InputAt(0);
+          Node* result = node->FindProjection(0);
+          if (result == NULL || IsDefined(result)) {
+            switch (node->opcode()) {
+              case IrOpcode::kInt32AddWithOverflow:
+                cont.OverwriteAndNegateIfEqual(kOverflow);
+                return VisitBinop(this, node, kMips64Dadd, &cont);
+              case IrOpcode::kInt32SubWithOverflow:
+                cont.OverwriteAndNegateIfEqual(kOverflow);
+                return VisitBinop(this, node, kMips64Dsub, &cont);
+              default:
+                break;
+            }
+          }
+        }
+        break;
       case IrOpcode::kWord32And:
         // TODO(plind): understand the significance of 'IR and' special case.
         return VisitWordCompare(this, value, kMips64Tst32, &cont, true);
