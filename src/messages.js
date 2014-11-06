@@ -20,6 +20,7 @@ var kMessages = {
   unexpected_strict_reserved:    ["Unexpected strict mode reserved word"],
   unexpected_eos:                ["Unexpected end of input"],
   malformed_regexp:              ["Invalid regular expression: /", "%0", "/: ", "%1"],
+  malformed_regexp_flags:        ["Invalid regular expression flags"],
   unterminated_regexp:           ["Invalid regular expression: missing /"],
   regexp_flags:                  ["Cannot supply flags when constructing one RegExp from another"],
   incompatible_method_receiver:  ["Method ", "%0", " called on incompatible receiver ", "%1"],
@@ -365,6 +366,23 @@ function MakeEvalError(type, args) {
 
 function MakeError(type, args) {
   return MakeGenericError($Error, type, args);
+}
+
+
+// The embedded versions are called from unoptimized code, with embedded
+// arguments. Those arguments cannot be arrays, which are context-dependent.
+function MakeTypeErrorEmbedded(type, arg) {
+  return MakeGenericError($TypeError, type, [arg]);
+}
+
+
+function MakeSyntaxErrorEmbedded(type, arg) {
+  return MakeGenericError($SyntaxError, type, [arg]);
+}
+
+
+function MakeReferenceErrorEmbedded(type, arg) {
+  return MakeGenericError($ReferenceError, type, [arg]);
 }
 
 /**

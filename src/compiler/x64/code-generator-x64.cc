@@ -34,12 +34,7 @@ class X64OperandConverter : public InstructionOperandConverter {
   Operand OutputOperand() { return ToOperand(instr_->Output()); }
 
   Immediate ToImmediate(InstructionOperand* operand) {
-    Constant constant = ToConstant(operand);
-    if (constant.type() == Constant::kInt32) {
-      return Immediate(constant.ToInt32());
-    }
-    UNREACHABLE();
-    return Immediate(-1);
+    return Immediate(ToConstant(operand).ToInt32());
   }
 
   Operand ToOperand(InstructionOperand* op, int extra = 0) {
@@ -446,16 +441,15 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
         __ cvttsd2si(i.OutputRegister(), i.InputOperand(0));
       }
       break;
-    case kSSEFloat64ToUint32:
+    case kSSEFloat64ToUint32: {
       if (instr->InputAt(0)->IsDoubleRegister()) {
         __ cvttsd2siq(i.OutputRegister(), i.InputDoubleRegister(0));
       } else {
         __ cvttsd2siq(i.OutputRegister(), i.InputOperand(0));
       }
-      __ andl(i.OutputRegister(), i.OutputRegister());  // clear upper bits.
-      // TODO(turbofan): generated code should not look at the upper 32 bits
-      // of the result, but those bits could escape to the outside world.
+      __ AssertZeroExtended(i.OutputRegister());
       break;
+    }
     case kSSEInt32ToFloat64:
       if (instr->InputAt(0)->IsRegister()) {
         __ cvtlsi2sd(i.OutputDoubleRegister(), i.InputRegister(0));
