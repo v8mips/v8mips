@@ -64,6 +64,14 @@ class Mips64OperandGenerator FINAL : public OperandGenerator {
 };
 
 
+static void VisitRR(InstructionSelector* selector, ArchOpcode opcode,
+                     Node* node) {
+  Mips64OperandGenerator g(selector);
+  selector->Emit(opcode, g.DefineAsRegister(node),
+                 g.UseRegister(node->InputAt(0)));
+}
+
+
 static void VisitRRR(InstructionSelector* selector, ArchOpcode opcode,
                      Node* node) {
   Mips64OperandGenerator g(selector);
@@ -556,14 +564,18 @@ void InstructionSelector::VisitFloat64Sqrt(Node* node) {
 }
 
 
-void InstructionSelector::VisitFloat64Floor(Node* node) { UNREACHABLE(); }
+void InstructionSelector::VisitFloat64Floor(Node* node) {
+  VisitRR(this, kMips64FloorD, node);
+}
 
 
-void InstructionSelector::VisitFloat64Ceil(Node* node) { UNREACHABLE(); }
+void InstructionSelector::VisitFloat64Ceil(Node* node) {
+  VisitRR(this, kMips64CeilD, node);
+}
 
 
 void InstructionSelector::VisitFloat64RoundTruncate(Node* node) {
-  UNREACHABLE();
+  VisitRR(this, kMips64RoundTruncateD, node);
 }
 
 
@@ -938,10 +950,12 @@ void InstructionSelector::VisitFloat64LessThanOrEqual(Node* node) {
 // static
 MachineOperatorBuilder::Flags
 InstructionSelector::SupportedMachineOperatorFlags() {
-  return MachineOperatorBuilder::kInt32DivIsSafe |
-         MachineOperatorBuilder::kInt32ModIsSafe |
-         MachineOperatorBuilder::kUint32DivIsSafe |
-         MachineOperatorBuilder::kUint32ModIsSafe;
+  if (CpuFeatures::IsSupported(MIPSr2) || CpuFeatures::IsSupported(MIPSr6)) {
+    return MachineOperatorBuilder::kFloat64Floor |
+           MachineOperatorBuilder::kFloat64Ceil |
+           MachineOperatorBuilder::kFloat64RoundTruncate;
+  }
+  return MachineOperatorBuilder::kNoFlags;
 }
 
 }  // namespace compiler

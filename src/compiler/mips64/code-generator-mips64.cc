@@ -354,6 +354,21 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       __ MovFromFloatResult(i.OutputDoubleRegister());
       break;
     }
+    case kMips64FloorD: {
+      __ floor_l_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0));
+      __ cvt_d_l(i.OutputDoubleRegister(), i.OutputDoubleRegister());
+      break;
+    }
+    case kMips64CeilD: {
+      __ ceil_l_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0));
+      __ cvt_d_l(i.OutputDoubleRegister(), i.OutputDoubleRegister());
+      break;
+    }
+    case kMips64RoundTruncateD: {
+      __ round_l_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0));
+      __ cvt_d_l(i.OutputDoubleRegister(), i.OutputDoubleRegister());
+      break;
+    }
     case kMips64SqrtD: {
       __ sqrt_d(i.OutputDoubleRegister(), i.InputDoubleRegister(0));
       break;

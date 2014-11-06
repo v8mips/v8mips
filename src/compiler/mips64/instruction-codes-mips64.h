@@ -54,6 +54,9 @@ namespace compiler {
   V(Mips64DivD)                      \
   V(Mips64ModD)                      \
   V(Mips64SqrtD)                     \
+  V(Mips64FloorD)                    \
+  V(Mips64CeilD)                     \
+  V(Mips64RoundTruncateD)            \
   V(Mips64CvtSD)                     \
   V(Mips64CvtDS)                     \
   V(Mips64TruncWD)                   \
