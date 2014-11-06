@@ -58,13 +58,14 @@ class MipsOperandConverter FINAL : public InstructionOperandConverter {
     switch (constant.type()) {
       case Constant::kInt32:
         return Operand(constant.ToInt32());
+      case Constant::kInt64:
+        return Operand(constant.ToInt64());
       case Constant::kFloat32:
         return Operand(
             isolate()->factory()->NewNumber(constant.ToFloat32(), TENURED));
       case Constant::kFloat64:
         return Operand(
             isolate()->factory()->NewNumber(constant.ToFloat64(), TENURED));
-      case Constant::kInt64:
       case Constant::kExternalReference:
       case Constant::kHeapObject:
         // TODO(plind): Maybe we should handle ExtRef & HeapObj here?
