@@ -378,8 +378,11 @@ void InstructionSelector::VisitInt32MulHigh(Node* node) {
 
 void InstructionSelector::VisitUint32MulHigh(Node* node) {
   Mips64OperandGenerator g(this);
-  Emit(kMips64MulHighU, g.DefineAsRegister(node), g.UseRegister(node->InputAt(0)),
+  InstructionOperand* const dmul_operand = g.TempRegister();
+  Emit(kMips64MulHighU, dmul_operand, g.UseRegister(node->InputAt(0)),
        g.UseRegister(node->InputAt(1)));
+  Emit(kMips64Ext, g.DefineAsRegister(node), dmul_operand, g.TempImmediate(0),
+       g.TempImmediate(32));
 }
 
 
