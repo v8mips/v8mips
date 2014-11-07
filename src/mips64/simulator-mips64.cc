@@ -2088,7 +2088,8 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           *i64hilo = rs * rt;
           break;
         case MULTU:
-          *u64hilo = static_cast<uint64_t>(rs_u) * static_cast<uint64_t>(rt_u);
+          *u64hilo = static_cast<uint64_t>(rs_u & 0xffffffff) *
+              static_cast<uint64_t>(rt_u & 0xffffffff);
           break;
         case DMULT:  // DMULT == D_MUL_MUH.
           if (kArchVariant != kMips64r6) {
