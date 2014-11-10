@@ -231,6 +231,7 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       break;
     case kMips64Xor32:
       __ Xor(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
+      __ Ext(i.OutputRegister(), i.OutputRegister(), 0, 32);
       break;
     case kMips64Xor:
       __ Xor(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
@@ -307,12 +308,11 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       break;
     case kMips64Tst:
     case kMips64Tst32:
-      // Psuedo-instruction used for tst/branch.
-      __ And(kCompareReg, i.InputRegister(0), i.InputOperand(1));
+      // Pseudo-instruction used for cmp/branch. No opcode emitted here.
       break;
     case kMips64Cmp:
     case kMips64Cmp32:
-      // Psuedo-instruction used for cmp/branch. No opcode emitted here.
+      // Pseudo-instruction used for cmp/branch. No opcode emitted here.
       break;
     case kMips64Mov:
       // TODO(plind): Should we combine mov/li like this, or use separate instr?
@@ -507,7 +507,6 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
   //    not separated by other instructions.
 
   if (instr->arch_opcode() == kMips64Tst) {
-    // The kMips64Tst psuedo-instruction emits And to 'kCompareReg' register.
     switch (condition) {
       case kNotEqual:
         cc = ne;
@@ -519,7 +518,8 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
         UNSUPPORTED_COND(kMips64Tst, condition);
         break;
     }
-    __ Branch(tlabel, cc, kCompareReg, Operand(zero_reg));
+    __ And(at, i.InputRegister(0), i.InputOperand(1));
+    __ Branch(tlabel, cc, at, Operand(zero_reg));
   } else if (instr->arch_opcode() == kMips64Tst32) {
     switch (condition) {
       case kNotEqual:
@@ -537,8 +537,9 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
     // This is a disadvantage to perform 32-bit operation on MIPS64.
     // Try to force globally in front-end Word64 representation to be preferred
     // for MIPS64 even for Word32.
-    __ Ext(kCompareReg, kCompareReg, 0, 32);
-    __ Branch(tlabel, cc, kCompareReg, Operand(zero_reg));
+    __ And(at, i.InputRegister(0), i.InputOperand(1));
+    __ Ext(at, at, 0, 32);
+    __ Branch(tlabel, cc, at, Operand(zero_reg));
   } else if (instr->arch_opcode() == kMips64Dadd ||
              instr->arch_opcode() == kMips64Dsub) {
     switch (condition) {
@@ -735,7 +736,6 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
   // TODO(plind): Add CHECK() to ensure that test/cmp and this branch were
   //    not separated by other instructions.
   if (instr->arch_opcode() == kMips64Tst) {
-    // The kMips64Tst psuedo-instruction emits And to 'kCompareReg' register.
     switch (condition) {
       case kNotEqual:
         cc = ne;
@@ -747,7 +747,8 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
         UNSUPPORTED_COND(kMips64Tst, condition);
         break;
     }
-    __ Branch(USE_DELAY_SLOT, &done, cc, kCompareReg, Operand(zero_reg));
+    __ And(at, i.InputRegister(0), i.InputOperand(1));
+    __ Branch(USE_DELAY_SLOT, &done, cc, at, Operand(zero_reg));
     __ li(result, Operand(1));  // In delay slot.
   } else if (instr->arch_opcode() == kMips64Tst32) {
     // The kMips64Tst psuedo-instruction emits And to 'kCompareReg' register.
@@ -764,8 +765,9 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
     }
     // Zero-extend register on MIPS64 only 64-bit operand
     // branch and compare op. is available.
-    __ Ext(kCompareReg, kCompareReg, 0, 32);
-    __ Branch(USE_DELAY_SLOT, &done, cc, kCompareReg, Operand(zero_reg));
+    __ And(at, i.InputRegister(0), i.InputOperand(1));
+    __ Ext(at, at, 0, 32);
+    __ Branch(USE_DELAY_SLOT, &done, cc, at, Operand(zero_reg));
     __ li(result, Operand(1));  // In delay slot.
   } else if (instr->arch_opcode() == kMips64Dadd ||
              instr->arch_opcode() == kMips64Dsub) {
