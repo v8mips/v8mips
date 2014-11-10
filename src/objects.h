@@ -3145,12 +3145,9 @@ class DescriptorArray: public FixedArray {
 
 enum SearchMode { ALL_ENTRIES, VALID_ENTRIES };
 
-template<SearchMode search_mode, typename T>
-inline int LinearSearch(T* array, Name* name, int len, int valid_entries);
-
-
-template<SearchMode search_mode, typename T>
-inline int Search(T* array, Name* name, int valid_entries = 0);
+template <SearchMode search_mode, typename T>
+inline int Search(T* array, Name* name, int valid_entries = 0,
+                  int* out_insertion_index = NULL);
 
 
 // HashTable is a subclass of FixedArray that implements a hash table
@@ -6121,6 +6118,8 @@ class Map: public HeapObject {
   // In case of duplicates, the latest descriptor is used.
   static void AppendCallbackDescriptors(Handle<Map> map,
                                         Handle<Object> descriptors);
+
+  static inline int SlackForArraySize(int old_size, int size_limit);
 
   static void EnsureDescriptorSlack(Handle<Map> map, int slack);
 

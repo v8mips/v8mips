@@ -2036,18 +2036,26 @@ void MacroAssembler::BranchShort(int16_t offset, Condition cond, Register rs,
         b(offset);
         break;
       case eq:
-        // We don't want any other register but scratch clobbered.
-        DCHECK(!scratch.is(rs));
-        r2 = scratch;
-        li(r2, rt);
-        beq(rs, r2, offset);
+        if (rt.imm32_ == 0) {
+          beq(rs, zero_reg, offset);
+        } else {
+          // We don't want any other register but scratch clobbered.
+          DCHECK(!scratch.is(rs));
+          r2 = scratch;
+          li(r2, rt);
+          beq(rs, r2, offset);
+        }
         break;
       case ne:
-        // We don't want any other register but scratch clobbered.
-        DCHECK(!scratch.is(rs));
-        r2 = scratch;
-        li(r2, rt);
-        bne(rs, r2, offset);
+        if (rt.imm32_ == 0) {
+          bne(rs, zero_reg, offset);
+        } else {
+          // We don't want any other register but scratch clobbered.
+          DCHECK(!scratch.is(rs));
+          r2 = scratch;
+          li(r2, rt);
+          bne(rs, r2, offset);
+        }
         break;
       // Signed comparison.
       case greater:
@@ -2289,18 +2297,28 @@ void MacroAssembler::BranchShort(Label* L, Condition cond, Register rs,
         b(offset);
         break;
       case eq:
-        DCHECK(!scratch.is(rs));
-        r2 = scratch;
-        li(r2, rt);
-        offset = shifted_branch_offset(L, false);
-        beq(rs, r2, offset);
+        if (rt.imm32_ == 0) {
+          offset = shifted_branch_offset(L, false);
+          beq(rs, zero_reg, offset);
+        } else {
+          DCHECK(!scratch.is(rs));
+          r2 = scratch;
+          li(r2, rt);
+          offset = shifted_branch_offset(L, false);
+          beq(rs, r2, offset);
+        }
         break;
       case ne:
-        DCHECK(!scratch.is(rs));
-        r2 = scratch;
-        li(r2, rt);
-        offset = shifted_branch_offset(L, false);
-        bne(rs, r2, offset);
+        if (rt.imm32_ == 0) {
+          offset = shifted_branch_offset(L, false);
+          bne(rs, zero_reg, offset);
+        } else {
+          DCHECK(!scratch.is(rs));
+          r2 = scratch;
+          li(r2, rt);
+          offset = shifted_branch_offset(L, false);
+          bne(rs, r2, offset);
+        }
         break;
       // Signed comparison.
       case greater:

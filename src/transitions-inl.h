@@ -140,13 +140,16 @@ Object* TransitionArray::GetTargetValue(int transition_number) {
 }
 
 
-int TransitionArray::Search(Name* name) {
+int TransitionArray::Search(Name* name, int* out_insertion_index) {
   if (IsSimpleTransition()) {
     Name* key = GetKey(kSimpleTransitionIndex);
     if (key->Equals(name)) return kSimpleTransitionIndex;
+    if (out_insertion_index != NULL) {
+      *out_insertion_index = key->Hash() > name->Hash() ? 0 : 1;
+    }
     return kNotFound;
   }
-  return internal::Search<ALL_ENTRIES>(this, name);
+  return internal::Search<ALL_ENTRIES>(this, name, 0, out_insertion_index);
 }
 
 
@@ -157,6 +160,15 @@ void TransitionArray::NoIncrementalWriteBarrierSet(int transition_number,
       this, ToKeyIndex(transition_number), key);
   FixedArray::NoIncrementalWriteBarrierSet(
       this, ToTargetIndex(transition_number), target);
+}
+
+
+void TransitionArray::SetNumberOfTransitions(int number_of_transitions) {
+  if (IsFullTransitionArray()) {
+    DCHECK(number_of_transitions <= number_of_transitions_storage());
+    WRITE_FIELD(this, kTransitionLengthOffset,
+                Smi::FromInt(number_of_transitions));
+  }
 }
 
 

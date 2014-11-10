@@ -935,6 +935,11 @@ FunctionLiteral* Parser::ParseLazy() {
   }
   Handle<SharedFunctionInfo> shared_info = info()->shared_info();
 
+  // Lazy parsing is only done during runtime, when we're already using the
+  // heap. So make the AstValueFactory also internalize all values when it
+  // creates them (this is more efficient).
+  ast_value_factory()->Internalize(isolate());
+
   // Initialize parser state.
   source = String::Flatten(source);
   FunctionLiteral* result;
@@ -3203,7 +3208,7 @@ Statement* Parser::ParseForStatement(ZoneList<const AstRawString*>* labels,
       Scanner::Location lhs_location = scanner()->peek_location();
       Expression* expression = ParseExpression(false, CHECK_OK);
       ForEachStatement::VisitMode mode;
-      bool accept_OF = expression->AsVariableProxy();
+      bool accept_OF = expression->IsVariableProxy();
 
       if (CheckInOrOf(accept_OF, &mode)) {
         expression = this->CheckAndRewriteReferenceExpression(
