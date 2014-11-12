@@ -712,9 +712,25 @@ void VisitWord64Compare(InstructionSelector* selector, Node* node,
 }  // namespace
 
 
+void EmitWordCompareZero(InstructionSelector* selector, InstructionCode opcode,
+                          Node* value, FlagsContinuation* cont) {
+  Mips64OperandGenerator g(selector);
+  InstructionOperand* const value_operand = g.UseRegister(value);
+  if (cont->IsBranch()) {
+    selector->Emit(opcode, nullptr, value_operand, g.TempImmediate(0),
+                   g.Label(cont->true_block()),
+                   g.Label(cont->false_block()))->MarkAsControl();
+  } else {
+    selector->Emit(opcode, g.DefineAsRegister(cont->result()), value_operand,
+                   g.TempImmediate(0));
+  }
+}
+
+
 // Shared routine for word comparisons against zero.
 void VisitWordCompareZero(InstructionSelector* selector, Node* user,
                           Node* value, FlagsContinuation* cont) {
+  InstructionCode opcode = cont->Encode(kMips64Cmp);
   while (selector->CanCover(user, value)) {
     switch (value->opcode()) {
       case IrOpcode::kWord32Equal: {
@@ -725,6 +741,7 @@ void VisitWordCompareZero(InstructionSelector* selector, Node* user,
           user = value;
           value = m.left().node();
           cont->Negate();
+          opcode = cont->Encode(kMips64Cmp32);
           continue;
         }
         cont->OverwriteAndNegateIfEqual(kEqual);
@@ -810,17 +827,8 @@ void VisitWordCompareZero(InstructionSelector* selector, Node* user,
   }
 
   // Continuation could not be combined with a compare, emit compare against 0.
-  Mips64OperandGenerator g(selector);
-  InstructionCode const opcode = cont->Encode(kMips64Cmp);
-  InstructionOperand* const value_operand = g.UseRegister(value);
-  if (cont->IsBranch()) {
-    selector->Emit(opcode, nullptr, value_operand, g.TempImmediate(0),
-                   g.Label(cont->true_block()),
-                   g.Label(cont->false_block()))->MarkAsControl();
-  } else {
-    selector->Emit(opcode, g.DefineAsRegister(cont->result()), value_operand,
-                   g.TempImmediate(0));
-  }
+  EmitWordCompareZero(selector, opcode, value, cont);
+
 }
 
 

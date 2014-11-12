@@ -231,7 +231,6 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
       break;
     case kMips64Xor32:
       __ Xor(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
-      __ Ext(i.OutputRegister(), i.OutputRegister(), 0, 32);
       break;
     case kMips64Xor:
       __ Xor(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
