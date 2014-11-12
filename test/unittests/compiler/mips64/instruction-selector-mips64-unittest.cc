@@ -167,13 +167,13 @@ const IntCmp kCmpInstructions[] = {
      1U},
     {{&RawMachineAssembler::WordNotEqual, "WordNotEqual", kMips64Cmp,
       kMachInt64},
-     2U},
+     1U},
     {{&RawMachineAssembler::Word32Equal, "Word32Equal", kMips64Cmp32,
       kMachInt32},
      1U},
     {{&RawMachineAssembler::Word32NotEqual, "Word32NotEqual", kMips64Cmp32,
       kMachInt32},
-     2U},
+     1U},
     {{&RawMachineAssembler::Int32LessThan, "Int32LessThan", kMips64Cmp32,
       kMachInt32},
      1U},
@@ -744,7 +744,7 @@ INSTANTIATE_TEST_CASE_P(InstructionSelectorTest,
 
 
 // ----------------------------------------------------------------------------
-// kMips64Tst testing.
+// kMips64Cmp with zero testing.
 // ----------------------------------------------------------------------------
 
 
@@ -754,10 +754,9 @@ TEST_F(InstructionSelectorTest, Word32EqualWithZero){
     m.Return(m.Word32Equal(m.Parameter(0), m.Int32Constant(0)));
     Stream s = m.Build();
     ASSERT_EQ(1U, s.size());
-    EXPECT_EQ(kMips64Tst32, s[0]->arch_opcode());
+    EXPECT_EQ(kMips64Cmp32, s[0]->arch_opcode());
     EXPECT_EQ(kMode_None, s[0]->addressing_mode());
     ASSERT_EQ(2U, s[0]->InputCount());
-    EXPECT_EQ(s.ToVreg(s[0]->InputAt(0)), s.ToVreg(s[0]->InputAt(1)));
     EXPECT_EQ(1U, s[0]->OutputCount());
     EXPECT_EQ(kFlags_set, s[0]->flags_mode());
     EXPECT_EQ(kEqual, s[0]->flags_condition());
@@ -767,10 +766,37 @@ TEST_F(InstructionSelectorTest, Word32EqualWithZero){
     m.Return(m.Word32Equal(m.Int32Constant(0), m.Parameter(0)));
     Stream s = m.Build();
     ASSERT_EQ(1U, s.size());
-    EXPECT_EQ(kMips64Tst32, s[0]->arch_opcode());
+    EXPECT_EQ(kMips64Cmp32, s[0]->arch_opcode());
     EXPECT_EQ(kMode_None, s[0]->addressing_mode());
     ASSERT_EQ(2U, s[0]->InputCount());
-    EXPECT_EQ(s.ToVreg(s[0]->InputAt(0)), s.ToVreg(s[0]->InputAt(1)));
+    EXPECT_EQ(1U, s[0]->OutputCount());
+    EXPECT_EQ(kFlags_set, s[0]->flags_mode());
+    EXPECT_EQ(kEqual, s[0]->flags_condition());
+  }
+}
+
+
+TEST_F(InstructionSelectorTest, Word64EqualWithZero){
+  {
+    StreamBuilder m(this, kMachInt64, kMachInt64);
+    m.Return(m.Word64Equal(m.Parameter(0), m.Int64Constant(0)));
+    Stream s = m.Build();
+    ASSERT_EQ(1U, s.size());
+    EXPECT_EQ(kMips64Cmp, s[0]->arch_opcode());
+    EXPECT_EQ(kMode_None, s[0]->addressing_mode());
+    ASSERT_EQ(2U, s[0]->InputCount());
+    EXPECT_EQ(1U, s[0]->OutputCount());
+    EXPECT_EQ(kFlags_set, s[0]->flags_mode());
+    EXPECT_EQ(kEqual, s[0]->flags_condition());
+  }
+  {
+    StreamBuilder m(this, kMachInt64, kMachInt64);
+    m.Return(m.Word64Equal(m.Int32Constant(0), m.Parameter(0)));
+    Stream s = m.Build();
+    ASSERT_EQ(1U, s.size());
+    EXPECT_EQ(kMips64Cmp, s[0]->arch_opcode());
+    EXPECT_EQ(kMode_None, s[0]->addressing_mode());
+    ASSERT_EQ(2U, s[0]->InputCount());
     EXPECT_EQ(1U, s[0]->OutputCount());
     EXPECT_EQ(kFlags_set, s[0]->flags_mode());
     EXPECT_EQ(kEqual, s[0]->flags_condition());
