@@ -217,20 +217,13 @@ void CodeGenerator::AssembleArchInstruction(Instruction* instr) {
     case kMips64DmodU:
       __ Dmodu(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
-    case kMips64And32:
       __ And(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
     case kMips64And:
       __ And(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
-    case kMips64Or32:
-      __ Or(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
-      break;
     case kMips64Or:
       __ Or(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
-      break;
-    case kMips64Xor32:
-      __ Xor(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));
       break;
     case kMips64Xor:
       __ Xor(i.OutputRegister(), i.InputRegister(0), i.InputOperand(1));

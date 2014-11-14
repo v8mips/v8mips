@@ -28,11 +28,8 @@ namespace compiler {
   V(Mips64Dmod)                      \
   V(Mips64ModU)                      \
   V(Mips64DmodU)                     \
-  V(Mips64And32)                     \
   V(Mips64And)                       \
-  V(Mips64Or32)                      \
   V(Mips64Or)                        \
-  V(Mips64Xor32)                     \
   V(Mips64Xor)                       \
   V(Mips64Shl)                       \
   V(Mips64Shr)                       \

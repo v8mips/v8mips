@@ -46,7 +46,6 @@ class Mips64OperandGenerator FINAL : public OperandGenerator {
       case kMips64Dsar:
       case kMips64Dshr:
         return is_uint6(value);
-      case kMips64Xor32:
       case kMips64Xor:
         return is_uint16(value);
       case kMips64Ldc1:
@@ -241,7 +240,7 @@ void InstructionSelector::VisitStore(Node* node) {
 
 
 void InstructionSelector::VisitWord32And(Node* node) {
-  VisitBinop(this, node, kMips64And32);
+  VisitBinop(this, node, kMips64And);
 }
 
 
@@ -251,7 +250,7 @@ void InstructionSelector::VisitWord64And(Node* node) {
 
 
 void InstructionSelector::VisitWord32Or(Node* node) {
-  VisitBinop(this, node, kMips64Or32);
+  VisitBinop(this, node, kMips64Or);
 }
 
 
@@ -261,7 +260,7 @@ void InstructionSelector::VisitWord64Or(Node* node) {
 
 
 void InstructionSelector::VisitWord32Xor(Node* node) {
-  VisitBinop(this, node, kMips64Xor32);
+  VisitBinop(this, node, kMips64Xor);
 }
 
 

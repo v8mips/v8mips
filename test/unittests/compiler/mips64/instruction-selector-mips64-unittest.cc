@@ -70,11 +70,11 @@ struct Conversion {
 
 
 const MachInst2 kLogicalInstructions[] = {
-    {&RawMachineAssembler::Word32And, "Word32And", kMips64And32, kMachInt32},
+    {&RawMachineAssembler::Word32And, "Word32And", kMips64And, kMachInt32},
     {&RawMachineAssembler::Word64And, "Word64And", kMips64And  , kMachInt64},
-    {&RawMachineAssembler::Word32Or , "Word32Or" , kMips64Or32 , kMachInt32},
+    {&RawMachineAssembler::Word32Or , "Word32Or" , kMips64Or , kMachInt32},
     {&RawMachineAssembler::Word64Or , "Word64Or" , kMips64Or   , kMachInt64},
-    {&RawMachineAssembler::Word32Xor, "Word32Xor", kMips64Xor32, kMachInt32},
+    {&RawMachineAssembler::Word32Xor, "Word32Xor", kMips64Xor, kMachInt32},
     {&RawMachineAssembler::Word64Xor, "Word64Xor", kMips64Xor  , kMachInt64}};
 
 
