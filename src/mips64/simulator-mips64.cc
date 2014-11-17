@@ -2242,7 +2242,17 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           uint16_t lsb = sa;
           uint16_t size = msb + 1;
           uint64_t mask = (1ULL << size) - 1;
-          *alu_out = static_cast<uint64_t>((rs_u & (mask << lsb)) >> lsb);
+          *alu_out = static_cast<int32_t>((rs_u & (mask << lsb)) >> lsb);
+          break;
+        }
+        case DEXT: {   // Mips32r2 instruction.
+          // Interpret rd field as 5-bit msb of extract.
+          uint16_t msb = rd_reg;
+          // Interpret sa field as 5-bit lsb of extract.
+          uint16_t lsb = sa;
+          uint16_t size = msb + 1;
+          uint64_t mask = (1ULL << size) - 1;
+          *alu_out = static_cast<int64_t>((rs_u & (mask << lsb)) >> lsb);
           break;
         }
         default:
@@ -2785,6 +2795,11 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           break;
         case EXT:
           // Ext instr leaves result in Rt, rather than Rd.
+          set_register(rt_reg, alu_out);
+          TraceRegWr(alu_out);
+          break;
+        case DEXT:
+          // Dext instr leaves result in Rt, rather than Rd.
           set_register(rt_reg, alu_out);
           TraceRegWr(alu_out);
           break;

@@ -530,7 +530,7 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
     // Try to force globally in front-end Word64 representation to be preferred
     // for MIPS64 even for Word32.
     __ And(at, i.InputRegister(0), i.InputOperand(1));
-    __ Ext(at, at, 0, 32);
+    __ Dext(at, at, 0, 32);
     __ Branch(tlabel, cc, at, Operand(zero_reg));
   } else if (instr->arch_opcode() == kMips64Dadd ||
              instr->arch_opcode() == kMips64Dsub) {
@@ -647,9 +647,9 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr,
       case kUnsignedGreaterThan:
        // Zero-extend registers on MIPS64 only 64-bit operand
        // branch and compare op. is available.
-        __ Ext(i.InputRegister(0), i.InputRegister(0), 0, 32);
+        __ Dext(i.InputRegister(0), i.InputRegister(0), 0, 32);
         if (instr->InputAt(1)->IsRegister()) {
-          __ Ext(i.InputRegister(1), i.InputRegister(1), 0, 32);
+          __ Dext(i.InputRegister(1), i.InputRegister(1), 0, 32);
         }
         break;
       default:
@@ -758,7 +758,7 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
     // Zero-extend register on MIPS64 only 64-bit operand
     // branch and compare op. is available.
     __ And(at, i.InputRegister(0), i.InputOperand(1));
-    __ Ext(at, at, 0, 32);
+    __ Dext(at, at, 0, 32);
     __ Branch(USE_DELAY_SLOT, &done, cc, at, Operand(zero_reg));
     __ li(result, Operand(1));  // In delay slot.
   } else if (instr->arch_opcode() == kMips64Dadd ||
@@ -877,9 +877,9 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
       case kUnsignedGreaterThan:
        // Zero-extend registers on MIPS64 only 64-bit operand
        // branch and compare op. is available.
-        __ Ext(left, left, 0, 32);
+        __ Dext(left, left, 0, 32);
         if (instr->InputAt(1)->IsRegister()) {
-          __ Ext(i.InputRegister(1), i.InputRegister(1), 0, 32);
+          __ Dext(i.InputRegister(1), i.InputRegister(1), 0, 32);
         }
         break;
       default:

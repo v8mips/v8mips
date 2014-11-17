@@ -56,6 +56,35 @@ class Mips64OperandGenerator FINAL : public OperandGenerator {
     }
   }
 
+
+  bool CanBeImmediate(Node* node, InstructionCode opcode,
+                      FlagsContinuation* cont) {
+    int64_t value;
+    if (node->opcode() == IrOpcode::kInt32Constant)
+      value = OpParameter<int32_t>(node);
+    else if (node->opcode() == IrOpcode::kInt64Constant)
+      value = OpParameter<int64_t>(node);
+    else
+      return false;
+    switch (ArchOpcodeField::decode(opcode)) {
+      case kMips64Cmp32:
+        switch (cont->condition()) {
+          case kUnsignedLessThan:
+          case kUnsignedGreaterThanOrEqual:
+          case kUnsignedLessThanOrEqual:
+          case kUnsignedGreaterThan:
+            // Immediate operands for unsigned 32-bit compare operations
+            // should not be sign-extended.
+            return is_uint15(value);
+          default:
+            return false;
+        }
+      default:
+        return is_int16(value);
+    }
+  }
+
+
  private:
   bool ImmediateFitsAddrMode1Instruction(int32_t imm) const {
     TRACE_UNIMPL();
@@ -310,7 +339,6 @@ void InstructionSelector::VisitWord64Ror(Node* node) {
 
 void InstructionSelector::VisitInt32Add(Node* node) {
   Mips64OperandGenerator g(this);
-
   // TODO(plind): Consider multiply & add optimization from arm port.
   VisitBinop(this, node, kMips64Add);
 }
@@ -318,7 +346,6 @@ void InstructionSelector::VisitInt32Add(Node* node) {
 
 void InstructionSelector::VisitInt64Add(Node* node) {
   Mips64OperandGenerator g(this);
-
   // TODO(plind): Consider multiply & add optimization from arm port.
   VisitBinop(this, node, kMips64Dadd);
 }
@@ -657,7 +684,6 @@ static void VisitCompare(InstructionSelector* selector, InstructionCode opcode,
                    g.Label(cont->false_block()))->MarkAsControl();
   } else {
     DCHECK(cont->IsSet());
-    // TODO(plind): Revisit and test this path.
     selector->Emit(opcode, g.DefineAsRegister(cont->result()), left, right);
   }
 }
@@ -683,10 +709,10 @@ void VisitWordCompare(InstructionSelector* selector, Node* node,
   Node* right = node->InputAt(1);
 
   // Match immediates on left or right side of comparison.
-  if (g.CanBeImmediate(right, opcode)) {
+  if (g.CanBeImmediate(right, opcode, cont)) {
     VisitCompare(selector, opcode, g.UseRegister(left), g.UseImmediate(right),
                  cont);
-  } else if (g.CanBeImmediate(left, opcode)) {
+  } else if (g.CanBeImmediate(left, opcode, cont)) {
     if (!commutative) cont->Commute();
     VisitCompare(selector, opcode, g.UseRegister(right), g.UseImmediate(left),
                  cont);
